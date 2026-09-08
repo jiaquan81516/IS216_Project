@@ -1,7 +1,22 @@
-import { computed, ref } from "vue";
+import { storeToRefs } from "pinia";
+import { useAuthStore } from "@/stores/authStore";
 
-const currentUser = ref(null);
 export function useAuth() {
-  const isAuthenticated = computed(() => currentUser.value !== null);
-  return { currentUser, isAuthenticated };
+  const authStore = useAuthStore();
+  const {
+    user: currentUser,
+    isAuthenticated,
+    loading,
+    error,
+  } = storeToRefs(authStore);
+  authStore.initializeAuthListener();
+
+  return {
+    currentUser,
+    isAuthenticated,
+    loading,
+    error,
+    signInWithGoogle: authStore.signInWithGoogle,
+    logout: authStore.logout,
+  };
 }
