@@ -1,1 +1,0 @@
-import{i as e,r as t,s as n,u as r}from"./index-BSHJWsYN.js";var i={class:`page`},a={__name:`ResourceDetail`,props:{id:{type:String,required:!0}},setup(a){return(o,s)=>(n(),e(`div`,i,[s[0]||=t(`h1`,null,`Resource details`,-1),t(`p`,null,`Resource `+r(a.id),1)]))}};export{a as default};
