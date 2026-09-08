@@ -1,0 +1,1 @@
+export const MINIMUM_RECORDS_FOR_INSIGHTS = 2;
