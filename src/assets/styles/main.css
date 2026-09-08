@@ -36,6 +36,9 @@ select {
   grid-template-columns: 14rem 1fr;
   min-height: 100vh;
 }
+.app-layout--public {
+  grid-template-columns: 1fr;
+}
 .app-layout__content {
   min-width: 0;
 }
