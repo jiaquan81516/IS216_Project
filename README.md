@@ -1,2 +1,2 @@
-# IS216_ParkWhereLeh
+# IS216_Project
 IS216 Project
