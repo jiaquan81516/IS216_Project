@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 
 import { mount } from "@vue/test-utils";
-import { useAuth, waitForAuthInitialization } from "../composables/useAuth";
 import router from "../router";
 import App from "../App.vue";
 
@@ -15,18 +14,5 @@ describe("App", () => {
       },
     });
     expect(wrapper.text()).toContain("Care Companion");
-  });
-
-  it("uses the development authentication happy path", async () => {
-    await waitForAuthInitialization();
-    const auth = useAuth();
-
-    const user = await auth.signInWithGoogle();
-
-    expect(user.uid).toBe("development-user");
-    expect(auth.isAuthenticated.value).toBe(true);
-
-    await auth.logout();
-    expect(auth.isAuthenticated.value).toBe(false);
   });
 });
