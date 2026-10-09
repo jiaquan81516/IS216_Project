@@ -8,10 +8,7 @@ import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import "./assets/styles/main.css";
 
 const app = createApp(App);
-const pinia = createPinia();
-
-app.use(pinia);
+app.use(createPinia());
 installAuthGuard();
 app.use(router);
-
 app.mount("#app");
