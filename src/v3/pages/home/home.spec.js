@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   fail: false,
   entries: [],
   entriesError: null,
+  handovers: [],
 }));
 
 vi.mock("@/api/firebase", () => ({ default: {}, auth: {} }));
@@ -32,6 +33,13 @@ vi.mock("@/v3/api/profile", async (importOriginal) => ({
 vi.mock("@/v3/api/entries", () => ({
   subscribeEntries: (_id, onData, onError) => {
     queueMicrotask(() => (state.entriesError ? onError(state.entriesError) : onData(state.entries)));
+    return () => {};
+  },
+}));
+vi.mock("@/v3/api/handovers", () => ({
+  HANDOVERS_MAX: 30,
+  subscribeHandovers: (_id, onData) => {
+    queueMicrotask(() => onData(state.handovers));
     return () => {};
   },
 }));
@@ -69,6 +77,7 @@ beforeEach(() => {
   state.members = [daniel, mei];
   state.entries = [];
   state.entriesError = null;
+  state.handovers = [];
 });
 
 const ts = (date) => ({ toDate: () => date });
@@ -183,6 +192,50 @@ describe("V3 home private check-in box", () => {
   it("links Check in privately to the V3 wellness page", async () => {
     const wrapper = await mountHome();
     const link = wrapper.findAll("a").find((a) => a.text() === "Check in privately");
-    expect(link.attributes("href")).toBe("/v3/wellness");
+    expect(link.attributes("href")).toBe("/wellness");
+  });
+});
+
+describe("V3 home and the handover", () => {
+  const waiting = {
+    id: "ho1",
+    from: "u2",
+    to: "u1",
+    sentAt: ts(new Date(new Date().setHours(7, 10, 0, 0))),
+    periodStart: ts(new Date(new Date().setHours(0, 0, 0, 0))),
+    summary: { feeds: 4, sleepMinutes: 220, nappies: 3 },
+    acceptedAt: null,
+  };
+
+  it("says nothing about a handover when there is none", async () => {
+    const wrapper = await mountHome();
+    expect(wrapper.find(".hp__handover").exists()).toBe(false);
+    expect(wrapper.get("#hp-recent").text()).toBe("Recent activity");
+  });
+
+  it("adds one quiet line linking to the page when one is waiting for me", async () => {
+    state.handovers = [waiting];
+    const wrapper = await mountHome();
+    const line = wrapper.get(".hp__handover");
+    expect(line.text()).toContain("Mei handed over at 7:10 AM");
+    expect(line.text()).toContain("12:00 AM to 7:10 AM");
+    expect(line.text()).toContain("4 feeds, 3 h 40 min sleep, 3 nappies");
+    expect(line.get("a").attributes("href")).toBe("/handover");
+    // Home keeps its single solid button: the handover line is quiet, not a second one.
+    expect(wrapper.findAll(".btn-primary")).toHaveLength(1);
+  });
+
+  it("makes the recent section window aware once a handover exists", async () => {
+    state.handovers = [{ ...waiting, id: "ho2", from: "u1", to: "u2" }];
+    const wrapper = await mountHome();
+    expect(wrapper.get("#hp-recent").text()).toBe("Since the last handover");
+    expect(wrapper.find(".hp__handover").exists()).toBe(false);
+  });
+
+  it("drops the line once I have accepted it", async () => {
+    state.handovers = [{ ...waiting, acceptedAt: ts(new Date()), acceptedBy: "u1" }];
+    const wrapper = await mountHome();
+    expect(wrapper.find(".hp__handover").exists()).toBe(false);
+    expect(wrapper.get("#hp-recent").text()).toBe("Since the last handover");
   });
 });

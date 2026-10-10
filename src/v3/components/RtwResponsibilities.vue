@@ -3,15 +3,19 @@ import "@/v3/v3.css";
 import { computed } from "vue";
 import V3ChipGroup from "@/v3/components/V3ChipGroup.vue";
 import { balanceHint, responsibilityCounts, responsibilitySummary } from "@/v3/api/rtwHelpers";
+import { ownerKey, ownerUid } from "@/v3/api/sharedHelpers";
 import { RESPONSIBILITY_AREAS } from "@/v3/data/rtw";
 import { useReturnToWorkStore } from "@/v3/stores/returnToWork";
 
 defineOptions({ name: "RtwResponsibilities" });
 
 // myName and partnerName are first names from the household, or empty when unknown.
+// meUid and partnerUid turn a chip choice into the uid that Firestore stores.
 const props = defineProps({
   myName: { type: String, default: "" },
   partnerName: { type: String, default: "" },
+  meUid: { type: String, default: "" },
+  partnerUid: { type: String, default: "" },
 });
 
 const store = useReturnToWorkStore();
@@ -24,7 +28,8 @@ const options = computed(() => [
   { value: "none", label: "Not decided" },
 ]);
 
-const counts = computed(() => responsibilityCounts(store.responsibilities));
+const counts = computed(() => responsibilityCounts(store.responsibilities, props.meUid));
+const chosen = (key) => ownerKey(store.responsibilities[key], props.meUid) || "none";
 const summary = computed(() => responsibilitySummary(counts.value, partnerLabel.value));
 const hint = computed(() =>
   balanceHint(counts.value, { me: props.myName || "You", partner: props.partnerName || "Your partner" }),
@@ -34,7 +39,7 @@ const taskTitles = computed(() => new Set(store.tasks.map((t) => t.title.trim().
 const hasTask = (area) => taskTitles.value.has(area.task.toLowerCase());
 
 function choose(area, value) {
-  store.setResponsibility(area.key, value === "none" ? null : value);
+  store.setResponsibility(area.key, value === "none" ? null : ownerUid(value, props.meUid, props.partnerUid));
 }
 function makeTask(area) {
   if (hasTask(area)) return;
@@ -58,7 +63,7 @@ function makeTask(area) {
         </div>
         <div class="rtr__controls">
           <V3ChipGroup
-            :model-value="store.responsibilities[area.key] || 'none'"
+            :model-value="chosen(area.key)"
             :options="options"
             :label="`Who covers: ${area.title}`"
             @update:model-value="(value) => choose(area, value)"

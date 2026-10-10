@@ -51,6 +51,13 @@ const PATHS = {
   edit: ["M17 3a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"],
   trash: ["M3 6h18", "M8 6V4h8v2", "M6 6l1 14h10l1-14", "M10 11v6M14 11v6"],
   plus: ["M12 5v14M5 12h14"],
+  // An arrow passing between two points: the end of one shift, the start of the next.
+  handover: [
+    "M4 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
+    "M16 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
+    "M9 12h5.5",
+    "M12 9.5 14.5 12 12 14.5",
+  ],
   check: ["M5 12.5l4.5 4.5L19 7"],
   x: ["M6 6l12 12M18 6L6 18"],
 };

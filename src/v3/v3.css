@@ -262,3 +262,15 @@
   line-height: 1.4;
   color: var(--nt-red-t, #991b1b);
 }
+
+/* Settings, Display: "Reduce motion" sets data-v3-motion on the document element
+   (src/v3/composables/useV3Prefs.js). The app has no entrance animations, so this only has
+   the few colour transitions to turn off. */
+:root[data-v3-motion="reduce"] *,
+:root[data-v3-motion="reduce"] *::before,
+:root[data-v3-motion="reduce"] *::after {
+  transition-duration: 0s !important;
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}

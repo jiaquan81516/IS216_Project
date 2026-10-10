@@ -1,12 +1,11 @@
 <script setup>
 import "@/v3/v3.css";
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted } from "vue";
 import AppButton from "@/components/ui/AppButton.vue";
 import V3ChipGroup from "@/v3/components/V3ChipGroup.vue";
 import { pumpingProgress, pumpingSummary } from "@/v3/api/rtwHelpers";
 import { statusText } from "@/v3/api/roomHelpers";
 import { PUMPING_SESSIONS, PUMPING_TIMES } from "@/v3/data/rtw";
-import { SAMPLE_ROOMS } from "@/v3/data/pumpingRooms";
 import { V3_ROUTES } from "@/v3/routes";
 import { useReturnToWorkStore } from "@/v3/stores/returnToWork";
 import { useRoomsStore } from "@/v3/stores/rooms";
@@ -16,10 +15,12 @@ defineOptions({ name: "RtwPumping" });
 const store = useReturnToWorkStore();
 const roomsStore = useRoomsStore();
 
-const progress = computed(() => pumpingProgress(store.pumping.items));
+const progress = computed(() => pumpingProgress(store.pumpingItems));
 const summary = computed(() => pumpingSummary(store.pumping));
 const sessionOptions = PUMPING_SESSIONS.map((n) => ({ value: n, label: `${n} sessions` }));
-const rooms = computed(() => [...SAMPLE_ROOMS, ...roomsStore.rooms]);
+onMounted(() => roomsStore.bind());
+onBeforeUnmount(() => roomsStore.unbind());
+const rooms = computed(() => roomsStore.rooms);
 </script>
 
 <template>
@@ -32,7 +33,7 @@ const rooms = computed(() => [...SAMPLE_ROOMS, ...roomsStore.rooms]);
         <p class="rtp__progress">{{ progress.text }}</p>
       </div>
       <ul class="rtp__list">
-        <li v-for="item in store.pumping.items" :key="item.key" class="rtp__item">
+        <li v-for="item in store.pumpingItems" :key="item.key" class="rtp__item">
           <input
             :id="`rtp-item-${item.key}`"
             class="form-check-input rtp__check"

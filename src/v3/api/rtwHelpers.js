@@ -1,5 +1,6 @@
 // Pure helpers for the V3 Return to work page. No Vue, Pinia or storage imports.
 import { addDays, daysBetween, isIsoDate, parseIso, toIso } from "@/v3/api/rotaHelpers";
+import { ownerKey } from "@/v3/api/sharedHelpers";
 import { PUMPING_TIMES, RESPONSIBILITY_AREAS, SUGGESTED_TASKS } from "@/v3/data/rtw";
 
 const MONTHS = [
@@ -77,11 +78,14 @@ export function groupTasks(tasks, today = new Date()) {
   }));
 }
 
-// Open tasks per owner. Done tasks are not counted.
-export function ownerCounts(tasks) {
+// Open tasks per owner. Done tasks are not counted. An owner is a uid or "both", so the
+// signed in user's uid decides which column a task falls into.
+export function ownerCounts(tasks, meUid) {
   const counts = { me: 0, partner: 0, both: 0 };
   for (const task of tasks) {
-    if (!task.done && counts[task.owner] !== undefined) counts[task.owner] += 1;
+    if (task.done) continue;
+    const key = ownerKey(task.owner, meUid);
+    if (counts[key] !== undefined) counts[key] += 1;
   }
   return counts;
 }
@@ -94,11 +98,12 @@ export function suggestedTasks(existingTitles = []) {
   return SUGGESTED_TASKS.filter((s) => !taken.has(norm(s.title))).map((s) => ({ ...s }));
 }
 
-// Counts for the Responsibilities tab. Areas with no choice count as not decided.
-export function responsibilityCounts(responsibilities = {}) {
+// Counts for the Responsibilities tab. Areas with no choice count as not decided. An owner
+// is a uid or "both", so the signed in user's uid decides which column an area falls into.
+export function responsibilityCounts(responsibilities = {}, meUid) {
   const counts = { me: 0, partner: 0, both: 0, undecided: 0 };
   for (const area of RESPONSIBILITY_AREAS) {
-    const who = responsibilities[area.key];
+    const who = ownerKey(responsibilities[area.key], meUid);
     if (who === "me" || who === "partner" || who === "both") counts[who] += 1;
     else counts.undecided += 1;
   }

@@ -7,15 +7,17 @@ import { V3_ROUTES } from "@/v3/routes";
 const GUARDED_APP_PATHS = new Set([
   V3_ROUTES.HOME,
   V3_ROUTES.CARE_LOG,
+  V3_ROUTES.HANDOVER,
   V3_ROUTES.ROTA,
   V3_ROUTES.WELLNESS,
   V3_ROUTES.SUPPORT,
   V3_ROUTES.RETURN_TO_WORK,
   V3_ROUTES.CALENDAR,
+  V3_ROUTES.SETTINGS,
+  V3_ROUTES.PROFILE,
 ]);
 
-// Guard rules for V3 routes only. Register this before the V2 guard so the
-// household redirect goes to the V3 sign in rather than the V2 one.
+// Authentication and household rules for the current app routes.
 export function installV3Guard(router) {
   router.beforeEach(async (to) => {
     if (to.path === V3_ROUTES.HOUSEHOLD) {

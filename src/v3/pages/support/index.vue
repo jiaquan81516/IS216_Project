@@ -1,13 +1,14 @@
 <script setup>
 import "@/v3/v3.css";
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import AppButton from "@/components/ui/AppButton.vue";
 import V3ChipGroup from "@/v3/components/V3ChipGroup.vue";
 import V3Icon from "@/v3/components/V3Icon.vue";
 import V3Tabs from "@/v3/components/V3Tabs.vue";
-import { FILTER_FEATURES, FORM_FEATURES, SAMPLE_ROOMS } from "@/v3/data/pumpingRooms";
+import { FILTER_FEATURES, FORM_FEATURES } from "@/v3/data/pumpingRooms";
 import { SUPPORT_GUIDES, TRUSTED_RESOURCES } from "@/v3/data/support";
 import { calendarUrl, filterRooms, mapEmbedUrl, mapOpenUrl, statusText } from "@/v3/api/roomHelpers";
+import { describeSharedError } from "@/v3/api/sharedHelpers";
 import { useRoomsStore } from "@/v3/stores/rooms";
 
 defineOptions({ name: "V3SupportPage" });
@@ -29,8 +30,13 @@ function toggleGuide(slug) {
 }
 
 // Pumping rooms
+// The directory is the Firestore collection `pumpingRooms`. While it is empty the store
+// falls back to the seed rooms in src/v3/data/pumpingRooms.js, which cannot be reported.
 const roomsStore = useRoomsStore();
-const allRooms = computed(() => [...SAMPLE_ROOMS, ...roomsStore.rooms]);
+onMounted(() => roomsStore.bind());
+onBeforeUnmount(() => roomsStore.unbind());
+const allRooms = computed(() => roomsStore.rooms);
+const roomsError = computed(() => (roomsStore.error ? describeSharedError(roomsStore.error.code, "pumping rooms").text : ""));
 const STATUS_OPTIONS = [
   { value: "all", label: "All" },
   { value: "verified", label: "Verified" },
@@ -42,8 +48,21 @@ const search = ref("");
 const filtered = computed(() =>
   filterRooms(allRooms.value, { status: status.value, features: features.value, search: search.value }),
 );
-const selectedId = ref(SAMPLE_ROOMS[0].id);
+const selectedId = ref("");
 const selected = computed(() => filtered.value.find((r) => r.id === selectedId.value) ?? filtered.value[0] ?? null);
+
+// Confirming or flagging a room
+const reported = ref("");
+async function report(room, kind) {
+  reported.value = "";
+  const ok = await roomsStore.reportRoom(room.id, kind);
+  if (ok) {
+    reported.value =
+      kind === "confirm"
+        ? `Thank you. ${room.name} is marked as verified.`
+        : `Thank you. ${room.name} is flagged and needs verification again.`;
+  }
+}
 
 function toggleIn(list, value) {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
@@ -66,13 +85,14 @@ function closeForm() {
   errors.value = { name: "", address: "" };
   requestAnimationFrame(() => addButton.value?.$el?.focus?.());
 }
-function saveRoom() {
+async function saveRoom() {
   errors.value = {
     name: form.value.name.trim() ? "" : "Enter the room name.",
     address: form.value.address.trim() ? "" : "Enter the address.",
   };
   if (errors.value.name || errors.value.address) return;
-  const room = roomsStore.addRoom(form.value);
+  const room = await roomsStore.addRoom(form.value);
+  if (!room) return;
   status.value = "all";
   features.value = [];
   search.value = "";
@@ -137,7 +157,10 @@ function saveRoom() {
     <!-- Pumping rooms -->
     <div v-else-if="tab === 'rooms'" id="support-panel-rooms" class="sp__rooms" role="tabpanel" aria-labelledby="support-tab-rooms">
       <div class="sp__rooms-head">
-        <p class="sp__muted">Sample rooms for now. Check details before you go.</p>
+        <p v-if="roomsStore.usingSeed" class="sp__muted">
+          Seed rooms for now, not confirmed. Add a real one and the directory takes over.
+        </p>
+        <p v-else class="sp__muted">Shared by everyone using NurtureTrack. Check details before you go.</p>
         <AppButton
           v-if="!formOpen"
           ref="addButton"
@@ -183,7 +206,10 @@ function saveRoom() {
 
       <div role="status" class="sp__status">
         <p v-if="added" class="sp__muted">{{ added }}</p>
+        <p v-if="reported" class="sp__muted">{{ reported }}</p>
       </div>
+      <p v-if="roomsStore.writeError" class="v3-error-text" role="alert">{{ roomsStore.writeError }}</p>
+      <p v-if="roomsError" class="v3-error-text" role="alert">{{ roomsError }}</p>
 
       <div class="sp__filters">
         <label class="sp__search">
@@ -221,6 +247,11 @@ function saveRoom() {
               <AppButton variant="outline" size="sm" @click="selectedId = r.id">Show on map</AppButton>
               <a class="v3-link" :href="calendarUrl(r)" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>
             </div>
+            <div v-if="!r.seed" class="sp__room-actions">
+              <AppButton variant="outline" size="sm" @click="report(r, 'confirm')">Confirm this room</AppButton>
+              <AppButton variant="outline" size="sm" @click="report(r, 'gone')">Flag as gone</AppButton>
+            </div>
+            <p v-else class="sp__muted">Seed data, so it cannot be confirmed or flagged yet.</p>
           </li>
         </ul>
 

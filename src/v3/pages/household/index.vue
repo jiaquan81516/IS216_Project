@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { useRoute } from "vue-router";
 import V3Header from "@/v3/components/V3Header.vue";
 import StepHeader from "@/v3/components/StepHeader.vue";
 import OptionCard from "@/v3/components/OptionCard.vue";
@@ -14,10 +15,13 @@ import "@/v3/v3.css";
 defineOptions({ name: "V3HouseholdPage" });
 
 const { currentUser, v3Profile, loadProfile } = useV3Auth();
+const route = useRoute();
 
 const loaded = ref(false);
-const mode = ref("create"); // create | join
-const code = ref("");
+// An invite link (/join/NT-XXXX) lands here with ?code= and opens the join form.
+const linkCode = typeof route?.query?.code === "string" ? route.query.code : "";
+const mode = ref(linkCode ? "join" : "create"); // create | join
+const code = ref(linkCode);
 const codeError = ref("");
 const error = ref("");
 const busy = ref(false);
@@ -127,10 +131,10 @@ async function submit() {
     }
     if (v3Profile.value) v3Profile.value = { ...v3Profile.value, onboarded: true };
   } catch (cause) {
-    error.value =
-      cause?.code === "invite/not-found"
-        ? "We could not find that code. Check it with your partner and try again."
-        : "Something went wrong. Please try again.";
+    // Invite errors already carry a sentence for the user (see inviteHelpers.js).
+    error.value = String(cause?.code ?? "").startsWith("invite/")
+      ? cause.message
+      : "Something went wrong. Please try again.";
   } finally {
     busy.value = false;
   }
