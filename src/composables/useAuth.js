@@ -11,12 +11,6 @@ const actionLoading = ref(false);
 const error = ref(null);
 const isAuthenticated = computed(() => currentUser.value !== null);
 const loading = computed(() => initializing.value || actionLoading.value);
-const developmentUser = Object.freeze({
-  uid: "development-user",
-  displayName: "Development User",
-  email: "developer@example.com",
-  photoURL: null,
-});
 
 let unsubscribe;
 let resolveInitialization;
@@ -58,17 +52,12 @@ async function runAuthAction(action) {
 }
 
 async function signInWithGoogle() {
-  const signIn = import.meta.env.DEV
-    ? () => Promise.resolve(developmentUser)
-    : signInWithGoogleApi;
-
-  currentUser.value = await runAuthAction(signIn);
+  currentUser.value = await runAuthAction(signInWithGoogleApi);
   return currentUser.value;
 }
 
 async function logout() {
-  const signOut = import.meta.env.DEV ? () => Promise.resolve() : logoutUser;
-  await runAuthAction(signOut);
+  await runAuthAction(logoutUser);
   currentUser.value = null;
 }
 

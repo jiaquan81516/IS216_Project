@@ -1,0 +1,276 @@
+/* App-only global styles. Imported by the App components; main.css is not touched. */
+.app-container {
+  width: 100%;
+  max-width: 1168px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+.app-body {
+  padding-top: 56px;
+  padding-bottom: 96px;
+}
+.app-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 28px;
+  min-width: 0;
+}
+.app-stack--24 {
+  gap: 24px;
+}
+.app-text-link {
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+.app-text-link--sm {
+  font-size: 0.875rem;
+}
+
+/* Buttons: Figma large button is 60px tall, 8px radius, 14px medium text. */
+.app-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 19px 20px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-family: var(--bs-body-font-family);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 20px;
+  letter-spacing: 0.07px;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+.app-btn--primary {
+  background: var(--nt-plum);
+  border-color: var(--nt-plum);
+  color: #fff;
+}
+.app-btn--primary:hover {
+  background: var(--nt-plum-hover);
+  border-color: var(--nt-plum-hover);
+  color: #fff;
+}
+.app-btn--outline {
+  background: transparent;
+  border-color: var(--nt-muted);
+  color: var(--nt-muted);
+}
+.app-btn--outline:hover {
+  background: var(--nt-gray);
+  color: var(--nt-ink);
+}
+.app-btn--block {
+  width: 100%;
+}
+.app-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* Form fields. */
+.app-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.app-field__label {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  line-height: normal;
+  color: var(--nt-ink);
+}
+.app-input {
+  width: 100%;
+  padding: 19px 20px;
+  background: #fff;
+  border: 1px solid var(--nt-line);
+  border-radius: 8px;
+  font-family: var(--bs-body-font-family);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 20px;
+  letter-spacing: 0.07px;
+  color: var(--nt-ink);
+}
+.app-input::placeholder {
+  color: var(--nt-muted);
+  opacity: 1;
+}
+.app-input:focus {
+  outline: none;
+  border-color: var(--nt-plum);
+  box-shadow: 0 0 0 3px rgb(59 47 63 / 12%);
+}
+.app-input:disabled {
+  background: var(--nt-gray);
+}
+.app-input--invalid {
+  border-color: var(--nt-red-t);
+}
+.app-field__hint {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: normal;
+  color: var(--nt-muted);
+}
+.app-field__error {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  color: var(--nt-red-t);
+}
+.app-alert {
+  width: 100%;
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  border-radius: 8px;
+}
+.app-note {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 21px;
+  color: var(--nt-muted);
+}
+
+/* Choice chips: pill buttons used by ChipGroup, the log panel and the care log filters.
+   Selected is plum text on gray with a plum border, never solid plum. */
+.app-chip {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 6px 14px;
+  background: #fff;
+  border: 1px solid var(--nt-line, #e5e7eb);
+  border-radius: 999px;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--nt-muted, #6b7280);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+.app-chip:hover {
+  background: var(--nt-gray, #f3f4f6);
+}
+.app-chip[aria-checked="true"],
+.app-chip[aria-pressed="true"] {
+  background: var(--nt-gray, #f3f4f6);
+  border-color: var(--nt-plum, #3b2f3f);
+  color: var(--nt-plum, #3b2f3f);
+}
+.app-chip:focus-visible {
+  outline: 2px solid var(--nt-plum, #3b2f3f);
+  outline-offset: 2px;
+}
+
+/* Compact controls and small badges shared by the app pages. */
+.app-control {
+  width: 100%;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid var(--nt-line, #e5e7eb);
+  border-radius: 8px;
+  font-family: "Inter", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--nt-ink, #1f2937);
+}
+.app-control:focus {
+  outline: none;
+  border-color: var(--nt-plum, #3b2f3f);
+  box-shadow: 0 0 0 3px rgb(59 47 63 / 12%);
+}
+.app-control--invalid {
+  border-color: var(--nt-red-t, #991b1b);
+}
+.app-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--nt-line, #e5e7eb);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  color: var(--nt-ink, #1f2937);
+  background: #fff;
+}
+.app-badge--coral {
+  border-color: var(--nt-coral, #c0553b);
+  color: var(--nt-coral, #c0553b);
+}
+.app-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--nt-gray, #f3f4f6);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--nt-ink, #1f2937);
+}
+.app-textbtn {
+  padding: 0;
+  background: none;
+  border: 0;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--nt-plum, #3b2f3f);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.app-textbtn:hover {
+  color: var(--nt-plum-hover, #2d2431);
+}
+.app-textbtn:focus-visible,
+.app-link:focus-visible {
+  outline: 2px solid var(--nt-plum, #3b2f3f);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.app-link,
+.app-link:visited {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--nt-plum, #3b2f3f);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.app-link:hover {
+  color: var(--nt-plum-hover, #2d2431);
+}
+.app-error-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--nt-red-t, #991b1b);
+}
+
+/* Settings, Display: "Reduce motion" sets data-app-motion on the document element
+   (src/app/composables/usePrefs.js). The app has no entrance animations, so this only has
+   the few colour transitions to turn off. */
+:root[data-app-motion="reduce"] *,
+:root[data-app-motion="reduce"] *::before,
+:root[data-app-motion="reduce"] *::after {
+  transition-duration: 0s !important;
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
