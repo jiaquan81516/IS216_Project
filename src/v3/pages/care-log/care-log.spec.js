@@ -5,6 +5,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 const state = vi.hoisted(() => ({
   entries: [],
   entriesError: null,
+  handovers: [],
   profileGate: null,
   profile: null,
   household: null,
@@ -43,6 +44,13 @@ vi.mock("@/v3/api/entries", () => ({
   addEntry: (...args) => state.addEntry(...args),
   updateEntry: (...args) => state.updateEntry(...args),
 }));
+vi.mock("@/v3/api/handovers", () => ({
+  HANDOVERS_MAX: 30,
+  subscribeHandovers: (_id, onData) => {
+    queueMicrotask(() => onData(state.handovers));
+    return () => {};
+  },
+}));
 
 import CareLogPage from "./index.vue";
 
@@ -60,7 +68,7 @@ async function mountPage(query = "", { settle = true } = {}) {
     history: createMemoryHistory(),
     routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }],
   });
-  router.push(`/v3/care-log${query}`);
+  router.push(`/care-log${query}`);
   await router.isReady();
   const wrapper = mount(CareLogPage, { global: { plugins: [router] } });
   if (settle) await flushPromises();
@@ -71,6 +79,7 @@ beforeEach(() => {
   state.deleteEntry.mockClear();
   state.markSeen.mockClear();
   state.entriesError = null;
+  state.handovers = [];
   state.profileGate = null;
   state.profile = { displayName: "Daniel Tan", email: "daniel@example.com", householdId: "h1" };
   state.household = { inviteCode: "NT-4F7K", babyName: "Aria", babyStatus: "born", babyDate: "2000-01-01" };
@@ -267,5 +276,31 @@ describe("V3 care log", () => {
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
     expect(wrapper.get('[role="dialog"] [role="radio"][aria-checked="true"]').text()).toBe("Feeding");
     expect(router.currentRoute.value.query.log).toBeUndefined();
+  });
+});
+
+describe("V3 care log handover dividers", () => {
+  it("draws no divider when the household has no handovers", async () => {
+    const { wrapper } = await mountPage();
+    expect(wrapper.find(".cl__handover").exists()).toBe(false);
+  });
+
+  it("labels the boundary between the entries either side of a handover", async () => {
+    const sentAt = minutesAgo(4);
+    state.handovers = [{ id: "ho1", from: "u2", to: "u1", sentAt: ts(sentAt), summary: {} }];
+    const { wrapper } = await mountPage();
+    const dividers = wrapper.findAll(".cl__handover");
+    expect(dividers).toHaveLength(1);
+    expect(dividers[0].text()).toMatch(/^Handover sent \d{1,2}:\d{2} (AM|PM)$/);
+    // Today has two entries, one on each side of the boundary, and they both still render.
+    const today = wrapper.findAll(".cl__day")[0];
+    const rows = today.findAll(".cl__rows > li");
+    expect(rows.map((li) => li.classes().includes("cl__handover"))).toEqual([false, true, false]);
+  });
+
+  it("leaves out a boundary with nothing on one side of it", async () => {
+    state.handovers = [{ id: "ho1", from: "u2", to: "u1", sentAt: ts(minutesAgo(1)), summary: {} }];
+    const { wrapper } = await mountPage();
+    expect(wrapper.find(".cl__handover").exists()).toBe(false);
   });
 });

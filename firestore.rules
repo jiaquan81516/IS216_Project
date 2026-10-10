@@ -25,13 +25,26 @@ service cloud.firestore {
 
       // Joining: only memberIds changes, old ids are kept, exactly the caller is added,
       // and the household's invitation code must exist.
-      allow update: if signedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
-        && request.resource.data.memberIds.hasAll(resource.data.memberIds)
-        && request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1
-        && request.auth.uid in request.resource.data.memberIds
-        && !(request.auth.uid in resource.data.memberIds)
-        && exists(/databases/$(database)/documents/invites/$(resource.data.inviteCode));
+      // Leaving: only memberIds changes and the caller takes only themselves out.
+      // Editing: a member may change the baby details and the invitation code, with the
+      // baby name capped so one person cannot push a huge string into a shared document.
+      allow update: if signedIn() && (
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
+          && request.resource.data.memberIds.hasAll(resource.data.memberIds)
+          && request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1
+          && request.auth.uid in request.resource.data.memberIds
+          && !(request.auth.uid in resource.data.memberIds)
+          && exists(/databases/$(database)/documents/invites/$(resource.data.inviteCode)))
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
+          && request.auth.uid in resource.data.memberIds
+          && !(request.auth.uid in request.resource.data.memberIds)
+          && request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1)
+        || (request.auth.uid in resource.data.memberIds
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['babyName', 'babyStatus', 'babyDate', 'inviteCode'])
+          && (!('babyName' in request.resource.data) || request.resource.data.babyName == null
+            || (request.resource.data.babyName is string && request.resource.data.babyName.size() <= 80)))
+      );
 
       match /members/{memberId} {
         allow read: if signedIn()
@@ -45,6 +58,14 @@ service cloud.firestore {
             || exists(/databases/$(database)/documents/invites/$(get(/databases/$(database)/documents/households/$(householdId)).data.inviteCode))
             || request.auth.uid in getAfter(/databases/$(database)/documents/households/$(householdId)).data.memberIds
           );
+
+        // Your own member document is the copy your partner reads, so only you may change
+        // it, and only you may remove it when you leave.
+        allow update: if signedIn()
+          && request.auth.uid == memberId
+          && (!('displayName' in request.resource.data) || request.resource.data.displayName == null
+            || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 80));
+        allow delete: if signedIn() && request.auth.uid == memberId;
       }
 
       // The care log. Members read. Anyone can add their own entries. Only the author edits
@@ -56,7 +77,13 @@ service cloud.firestore {
         }
         function validEntry() {
           return request.resource.data.type in ['feed', 'sleep', 'nappy', 'medication', 'note']
-            && request.resource.data.at is timestamp;
+            && request.resource.data.at is timestamp
+            // A note is user supplied text, so it is capped the same way everywhere else.
+            && (!('details' in request.resource.data)
+              || !('text' in request.resource.data.details)
+              || request.resource.data.details.text == null
+              || (request.resource.data.details.text is string
+                && request.resource.data.details.text.size() <= 400));
         }
 
         allow read: if isMember();
@@ -75,12 +102,194 @@ service cloud.firestore {
 
         allow delete: if isMember() && resource.data.by == request.auth.uid;
       }
+
+      // Shared membership check for the collections below. The care log keeps its own copy
+      // so that rule stays exactly as it was.
+      function sharedMember() {
+        return signedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds;
+      }
+
+      // Handovers. One document per handover, so the history is kept. Either parent reads
+      // them. You may only send in your own name, to the other member of the household. The
+      // sender may fix a handover while it is still unaccepted; the reader may only set
+      // acceptedAt and acceptedBy, and only to their own uid. Nothing is ever deleted.
+      match /handovers/{handoverId} {
+        allow read: if sharedMember();
+
+        allow create: if sharedMember()
+          && request.resource.data.from == request.auth.uid
+          && request.resource.data.to != request.auth.uid
+          && request.resource.data.to in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds
+          && request.resource.data.sentAt is timestamp
+          && request.resource.data.acceptedAt == null
+          && request.resource.data.acceptedBy == null;
+
+        allow update: if sharedMember()
+          && resource.data.acceptedAt == null
+          && (
+            (resource.data.from == request.auth.uid
+              && request.resource.data.from == resource.data.from
+              && request.resource.data.to == resource.data.to
+              && request.resource.data.acceptedAt == null
+              && request.resource.data.acceptedBy == null)
+            || (resource.data.to == request.auth.uid
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['acceptedAt', 'acceptedBy'])
+              && request.resource.data.acceptedBy == request.auth.uid
+              && request.resource.data.acceptedAt is timestamp)
+          );
+
+        allow delete: if false;
+      }
+
+      // The sleep rota plan. One document, "settings". Either parent may save it, and every
+      // write says who did it.
+      match /rota/{docId} {
+        allow read: if sharedMember();
+        allow create, update: if sharedMember() && request.resource.data.updatedBy == request.auth.uid;
+        allow delete: if false;
+      }
+
+      // One document per night, id yyyy-mm-dd, for nights set by hand or by an accepted swap.
+      match /nights/{nightId} {
+        allow read: if sharedMember();
+        allow create, update: if sharedMember() && request.resource.data.setBy == request.auth.uid;
+        allow delete: if sharedMember();
+      }
+
+      // Swap requests. You may only ask in your own name, only the other parent may accept or
+      // decline, and only the asker may cancel.
+      match /swaps/{swapId} {
+        allow read: if sharedMember();
+
+        allow create: if sharedMember()
+          && request.resource.data.from == request.auth.uid
+          && request.resource.data.status == 'pending';
+
+        allow update: if sharedMember()
+          && request.resource.data.from == resource.data.from
+          && request.resource.data.date == resource.data.date
+          && resource.data.status == 'pending'
+          && (
+            (resource.data.to == request.auth.uid
+              && request.resource.data.status in ['accepted', 'declined'])
+            || (resource.data.from == request.auth.uid
+              && request.resource.data.status == 'cancelled')
+          );
+
+        allow delete: if false;
+      }
+
+      // Calendar events. Shared, so either parent may edit or delete one. The author is kept.
+      match /events/{eventId} {
+        allow read: if sharedMember();
+        allow create: if sharedMember() && request.resource.data.createdBy == request.auth.uid;
+        allow update: if sharedMember() && request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if sharedMember();
+      }
+
+      // Return to work tasks. Shared the same way as events.
+      match /tasks/{taskId} {
+        allow read: if sharedMember();
+        allow create: if sharedMember() && request.resource.data.createdBy == request.auth.uid;
+        allow update: if sharedMember() && request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if sharedMember();
+      }
+
+      // The return to work plan. One document, "plan", like the rota settings.
+      match /rtw/{docId} {
+        allow read: if sharedMember();
+        allow create, update: if sharedMember() && request.resource.data.updatedBy == request.auth.uid;
+        allow delete: if false;
+      }
     }
 
+    // Invitation codes. Any signed in user can read a code to join with it. An invite is
+    // never deleted: it is marked used when somebody joins with it, and revoked when the
+    // household makes a new code, so an old code gets a clear answer instead of "not found".
     match /invites/{code} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
-      allow update, delete: if false;
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.usedAt == null
+        && request.resource.data.usedBy == null;
+
+      allow update: if signedIn() && (
+        // Joining with it: only the two "used" fields, only once, in your own name.
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedAt', 'usedBy'])
+          && resource.data.usedBy == null
+          && request.resource.data.usedBy == request.auth.uid
+          && request.resource.data.usedAt is timestamp)
+        // Replacing it: only the creator, and only the revoked stamp.
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['revokedAt'])
+          && resource.data.createdBy == request.auth.uid
+          && request.resource.data.revokedAt is timestamp)
+      );
+
+      allow delete: if false;
+    }
+
+    // Server only collections. Nothing in the browser may read or write these, and nothing
+    // needs to: the Vercel functions use the Firebase Admin SDK, which is not bound by these
+    // rules at all. Denying them here is what keeps a Google refresh token, a rate limit
+    // counter and an OAuth nonce out of reach of the client.
+    //
+    // googleTokens/{uid}  the Google refresh token, its scope and the NurtureTrack calendar id
+    // googleSync/{uid}    the calendar sync token and the map of what was pushed to Google,
+    //                     which is how a deleted event is noticed without a tombstone
+    // oauthStates/{nonce} the one time nonce in the OAuth state value
+    // serverLimits/{uid}  the per uid sliding window behind the 429 answers
+    match /googleTokens/{uid} {
+      allow read, write: if false;
+    }
+    match /googleSync/{uid} {
+      allow read, write: if false;
+    }
+    match /oauthStates/{nonce} {
+      allow read, write: if false;
+    }
+    match /serverLimits/{uid} {
+      allow read, write: if false;
+    }
+
+    // The pumping room directory. Global on purpose: a nursing room at a mall is the same
+    // room for every household. Any signed in user reads it, adds one, and confirms or flags
+    // one. Nothing is deleted, so a bad edit can always be traced through the reports.
+    //
+    // Rate limiting: rules cannot count writes over time, so the real limit belongs on the
+    // server (docs/data-model.md, section 7). What rules can do is make every write
+    // attributable and bounded, which is what the time and length checks below are for.
+    match /pumpingRooms/{roomId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.address is string
+        && request.resource.data.address.size() > 0
+        && request.resource.data.address.size() <= 200
+        && request.resource.data.createdAt == request.time;
+
+      // Only the verification state moves, and only ever through a report.
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'verifiedAt'])
+        && request.resource.data.status in ['verified', 'unverified'];
+
+      allow delete: if false;
+
+      match /reports/{reportId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && request.resource.data.by == request.auth.uid
+          && request.resource.data.at == request.time
+          && request.resource.data.field is string
+          && request.resource.data.field.size() <= 40
+          && request.resource.data.value is string
+          && request.resource.data.value.size() <= 400;
+        allow update, delete: if false;
+      }
     }
   }
 }

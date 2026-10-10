@@ -1,119 +1,223 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import { RTW_KEY, useReturnToWorkStore } from "@/v3/stores/returnToWork";
+import { nextTick } from "vue";
+
+const api = vi.hoisted(() => ({
+  onPlan: null,
+  onTasks: null,
+  onError: null,
+  stops: 0,
+  addTask: vi.fn(async () => "t-new"),
+  updateTask: vi.fn(async () => {}),
+  toggleTask: vi.fn(async () => {}),
+  deleteTask: vi.fn(async () => {}),
+  saveRtwPlan: vi.fn(async () => {}),
+  setResponsibility: vi.fn(async () => {}),
+  setPumping: vi.fn(async () => {}),
+  migrateLegacyRtw: vi.fn(async () => false),
+}));
+
+vi.mock("@/v3/api/rtw", () => ({
+  subscribeRtwPlan: (hid, onData, onError) => {
+    api.onPlan = onData;
+    api.onError = onError;
+    return () => {
+      api.stops += 1;
+    };
+  },
+  subscribeTasks: (hid, onData) => {
+    api.onTasks = onData;
+    return () => {
+      api.stops += 1;
+    };
+  },
+  addTask: (...a) => api.addTask(...a),
+  updateTask: (...a) => api.updateTask(...a),
+  toggleTask: (...a) => api.toggleTask(...a),
+  deleteTask: (...a) => api.deleteTask(...a),
+  saveRtwPlan: (...a) => api.saveRtwPlan(...a),
+  setResponsibility: (...a) => api.setResponsibility(...a),
+  setPumping: (...a) => api.setPumping(...a),
+  migrateLegacyRtw: (...a) => api.migrateLegacyRtw(...a),
+}));
+
+import { cleanTask, useReturnToWorkStore } from "@/v3/stores/returnToWork";
+
+const ME = "u1";
+const PARTNER = "u2";
 
 function fresh() {
   setActivePinia(createPinia());
   return useReturnToWorkStore();
 }
-const saved = () => JSON.parse(localStorage.getItem(RTW_KEY));
+function bound({ plan = null, tasks = [] } = {}) {
+  const store = fresh();
+  store.bind("h1", ME, PARTNER);
+  api.onPlan(plan);
+  api.onTasks(tasks);
+  return store;
+}
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  api.onPlan = null;
+  api.onTasks = null;
+  api.stops = 0;
+  for (const key of [
+    "addTask",
+    "updateTask",
+    "toggleTask",
+    "deleteTask",
+    "saveRtwPlan",
+    "setResponsibility",
+    "setPumping",
+    "migrateLegacyRtw",
+  ]) {
+    api[key].mockClear();
+  }
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
 
-describe("return to work store", () => {
-  it("starts empty with a five item pumping checklist", () => {
+describe("return to work store binding", () => {
+  it("loads, and shows no error, until a household id arrives", () => {
     const store = fresh();
+    expect(store.loading).toBe(true);
+    expect(store.error).toBeNull();
+    store.bind("", ME, PARTNER);
+    expect(store.loading).toBe(true);
+    expect(store.error).toBeNull();
+    expect(api.onPlan).toBeNull();
+  });
+
+  it("starts empty with a five item checklist and nothing decided", () => {
+    const store = bound();
+    expect(store.loading).toBe(false);
     expect(store.returnDate).toBeNull();
     expect(store.tasks).toEqual([]);
-    expect(store.pumping.items).toHaveLength(5);
-    expect(store.pumping.items.every((i) => !i.done)).toBe(true);
+    expect(store.pumpingItems).toHaveLength(5);
+    expect(store.pumpingItems.every((i) => !i.done)).toBe(true);
     expect(store.pumping.sessions).toBeNull();
-  });
-
-  it("adds, toggles, edits and deletes tasks", () => {
-    const store = fresh();
-    const task = store.addTask({ title: "  Book a trial ", group: "childcare", owner: "me", due: "2026-10-20" });
-    expect(task.title).toBe("Book a trial");
-    expect(store.tasks).toHaveLength(1);
-    store.toggleTask(task.id);
-    expect(store.tasks[0].done).toBe(true);
-    store.updateTask(task.id, { title: "Book two trials", owner: "partner" });
-    expect(store.tasks[0]).toMatchObject({ title: "Book two trials", owner: "partner", group: "childcare" });
-    store.removeTask(task.id);
-    expect(store.tasks).toEqual([]);
-  });
-
-  it("ignores empty titles and normalises bad values", () => {
-    const store = fresh();
-    expect(store.addTask({ title: "   " })).toBeNull();
-    const task = store.addTask({ title: "x", group: "nope", owner: "nobody", due: "tomorrow" });
-    expect(task).toMatchObject({ group: "home", owner: "both", due: null });
-  });
-
-  it("sets the return date and rejects bad ones", () => {
-    const store = fresh();
-    store.setReturnDate("2026-11-04");
-    expect(store.returnDate).toBe("2026-11-04");
-    store.setReturnDate("soon");
-    expect(store.returnDate).toBeNull();
-  });
-
-  it("stores responsibilities and pumping choices", () => {
-    const store = fresh();
-    store.setResponsibility("meals", "partner");
-    store.setResponsibility("unknown-area", "me");
-    expect(store.responsibilities.meals).toBe("partner");
-    expect(store.responsibilities["unknown-area"]).toBeUndefined();
-    store.setResponsibility("meals", null);
     expect(store.responsibilities.meals).toBeNull();
-    store.togglePumpingItem("find-room");
-    store.setSessions(3);
-    store.setSessions(9);
-    expect(store.pumping.sessions).toBeNull();
-    store.setSessions(4);
-    store.togglePumpingTime("morning");
-    store.togglePumpingTime("midday");
-    store.togglePumpingTime("morning");
-    expect(store.pumping.times).toEqual(["midday"]);
-    expect(store.pumping.items.find((i) => i.key === "find-room").done).toBe(true);
   });
 
-  it("persists to localStorage and loads it back", () => {
-    const store = fresh();
-    store.setReturnDate("2026-11-04");
-    store.addTask({ title: "Plan the morning handover", group: "home" });
-    store.togglePumpingItem("pack-pump");
-    store.setSessions(2);
-    expect(saved().returnDate).toBe("2026-11-04");
-    expect(saved().tasks).toHaveLength(1);
-
-    const again = fresh();
-    expect(again.returnDate).toBe("2026-11-04");
-    expect(again.tasks[0].title).toBe("Plan the morning handover");
-    expect(again.pumping.items.find((i) => i.key === "pack-pump").done).toBe(true);
-    expect(again.pumping.sessions).toBe(2);
-  });
-
-  it("falls back to defaults when stored data is broken", () => {
-    localStorage.setItem(RTW_KEY, "{not json");
-    expect(fresh().tasks).toEqual([]);
-    localStorage.setItem(RTW_KEY, JSON.stringify({ returnDate: 5, tasks: [{ title: "ok", owner: "me" }, { nope: 1 }, null] }));
-    const store = fresh();
-    expect(store.returnDate).toBeNull();
+  it("fills the plan and the tasks from one snapshot each", () => {
+    const store = bound({
+      plan: {
+        returnDate: "2026-11-04",
+        responsibilities: { meals: PARTNER, chores: "both" },
+        pumping: { items: { "find-room": true }, sessions: 3, times: ["morning", "nope"] },
+        updatedBy: PARTNER,
+      },
+      tasks: [{ id: "t1", title: "Book a trial", owner: ME, done: false, due: null, group: "childcare" }],
+    });
+    expect(store.returnDate).toBe("2026-11-04");
+    expect(store.responsibilities.meals).toBe(PARTNER);
+    expect(store.responsibilities.chores).toBe("both");
+    expect(store.pumpingItems.find((i) => i.key === "find-room").done).toBe(true);
+    expect(store.pumping.sessions).toBe(3);
+    expect(store.pumping.times).toEqual(["morning"]);
     expect(store.tasks).toHaveLength(1);
-    expect(store.tasks[0].owner).toBe("me");
+    expect(store.updatedBy).toBe(PARTNER);
   });
 
-  it("keeps working when storage throws", () => {
-    const original = Storage.prototype.setItem;
-    Storage.prototype.setItem = () => {
-      throw new Error("blocked");
-    };
-    try {
-      const store = fresh();
-      expect(() => store.addTask({ title: "Still works" })).not.toThrow();
-      expect(store.tasks).toHaveLength(1);
-    } finally {
-      Storage.prototype.setItem = original;
-    }
-  });
-
-  it("resets everything", () => {
-    const store = fresh();
-    store.setReturnDate("2026-11-04");
-    store.addTask({ title: "x" });
-    store.reset();
-    expect(store.returnDate).toBeNull();
+  it("reports a failed listener by code and stops listening on unbind", () => {
+    const store = bound();
+    api.onError({ code: "permission-denied" });
+    expect(store.error).toEqual({ code: "permission-denied" });
+    store.unbind();
+    expect(api.stops).toBe(2);
     expect(store.tasks).toEqual([]);
+    expect(store.error).toBeNull();
+  });
+
+  it("moves the old browser plan up once, after the first snapshot", async () => {
+    bound();
+    await nextTick();
+    expect(api.migrateLegacyRtw).toHaveBeenCalledWith("h1", ME, PARTNER);
+    api.onPlan(null);
+    expect(api.migrateLegacyRtw).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("return to work store writes", () => {
+  it("saves the return date and rejects a bad one", async () => {
+    const store = bound();
+    await store.setReturnDate("2026-11-04");
+    expect(api.saveRtwPlan).toHaveBeenCalledWith("h1", ME, { returnDate: "2026-11-04" });
+    await store.setReturnDate("soon");
+    expect(api.saveRtwPlan).toHaveBeenLastCalledWith("h1", ME, { returnDate: null });
+  });
+
+  it("adds, edits, ticks and deletes a task", async () => {
+    const store = bound({
+      tasks: [{ id: "t1", title: "Old title", owner: ME, group: "home", due: null, done: false, notes: "" }],
+    });
+    await store.addTask({ title: "  Book a trial ", group: "childcare", owner: PARTNER, due: "2026-10-20" });
+    expect(api.addTask).toHaveBeenCalledWith("h1", ME, {
+      title: "Book a trial",
+      group: "childcare",
+      due: "2026-10-20",
+      owner: PARTNER,
+      notes: "",
+    });
+    expect(await store.addTask({ title: "   " })).toBeNull();
+
+    await store.updateTask("t1", { title: "New title", owner: "both" });
+    expect(api.updateTask).toHaveBeenCalledWith("h1", "t1", expect.objectContaining({ title: "New title", owner: "both" }));
+    expect(await store.updateTask("missing", { title: "x" })).toBeNull();
+
+    await store.toggleTask("t1");
+    expect(api.toggleTask).toHaveBeenCalledWith("h1", "t1", true, ME);
+    await store.removeTask("t1");
+    expect(api.deleteTask).toHaveBeenCalledWith("h1", "t1");
+  });
+
+  it("normalises a task draft", () => {
+    expect(cleanTask({ title: "x", group: "nope", owner: "", due: "tomorrow" })).toEqual({
+      title: "x",
+      group: "home",
+      due: null,
+      owner: "both",
+      notes: "",
+    });
+    expect(cleanTask({ title: "  " })).toBeNull();
+  });
+
+  it("stores a responsibility as a uid, both or nothing", async () => {
+    const store = bound();
+    await store.setResponsibility("meals", PARTNER);
+    expect(api.setResponsibility).toHaveBeenCalledWith("h1", ME, "meals", PARTNER);
+    await store.setResponsibility("meals", null);
+    expect(api.setResponsibility).toHaveBeenLastCalledWith("h1", ME, "meals", null);
+    expect(await store.setResponsibility("unknown-area", ME)).toBe(false);
+    expect(api.setResponsibility).toHaveBeenCalledTimes(2);
+  });
+
+  it("merges one pumping choice at a time", async () => {
+    const store = bound({ plan: { pumping: { times: ["morning"] } } });
+    await store.togglePumpingItem("find-room");
+    expect(api.setPumping).toHaveBeenCalledWith("h1", ME, { items: { "find-room": true } });
+    await store.setSessions(3);
+    expect(api.setPumping).toHaveBeenLastCalledWith("h1", ME, { sessions: 3 });
+    await store.setSessions(9);
+    expect(api.setPumping).toHaveBeenLastCalledWith("h1", ME, { sessions: null });
+    await store.togglePumpingTime("midday");
+    expect(api.setPumping).toHaveBeenLastCalledWith("h1", ME, { times: ["morning", "midday"] });
+    await store.togglePumpingTime("morning");
+    expect(api.setPumping).toHaveBeenLastCalledWith("h1", ME, { times: [] });
+    expect(await store.togglePumpingTime("nope")).toBe(false);
+  });
+
+  it("reports a failed write without hiding the page", async () => {
+    const store = bound();
+    api.saveRtwPlan.mockRejectedValueOnce(Object.assign(new Error("no"), { code: "permission-denied" }));
+    expect(await store.setReturnDate("2026-11-04")).toBe(false);
+    expect(store.writeError).toContain("could not save the plan");
+    expect(store.error).toBeNull();
+  });
+
+  it("writes nothing when no household is bound", async () => {
+    const store = fresh();
+    expect(await store.addTask({ title: "x" })).toBeNull();
+    expect(api.addTask).not.toHaveBeenCalled();
   });
 });

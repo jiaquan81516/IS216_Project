@@ -9,6 +9,8 @@ import V3Icon from "@/v3/components/V3Icon.vue";
 import { describeEntriesError, formatTime, lastFeedHeading, lastOfType, summariseEntry } from "@/v3/api/entryHelpers";
 import { babySentence, displayName, useV3Home, V3_HOME_KEY } from "@/v3/composables/useV3Home";
 import { useV3Entries, V3_ENTRIES_KEY } from "@/v3/composables/useV3Entries";
+import { useV3Handovers, V3_HANDOVERS_KEY } from "@/v3/composables/useV3Handovers";
+import { formatWindow, summaryLine } from "@/v3/api/handoverHelpers";
 import { V3_ROUTES } from "@/v3/routes";
 
 defineOptions({ name: "V3HomePage" });
@@ -18,6 +20,8 @@ defineOptions({ name: "V3HomePage" });
 const home = inject(V3_HOME_KEY, null) ?? useV3Home();
 const { loading, error, reload, me, partner, baby, inviteCode, householdId } = home;
 const shared = inject(V3_ENTRIES_KEY, null) ?? useV3Entries(householdId);
+const myUid = computed(() => me.value.uid);
+const handoversShared = inject(V3_HANDOVERS_KEY, null) ?? useV3Handovers(householdId, myUid);
 
 const now = new Date();
 const greeting = now.getHours() < 12 ? "Morning" : now.getHours() < 18 ? "Afternoon" : "Evening";
@@ -67,6 +71,21 @@ const recent = computed(() =>
   }),
 );
 
+// A handover waiting for me is one quiet line, not a second solid button.
+const waitingHandover = computed(() => handoversShared.waitingForMe.value);
+const waitingLine = computed(() => {
+  const handover = waitingHandover.value;
+  if (!handover) return "";
+  const who = handover.from === me.value.uid ? myName.value : partnerFirst.value || "Your partner";
+  const when = formatTime(handover.sentAt);
+  const covers = formatWindow(handover.periodStart, handover.sentAt);
+  return `${who} handed over at ${when}. ${covers}. ${summaryLine(handover.summary)}.`;
+});
+
+// "Since the last handover" once there is one, so the section says which window it shows.
+const hasHandover = computed(() => Boolean(handoversShared.latest.value));
+const recentHeading = computed(() => (hasHandover.value ? "Since the last handover" : "Recent activity"));
+
 const copied = ref(false);
 let copiedTimer = null;
 async function copyCode() {
@@ -103,6 +122,14 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
         <AppButton variant="outline" size="sm" @click="copyCode">{{ copied ? "Copied" : "Copy code" }}</AppButton>
       </div>
 
+      <section v-if="waitingLine" class="hp__handover" aria-labelledby="hp-handover">
+        <p id="hp-handover" class="hp__handover-text">{{ waitingLine }}</p>
+        <AppLink class="hp__link" :to="V3_ROUTES.HANDOVER">
+          <span>Read the handover</span>
+          <V3Icon name="chevron" :size="16" />
+        </AppLink>
+      </section>
+
       <header class="hp__head">
         <h1 class="nt-title hp__title">Good {{ greeting.toLowerCase() }}, {{ myName }}</h1>
         <p class="hp__sub">{{ subtitle }}</p>
@@ -133,7 +160,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 
           <section aria-labelledby="hp-recent" class="hp__since">
             <div class="hp__title-row">
-              <h2 id="hp-recent" class="nt-heading">Recent activity</h2>
+              <h2 id="hp-recent" class="nt-heading">{{ recentHeading }}</h2>
               <AppLink class="hp__link" :to="V3_ROUTES.CARE_LOG">
                 <span>View full log</span>
                 <V3Icon name="chevron" :size="16" />
@@ -181,6 +208,9 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__invite { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 16px; background: var(--nt-gray); border: 1px solid var(--nt-line); border-radius: 8px; }
 .hp__invite-text { margin: 0; font-size: 0.875rem; color: var(--nt-ink); }
 .hp__invite-text strong { font-weight: 600; }
+
+.hp__handover { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 12px 16px; background: var(--nt-gray); border: 1px solid var(--nt-line); border-radius: 8px; }
+.hp__handover-text { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); }
 
 .hp__head { display: flex; flex-direction: column; gap: 8px; }
 .hp__title { font-size: 2.5rem; line-height: 1.2; }

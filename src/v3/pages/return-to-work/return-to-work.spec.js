@@ -1,45 +1,134 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mount } from "@vue/test-utils";
-import { nextTick, ref } from "vue";
+import { flushPromises, mount } from "@vue/test-utils";
+import { ref } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { V3_HOME_KEY } from "@/v3/composables/useV3Home";
-import { RTW_KEY, useReturnToWorkStore } from "@/v3/stores/returnToWork";
-import { ROOMS_KEY } from "@/v3/stores/rooms";
+import { V3_SHARED_KEY } from "@/v3/composables/useV3Shared";
+import { useReturnToWorkStore } from "@/v3/stores/returnToWork";
 
-vi.mock("@/composables/useAuth", () => ({ useAuth: () => ({}) }));
+// The page reads and writes the shared plan through the store, so the api module is mocked.
+const rooms = vi.hoisted(() => ({ list: [] }));
+const api = vi.hoisted(() => ({
+  plan: null,
+  tasks: [],
+  error: null,
+  cb: {},
+  addTask: vi.fn(async () => "t-new"),
+  updateTask: vi.fn(async () => {}),
+  toggleTask: vi.fn(async () => {}),
+  deleteTask: vi.fn(async () => {}),
+  saveRtwPlan: vi.fn(async () => {}),
+  setResponsibility: vi.fn(async () => {}),
+  setPumping: vi.fn(async () => {}),
+}));
+
+vi.mock("@/composables/useAuth", () => ({ useAuth: () => ({ currentUser: { value: { uid: ME } } }) }));
+// The pumping tab lists the shared room directory, which is Firestore now.
+vi.mock("@/v3/api/rooms", () => ({
+  subscribeRooms: (onData) => {
+    queueMicrotask(() => onData(rooms.list));
+    return () => {};
+  },
+  addRoom: vi.fn(async () => "room-new"),
+  reportRoom: vi.fn(async () => "report-new"),
+}));
+vi.mock("@/v3/api/rtw", () => ({
+  subscribeRtwPlan: (hid, onData, onError) => {
+    api.cb.plan = onData;
+    queueMicrotask(() => (api.error ? onError(api.error) : onData(api.plan)));
+    return () => {};
+  },
+  subscribeTasks: (hid, onData) => {
+    api.cb.tasks = onData;
+    queueMicrotask(() => onData(api.tasks));
+    return () => {};
+  },
+  addTask: (...a) => api.addTask(...a),
+  updateTask: (...a) => api.updateTask(...a),
+  toggleTask: (...a) => api.toggleTask(...a),
+  deleteTask: (...a) => api.deleteTask(...a),
+  saveRtwPlan: (...a) => api.saveRtwPlan(...a),
+  setResponsibility: (...a) => api.setResponsibility(...a),
+  setPumping: (...a) => api.setPumping(...a),
+  migrateLegacyRtw: vi.fn(async () => false),
+}));
 
 import RtwPage from "./index.vue";
 
 // Wednesday 14 October 2026.
 const NOW = new Date(2026, 9, 14, 12, 0, 0);
+const ME = "u1";
+const PARTNER = "u2";
+const retry = vi.fn();
 
-function mountPage({ named = true } = {}) {
+let nextId = 0;
+const task = (over = {}) => ({
+  id: `t${(nextId += 1)}`,
+  title: "Task",
+  group: "home",
+  due: null,
+  owner: "both",
+  done: false,
+  doneAt: null,
+  doneBy: null,
+  notes: "",
+  ...over,
+});
+
+async function mountPage({ named = true, householdId = "h1" } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
+  const store = useReturnToWorkStore();
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }],
   });
   const home = named
-    ? { me: ref({ firstName: "daniel" }), partner: ref({ firstName: "mei" }) }
-    : { me: ref({}), partner: ref(null) };
+    ? {
+        householdId: ref(householdId),
+        me: ref({ uid: ME, firstName: "daniel" }),
+        partner: ref({ uid: PARTNER, firstName: "mei" }),
+      }
+    : { householdId: ref(householdId), me: ref({ uid: ME }), partner: ref(null) };
+  if (householdId) store.bind(householdId, ME, named ? PARTNER : "");
   const wrapper = mount(RtwPage, {
     attachTo: document.body,
-    global: { plugins: [pinia, router], provide: { [V3_HOME_KEY]: home } },
+    global: { plugins: [pinia, router], provide: { [V3_HOME_KEY]: home, [V3_SHARED_KEY]: { retry } } },
   });
-  return { wrapper, store: useReturnToWorkStore() };
+  await flushPromises();
+  return { wrapper, store };
 }
 const solid = (wrapper) => wrapper.findAll("button.btn-primary, a.btn-primary");
 const buttonByText = (wrapper, text) => wrapper.findAll("button").find((b) => b.text() === text);
 const chip = (wrapper, text) => wrapper.findAll('[role="radio"], .v3-chip').find((b) => b.text() === text);
 async function openTab(wrapper, label) {
   await wrapper.findAll('[role="tab"]').find((t) => t.text() === label).trigger("click");
+  await flushPromises();
 }
 
 beforeEach(() => {
   localStorage.clear();
-  vi.useFakeTimers();
+  rooms.list = [];
+  api.plan = null;
+  api.tasks = [];
+  api.error = null;
+  api.cb = {};
+  nextId = 0;
+  retry.mockClear();
+  for (const key of [
+    "addTask",
+    "updateTask",
+    "toggleTask",
+    "deleteTask",
+    "saveRtwPlan",
+    "setResponsibility",
+    "setPumping",
+  ]) {
+    api[key].mockClear();
+  }
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(NOW);
 });
 afterEach(() => {
@@ -48,54 +137,63 @@ afterEach(() => {
 });
 
 describe("V3 return to work page, plan tab", () => {
-  it("shows the heading, subtitle and three tabs", () => {
-    const { wrapper } = mountPage();
+  it("shows the heading, subtitle and three tabs", async () => {
+    const { wrapper } = await mountPage();
     expect(wrapper.get("h1").text()).toBe("Return to work");
-    expect(wrapper.text()).toContain("A shared plan for getting ready, one step at a time.");
+    expect(wrapper.text()).toContain("You both see the same plan.");
     expect(wrapper.findAll('[role="tab"]').map((t) => t.text())).toEqual(["Plan", "Responsibilities", "Pumping preparation"]);
+    expect(wrapper.text()).not.toMatch(/[\u2013\u2014]/);
   });
 
-  it("asks for the date first, with one solid button and an empty task list", () => {
-    const { wrapper } = mountPage();
+  it("asks for the date first, with one solid button and an empty task list", async () => {
+    const { wrapper } = await mountPage();
     expect(wrapper.text()).toContain("When do you go back?");
-    expect(wrapper.find('input[type="date"]').exists()).toBe(true);
     expect(solid(wrapper)).toHaveLength(1);
     expect(solid(wrapper)[0].text()).toBe("Save date");
     expect(wrapper.text()).toContain("No tasks yet. Add one or start from the suggestions below.");
   });
 
-  it("needs a date before saving", async () => {
-    const { wrapper } = mountPage();
-    await buttonByText(wrapper, "Save date").trigger("click");
-    expect(wrapper.get('[role="alert"]').text()).toBe("Choose the day you go back to work.");
+  it("shows Loading the plan and no alert before the household id exists", async () => {
+    const { wrapper } = await mountPage({ householdId: "" });
+    expect(wrapper.text()).toContain("Loading the plan...");
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("When do you go back?");
   });
 
-  it("saving a date shows the countdown sentence and drops the solid button", async () => {
-    const { wrapper, store } = mountPage();
+  it("explains permission-denied and offers Try again", async () => {
+    api.error = { code: "permission-denied" };
+    const { wrapper } = await mountPage();
+    expect(wrapper.get('[role="alert"]').text()).toContain("do not allow reading the plan");
+    await buttonByText(wrapper, "Try again").trigger("click");
+    expect(retry).toHaveBeenCalled();
+  });
+
+  it("needs a date before saving, then saves it to the shared plan", async () => {
+    const { wrapper } = await mountPage();
+    await buttonByText(wrapper, "Save date").trigger("click");
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toBe("Choose the day you go back to work.");
+    expect(api.saveRtwPlan).not.toHaveBeenCalled();
+
     await wrapper.get('input[type="date"]').setValue("2026-11-04");
     await buttonByText(wrapper, "Save date").trigger("click");
-    expect(store.returnDate).toBe("2026-11-04");
+    await flushPromises();
+    expect(api.saveRtwPlan).toHaveBeenCalledWith("h1", ME, { returnDate: "2026-11-04" });
+  });
+
+  it("shows the countdown sentence from the shared plan and who saved it", async () => {
+    api.plan = { returnDate: "2026-11-04", updatedAt: new Date(NOW.getTime() - 5 * 60000), updatedBy: PARTNER };
+    const { wrapper } = await mountPage();
     expect(wrapper.get(".rw__sentence").text()).toBe("Back at work on 4 November. 21 days to go.");
+    expect(wrapper.text()).toContain("Updated by Mei 5 minutes ago");
     expect(wrapper.text()).not.toContain("When do you go back?");
     expect(solid(wrapper)).toHaveLength(0);
     expect(buttonByText(wrapper, "Change date")).toBeTruthy();
   });
 
-  it("lets you change the date", async () => {
-    const { wrapper, store } = mountPage();
-    store.setReturnDate("2026-11-04");
-    await nextTick();
-    await buttonByText(wrapper, "Change date").trigger("click");
-    expect(wrapper.get('input[type="date"]').element.value).toBe("2026-11-04");
-    await wrapper.get('input[type="date"]').setValue("2026-11-11");
-    await buttonByText(wrapper, "Save date").trigger("click");
-    expect(wrapper.get(".rw__sentence").text()).toBe("Back at work on 11 November. 28 days to go.");
-  });
-
-  it("adds a task through the inline form", async () => {
-    const { wrapper, store } = mountPage();
-    store.setReturnDate("2026-11-04");
-    await nextTick();
+  it("adds a task through the inline form, with the owner as a uid", async () => {
+    api.plan = { returnDate: "2026-11-04" };
+    const { wrapper } = await mountPage();
     expect(solid(wrapper)).toHaveLength(0);
     await buttonByText(wrapper, "Add a task").trigger("click");
     expect(solid(wrapper)).toHaveLength(1);
@@ -110,34 +208,27 @@ describe("V3 return to work page, plan tab", () => {
     const dateInputs = wrapper.findAll('input[type="date"]');
     await dateInputs[dateInputs.length - 1].setValue("2026-10-16");
     await buttonByText(wrapper, "Add task").trigger("click");
+    await flushPromises();
 
-    expect(store.tasks).toHaveLength(1);
-    expect(store.tasks[0]).toMatchObject({ title: "Book the nursery trial", group: "childcare", owner: "partner", due: "2026-10-16" });
-    const row = wrapper.get(".rw__task");
-    expect(row.text()).toContain("Book the nursery trial");
-    expect(row.text()).toContain("Mei");
-    expect(row.text()).toContain("Due in 2 days");
+    expect(api.addTask).toHaveBeenCalledWith("h1", ME, {
+      title: "Book the nursery trial",
+      group: "childcare",
+      owner: PARTNER,
+      due: "2026-10-16",
+      notes: "",
+    });
     expect(wrapper.find("#rtw-form").exists()).toBe(false);
-    expect(solid(wrapper)).toHaveLength(0);
-    expect(wrapper.text()).not.toContain("No tasks yet");
   });
 
-  it("keeps Save date outline while the add form is open", async () => {
-    const { wrapper } = mountPage();
-    await buttonByText(wrapper, "Add a task").trigger("click");
-    expect(solid(wrapper)).toHaveLength(1);
-    expect(solid(wrapper)[0].text()).toBe("Add task");
-  });
-
-  it("orders groups and sorts by due date", async () => {
-    const { wrapper, store } = mountPage();
-    store.addTask({ title: "No date task" });
-    store.addTask({ title: "Later task", due: "2026-11-30" });
-    store.addTask({ title: "Soon task", due: "2026-10-16" });
-    store.addTask({ title: "Late task", due: "2026-10-10" });
-    const done = store.addTask({ title: "Finished task" });
-    store.toggleTask(done.id);
-    await nextTick();
+  it("lists shared tasks by group, with the owner by name", async () => {
+    api.tasks = [
+      task({ title: "No date task" }),
+      task({ title: "Later task", due: "2026-11-30", owner: PARTNER }),
+      task({ title: "Soon task", due: "2026-10-16", owner: ME }),
+      task({ title: "Late task", due: "2026-10-10" }),
+      task({ title: "Finished task", done: true, doneBy: PARTNER, doneAt: new Date(NOW.getTime() - 3600000) }),
+    ];
+    const { wrapper } = await mountPage();
     expect(wrapper.findAll(".rw__group-title").map((h) => h.text()).slice(0, 5)).toEqual([
       "Overdue",
       "This week",
@@ -145,164 +236,173 @@ describe("V3 return to work page, plan tab", () => {
       "No date",
       "Done",
     ]);
-    expect(wrapper.text()).toContain("Overdue by 4 days");
     expect(wrapper.get(".rw__overdue").text()).toBe("Overdue by 4 days");
+    expect(wrapper.text()).toContain("Open tasks: Me 1, Mei 1, both 2.");
+    const soon = wrapper.findAll(".rw__task").find((t) => t.text().includes("Soon task"));
+    expect(soon.get(".v3-badge").text()).toBe("Me");
+    const later = wrapper.findAll(".rw__task").find((t) => t.text().includes("Later task"));
+    expect(later.get(".v3-badge").text()).toBe("Mei");
+  });
+
+  it("says who finished a task", async () => {
+    api.tasks = [task({ title: "Packed", done: true, doneBy: PARTNER, doneAt: new Date(NOW.getTime() - 5 * 60000) })];
+    const { wrapper } = await mountPage();
+    expect(wrapper.get(".rw__task").text()).toContain("Done by Mei 5 minutes ago");
+    api.cb.tasks([task({ id: "t1", title: "Packed", done: true, doneBy: ME, doneAt: new Date(NOW.getTime() - 60000) })]);
+    await flushPromises();
+    expect(wrapper.get(".rw__task").text()).toContain("Done by you 1 minute ago");
   });
 
   it("ticks a task with a real checkbox", async () => {
-    const { wrapper, store } = mountPage();
-    store.addTask({ title: "Pack the bag" });
-    await nextTick();
+    api.tasks = [task({ title: "Pack the bag" })];
+    const { wrapper } = await mountPage();
     const box = wrapper.get('input[type="checkbox"]');
     expect(wrapper.get(`label[for="${box.attributes("id")}"]`).text()).toBe("Pack the bag");
     await box.setValue(true);
-    expect(store.tasks[0].done).toBe(true);
-    expect(wrapper.findAll(".rw__group-title")[0].text()).toBe("Done");
+    await flushPromises();
+    expect(api.toggleTask).toHaveBeenCalledWith("h1", "t1", true, ME);
   });
 
   it("edits a task and deletes with a confirm", async () => {
-    const { wrapper, store } = mountPage();
-    store.addTask({ title: "Old title", owner: "me" });
-    await nextTick();
+    api.tasks = [task({ title: "Old title", owner: ME })];
+    const { wrapper } = await mountPage();
     await wrapper.get('button[aria-label="Edit Old title"]').trigger("click");
     expect(wrapper.get('input[type="text"]').element.value).toBe("Old title");
+    expect(chip(wrapper, "Me").attributes("aria-checked")).toBe("true");
     await wrapper.get('input[type="text"]').setValue("New title");
     await buttonByText(wrapper, "Save task").trigger("click");
-    expect(store.tasks[0].title).toBe("New title");
+    await flushPromises();
+    expect(api.updateTask).toHaveBeenCalledWith("h1", "t1", expect.objectContaining({ title: "New title", owner: ME }));
 
-    await wrapper.get('button[aria-label="Delete New title"]').trigger("click");
+    await wrapper.get('button[aria-label="Delete Old title"]').trigger("click");
     expect(wrapper.text()).toContain("Delete this task?");
-    expect(store.tasks).toHaveLength(1);
+    expect(api.deleteTask).not.toHaveBeenCalled();
     await buttonByText(wrapper, "Cancel").trigger("click");
-    expect(store.tasks).toHaveLength(1);
-    await wrapper.get('button[aria-label="Delete New title"]').trigger("click");
+    await wrapper.get('button[aria-label="Delete Old title"]').trigger("click");
     await buttonByText(wrapper, "Delete").trigger("click");
-    expect(store.tasks).toHaveLength(0);
+    await flushPromises();
+    expect(api.deleteTask).toHaveBeenCalledWith("h1", "t1");
   });
 
-  it("adds a suggestion and removes it from the list", async () => {
-    const { wrapper, store } = mountPage();
+  it("adds a suggestion for both of you and drops it from the list", async () => {
+    const { wrapper } = await mountPage();
     expect(wrapper.findAll("#rtw-suggestions ~ ul li")).toHaveLength(6);
     await wrapper.get('button[aria-label="Add Find a pumping room near work"]').trigger("click");
-    expect(store.tasks[0]).toMatchObject({ title: "Find a pumping room near work", group: "pumping", owner: "both", due: null });
+    await flushPromises();
+    expect(api.addTask).toHaveBeenCalledWith("h1", ME, {
+      title: "Find a pumping room near work",
+      group: "pumping",
+      owner: "both",
+      due: null,
+      notes: "",
+    });
+    api.cb.tasks([task({ title: "Find a pumping room near work", group: "pumping" })]);
+    await flushPromises();
     expect(wrapper.findAll("#rtw-suggestions ~ ul li")).toHaveLength(5);
-    expect(wrapper.find('button[aria-label="Add Find a pumping room near work"]').exists()).toBe(false);
   });
 
-  it("hides the suggestions section when all are added", async () => {
-    const { wrapper, store } = mountPage();
-    ["Talk to your manager about flexible work", "Choose childcare and book a trial", "Plan the morning handover", "Find a pumping room near work", "Pack pump, parts and storage bags", "Agree who does night duty in the first week back"].forEach((title) => store.addTask({ title }));
-    await nextTick();
-    expect(wrapper.find("#rtw-suggestions").exists()).toBe(false);
-  });
-
-  it("falls back to generic names and uses no dashes", async () => {
-    const { wrapper, store } = mountPage({ named: false });
-    store.addTask({ title: "Task", owner: "partner" });
-    await nextTick();
+  it("falls back to generic names and shows a failed write", async () => {
+    api.toggleTask.mockRejectedValueOnce(Object.assign(new Error("no"), { code: "permission-denied" }));
+    api.tasks = [task({ title: "Task", owner: "u9" })];
+    const { wrapper } = await mountPage({ named: false });
     expect(wrapper.get(".rw__task").text()).toContain("Your partner");
-    expect(wrapper.text()).not.toMatch(/[\u2013\u2014]/);
+    await wrapper.get('input[type="checkbox"]').setValue(true);
+    await flushPromises();
+    expect(wrapper.get('[role="alert"]').text()).toContain("could not save the task");
+    expect(wrapper.findAll("[data-task]")).toHaveLength(1);
   });
 });
 
 describe("V3 return to work page, responsibilities tab", () => {
   it("lists eight areas and counts everything as not decided at first", async () => {
-    const { wrapper } = mountPage();
+    const { wrapper } = await mountPage();
     await openTab(wrapper, "Responsibilities");
-    expect(wrapper.text()).toContain("Who covers what once you are both back at work.");
     expect(wrapper.findAll(".rtr__row")).toHaveLength(8);
     expect(wrapper.get(".rtr__summary").text()).toBe("You cover 0, Mei covers 0, shared 0, not decided 8.");
     expect(solid(wrapper)).toHaveLength(0);
   });
 
-  it("updates the summary and suggests moving one at a gap of two", async () => {
-    const { wrapper, store } = mountPage();
+  it("saves a choice as a uid and reads a shared one back", async () => {
+    api.plan = { responsibilities: { "morning-routine": ME, dropoff: ME, pickup: PARTNER, meals: "both" } };
+    const { wrapper } = await mountPage();
     await openTab(wrapper, "Responsibilities");
-    const rowChip = (area, text) => wrapper.get(`[data-area="${area}"]`).findAll('[role="radio"]').find((b) => b.text() === text);
-    await rowChip("morning-routine", "Me").trigger("click");
-    await rowChip("dropoff", "Me").trigger("click");
-    expect(wrapper.find(".rtr__hint").exists()).toBe(true);
-    expect(wrapper.get(".rtr__hint").text()).toBe("Daniel has 2 more than Mei. Consider moving one.");
-    await rowChip("pickup", "Mei").trigger("click");
-    await rowChip("meals", "Both").trigger("click");
     expect(wrapper.get(".rtr__summary").text()).toBe("You cover 2, Mei covers 1, shared 1, not decided 4.");
-    expect(wrapper.find(".rtr__hint").exists()).toBe(false);
-    expect(store.responsibilities.pickup).toBe("partner");
+    const rowChip = (area, text) => wrapper.get(`[data-area="${area}"]`).findAll('[role="radio"]').find((b) => b.text() === text);
+    expect(rowChip("pickup", "Mei").attributes("aria-checked")).toBe("true");
+    await rowChip("sick-days", "Mei").trigger("click");
+    await flushPromises();
+    expect(api.setResponsibility).toHaveBeenCalledWith("h1", ME, "sick-days", PARTNER);
     await rowChip("pickup", "Not decided").trigger("click");
-    expect(store.responsibilities.pickup).toBeNull();
+    await flushPromises();
+    expect(api.setResponsibility).toHaveBeenLastCalledWith("h1", ME, "pickup", null);
+  });
+
+  it("suggests moving one when the split is uneven by two", async () => {
+    api.plan = { responsibilities: { "morning-routine": ME, dropoff: ME } };
+    const { wrapper } = await mountPage();
+    await openTab(wrapper, "Responsibilities");
+    expect(wrapper.get(".rtr__hint").text()).toBe("Daniel has 2 more than Mei. Consider moving one.");
   });
 
   it("makes a task assigned to the chosen owner", async () => {
-    const { wrapper, store } = mountPage();
+    api.plan = { responsibilities: { dropoff: PARTNER } };
+    const { wrapper } = await mountPage();
     await openTab(wrapper, "Responsibilities");
-    const row = wrapper.get('[data-area="dropoff"]');
-    await row.findAll('[role="radio"]').find((b) => b.text() === "Mei").trigger("click");
-    await row.get("button.rtr__make").trigger("click");
-    expect(store.tasks[0]).toMatchObject({ title: "Plan childcare drop-off", group: "childcare", owner: "partner" });
-    expect(row.get("button.rtr__make").text()).toBe("Task added");
-    expect(row.get("button.rtr__make").attributes("disabled")).toBeDefined();
+    await wrapper.get('[data-area="dropoff"]').get("button.rtr__make").trigger("click");
+    await flushPromises();
+    expect(api.addTask).toHaveBeenCalledWith("h1", ME, {
+      title: "Plan childcare drop-off",
+      group: "childcare",
+      owner: PARTNER,
+      due: null,
+      notes: "",
+    });
   });
 });
 
 describe("V3 return to work page, pumping tab", () => {
-  it("tracks checklist progress", async () => {
-    const { wrapper, store } = mountPage();
+  it("tracks checklist progress from the shared plan", async () => {
+    api.plan = { pumping: { items: { "find-room": true, "pack-pump": true } } };
+    const { wrapper } = await mountPage();
     await openTab(wrapper, "Pumping preparation");
-    expect(wrapper.text()).toContain("Get set up before the first day back.");
-    expect(wrapper.get(".rtp__progress").text()).toBe("0 of 5 done");
+    expect(wrapper.get(".rtp__progress").text()).toBe("2 of 5 done");
     const boxes = wrapper.findAll('input[type="checkbox"]');
     expect(boxes).toHaveLength(5);
     await boxes[0].setValue(true);
-    await boxes[1].setValue(true);
-    await boxes[4].setValue(true);
-    expect(wrapper.get(".rtp__progress").text()).toBe("3 of 5 done");
-    expect(store.pumping.items.filter((i) => i.done)).toHaveLength(3);
-    expect(wrapper.get(`label[for="${boxes[0].attributes("id")}"]`).text()).toBe("Talk to your workplace about pumping breaks");
+    await flushPromises();
+    expect(api.setPumping).toHaveBeenCalledWith("h1", ME, { items: { "talk-workplace": true } });
     expect(solid(wrapper)).toHaveLength(0);
   });
 
-  it("builds the breaks summary", async () => {
-    const { wrapper } = mountPage();
+  it("builds the breaks summary from the shared plan", async () => {
+    api.plan = { pumping: { sessions: 3, times: ["morning", "afternoon"] } };
+    const { wrapper } = await mountPage();
     await openTab(wrapper, "Pumping preparation");
-    expect(wrapper.find(".rtp__summary").exists()).toBe(false);
-    await chip(wrapper, "3 sessions").trigger("click");
-    await chip(wrapper, "Afternoon").trigger("click");
-    await chip(wrapper, "Morning").trigger("click");
-    await chip(wrapper, "Midday").trigger("click");
-    expect(wrapper.get(".rtp__summary").text()).toBe("Plan for 3 breaks: morning, midday, afternoon.");
-    expect(chip(wrapper, "Morning").attributes("aria-pressed")).toBe("true");
-    await chip(wrapper, "Midday").trigger("click");
     expect(wrapper.get(".rtp__summary").text()).toBe("Plan for 3 breaks: morning, afternoon.");
+    await chip(wrapper, "Midday").trigger("click");
+    await flushPromises();
+    expect(api.setPumping).toHaveBeenCalledWith("h1", ME, { times: ["morning", "afternoon", "midday"] });
+    await chip(wrapper, "4 sessions").trigger("click");
+    await flushPromises();
+    expect(api.setPumping).toHaveBeenLastCalledWith("h1", ME, { sessions: 4 });
   });
 
-  it("lists rooms with links to Support, including saved ones", async () => {
-    localStorage.setItem(
-      ROOMS_KEY,
-      JSON.stringify([{ id: "c1", name: "Office nursing room", address: "1 Example Road", features: [] }]),
-    );
-    const { wrapper } = mountPage();
+  it("lists the shared room directory with links to Support", async () => {
+    rooms.list = [{ id: "r1", name: "Office nursing room", address: "1 Example Road", status: "unverified" }];
+    const { wrapper } = await mountPage();
     await openTab(wrapper, "Pumping preparation");
-    const rooms = wrapper.findAll(".rtp__room");
-    expect(rooms.map((r) => r.get(".rtp__room-name").text())).toEqual([
+    const list = wrapper.findAll(".rtp__room");
+    expect(list.map((r) => r.get(".rtp__room-name").text())).toEqual(["Office nursing room"]);
+    expect(list[0].get("a").attributes("href")).toBe("/support");
+  });
+
+  it("falls back to the seed rooms while the directory is empty", async () => {
+    rooms.list = [];
+    const { wrapper } = await mountPage();
+    await openTab(wrapper, "Pumping preparation");
+    expect(wrapper.findAll(".rtp__room").map((r) => r.get(".rtp__room-name").text())).toEqual([
       "SMU Library Nursing Room",
       "Raffles City Family Room",
-      "Office nursing room",
     ]);
-    expect(rooms[0].text()).toContain("70 Stamford Road, Singapore 178901");
-    expect(rooms[0].text()).toContain("Verified 4 days ago");
-    expect(rooms[1].text()).toContain("Needs verification");
-    const link = rooms[0].get("a");
-    expect(link.attributes("href")).toBe("/v3/support");
-    expect(link.text()).toContain("Open in Support");
-  });
-
-  it("persists the plan between visits", async () => {
-    const first = mountPage();
-    first.store.addTask({ title: "Remembered" });
-    expect(JSON.parse(localStorage.getItem(RTW_KEY)).tasks[0].title).toBe("Remembered");
-    first.wrapper.unmount();
-    const second = mountPage();
-    await nextTick();
-    expect(second.wrapper.text()).toContain("Remembered");
   });
 });

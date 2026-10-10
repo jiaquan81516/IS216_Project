@@ -6,10 +6,12 @@ import {
   getDocs,
   serverTimestamp,
   setDoc,
+  Timestamp,
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "./db";
+import { describeInviteState, INVITE_ERROR_CODES, inviteExpiryMs, inviteState } from "./inviteHelpers";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_PREFIX = "NT-";
@@ -110,20 +112,7 @@ export async function createHousehold(user, baby = {}) {
   const { babyName, babyStatus, babyDate } = cleanBaby(baby);
   const profile = (await getUserProfile(user.uid)) || {};
 
-  let inviteCode = null;
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const candidate = generateInviteCode();
-    const taken = await getDoc(doc(db, "invites", candidate));
-    if (!taken.exists()) {
-      inviteCode = candidate;
-      break;
-    }
-  }
-  if (!inviteCode) {
-    const error = new Error("Could not create an invitation code.");
-    error.code = "invite/generation-failed";
-    throw error;
-  }
+  const inviteCode = await freshCode();
 
   const householdRef = doc(db, "households", crypto.randomUUID());
   const householdId = householdRef.id;
@@ -145,11 +134,7 @@ export async function createHousehold(user, baby = {}) {
     role: profile.role ?? null,
     joinedAt: serverTimestamp(),
   });
-  batch.set(doc(db, "invites", inviteCode), {
-    householdId,
-    createdBy: user.uid,
-    createdAt: serverTimestamp(),
-  });
+  batch.set(doc(db, "invites", inviteCode), inviteDoc(householdId, user.uid));
   batch.update(doc(db, "users", user.uid), { householdId, onboarded: true });
 
   await batch.commit();
@@ -159,12 +144,14 @@ export async function createHousehold(user, baby = {}) {
 export async function joinHousehold(user, code) {
   const inviteCode = normaliseInviteCode(code);
   const inviteSnap = inviteCode ? await getDoc(doc(db, "invites", inviteCode)) : null;
-  if (!inviteSnap || !inviteSnap.exists()) {
-    const error = new Error("That invitation code was not found.");
-    error.code = "invite/not-found";
+  const invite = inviteSnap?.exists() ? inviteSnap.data() : null;
+  const state = inviteState(invite);
+  if (state !== "valid") {
+    const error = new Error(describeInviteState(state));
+    error.code = INVITE_ERROR_CODES[state] ?? INVITE_ERROR_CODES.missing;
     throw error;
   }
-  const { householdId } = inviteSnap.data();
+  const { householdId } = invite;
   const profile = (await getUserProfile(user.uid)) || {};
 
   const batch = writeBatch(db);
@@ -176,8 +163,61 @@ export async function joinHousehold(user, code) {
     joinedAt: serverTimestamp(),
   });
   batch.update(doc(db, "users", user.uid), { householdId, onboarded: true });
+  // Mark the code used so it cannot be shared on to a third person.
+  batch.update(doc(db, "invites", inviteCode), { usedAt: serverTimestamp(), usedBy: user.uid });
   await batch.commit();
   return { householdId };
+}
+
+// A fresh invite doc. Every code made from now on carries an expiry; codes made before this
+// release have no expiresAt and are treated as valid for ever (see inviteHelpers.js).
+function inviteDoc(householdId, uid, now = Date.now()) {
+  return {
+    householdId,
+    createdBy: uid,
+    createdAt: serverTimestamp(),
+    expiresAt: Timestamp.fromMillis(inviteExpiryMs(now)),
+    usedAt: null,
+    usedBy: null,
+    revokedAt: null,
+  };
+}
+
+async function freshCode() {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const candidate = generateInviteCode();
+    const taken = await getDoc(doc(db, "invites", candidate));
+    if (!taken.exists()) return candidate;
+  }
+  const error = new Error("Could not create an invitation code.");
+  error.code = "invite/generation-failed";
+  throw error;
+}
+
+// Replaces the household's code. The old invite document is marked revoked rather than
+// deleted, so a partner who tries the old code gets a clear answer instead of "not found".
+export async function regenerateInviteCode(user, householdId, oldCode = null) {
+  if (!householdId) {
+    const error = new Error("You need a household before you can make a code.");
+    error.code = "invite/no-household";
+    throw error;
+  }
+  const inviteCode = await freshCode();
+  const batch = writeBatch(db);
+  batch.set(doc(db, "invites", inviteCode), inviteDoc(householdId, user.uid));
+  batch.update(doc(db, "households", householdId), { inviteCode });
+  if (oldCode && oldCode !== inviteCode) {
+    batch.update(doc(db, "invites", oldCode), { revokedAt: serverTimestamp() });
+  }
+  await batch.commit();
+  return { inviteCode };
+}
+
+export async function getInvite(code) {
+  const inviteCode = normaliseInviteCode(code);
+  if (!inviteCode) return null;
+  const snap = await getDoc(doc(db, "invites", inviteCode));
+  return snap.exists() ? { code: inviteCode, ...snap.data() } : null;
 }
 
 export async function getHouseholdInviteCode(householdId) {

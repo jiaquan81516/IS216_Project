@@ -4,10 +4,13 @@ import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import BrandLogo from "@/components/ui/BrandLogo.vue";
 import { useAuth } from "@/composables/useAuth";
-import V3Avatar from "@/v3/components/V3Avatar.vue";
 import V3Icon from "@/v3/components/V3Icon.vue";
+import V3UserMenu from "@/v3/components/V3UserMenu.vue";
 import { displayName, useV3Home, V3_HOME_KEY } from "@/v3/composables/useV3Home";
 import { useV3Entries, V3_ENTRIES_KEY } from "@/v3/composables/useV3Entries";
+import { useV3Handovers, V3_HANDOVERS_KEY } from "@/v3/composables/useV3Handovers";
+import { useV3Shared, V3_SHARED_KEY } from "@/v3/composables/useV3Shared";
+import { resetLimits } from "@/v3/api/limits";
 import { V3_NAV } from "@/v3/data/nav";
 import { V3_ROUTES } from "@/v3/routes";
 
@@ -22,6 +25,14 @@ const home = useV3Home();
 provide(V3_HOME_KEY, home);
 // One live entries listener, shared by Home and the care log. It waits for the household id.
 provide(V3_ENTRIES_KEY, useV3Entries(home.householdId));
+// One set of listeners for the shared pages (sleep rota, calendar, return to work). They
+// wait for the household id too, and are unbound when it changes or the shell unmounts.
+const meUid = computed(() => home.me.value.uid);
+const partnerUid = computed(() => home.partner.value?.uid ?? "");
+provide(V3_SHARED_KEY, useV3Shared(home.householdId, meUid, partnerUid));
+// One live handovers listener. The page, the Home line and the care log dividers share it.
+const handovers = useV3Handovers(home.householdId, meUid);
+provide(V3_HANDOVERS_KEY, handovers);
 
 const menuOpen = ref(false);
 const menuButton = ref(null);
@@ -34,7 +45,14 @@ const names = computed(() => {
 const babyName = computed(() => (home.baby.value.name ? `Baby ${home.baby.value.name}` : ""));
 const babyAge = computed(() => home.baby.value.line || "");
 const userName = computed(() => displayName(home.me.value.displayName || home.me.value.firstName));
-const items = computed(() => V3_NAV.map((item) => ({ ...item, active: item.to === route.path })));
+const waiting = computed(() => handovers.waitingCount.value);
+const items = computed(() =>
+  V3_NAV.map((item) => ({
+    ...item,
+    active: item.to === route.path,
+    count: item.key === "handover" ? waiting.value : 0,
+  })),
+);
 
 function toggleMenu() {
   menuOpen.value = !menuOpen.value;
@@ -52,6 +70,7 @@ function skipToMain(event) {
   document.getElementById("v3-main")?.focus();
 }
 async function signOut() {
+  resetLimits();
   await logout();
   router.push(V3_ROUTES.LANDING);
 }
@@ -99,6 +118,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
               >
                 <V3Icon :name="item.icon" />
                 <span>{{ item.label }}</span>
+                <span v-if="item.count" class="side__count" aria-hidden="true">{{ item.count }}</span>
+                <span v-if="item.count" class="visually-hidden">
+                  {{ item.count === 1 ? "1 handover waiting for you" : `${item.count} handovers waiting for you` }}
+                </span>
               </RouterLink>
             </li>
           </ul>
@@ -107,11 +130,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
         <div class="side__foot">
           <p class="side__note">Your care space is shared. Wellness check-ins stay private by default.</p>
           <div class="side__user">
-            <V3Avatar :name="userName" tone="apricot" :size="36" />
-            <div class="side__user-text">
-              <p class="side__user-name">{{ userName }}</p>
-              <button type="button" class="side__signout" @click="signOut">Sign out</button>
-            </div>
+            <V3UserMenu :name="userName" @sign-out="signOut" />
           </div>
         </div>
       </div>
@@ -232,6 +251,17 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   color: var(--nt-muted);
   text-decoration: none;
 }
+.side__count {
+  margin-left: auto;
+  padding: 0 7px;
+  background: var(--nt-gray);
+  border: 1px solid var(--nt-line);
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 20px;
+  color: var(--nt-plum);
+}
 .side__link:hover {
   background: var(--nt-gray);
   color: var(--nt-ink);
@@ -259,35 +289,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   gap: 10px;
   padding-top: 16px;
   border-top: 1px solid var(--nt-line);
-}
-.side__user-text {
-  min-width: 0;
-}
-.side__user-name {
-  margin: 0;
-  overflow: hidden;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.3;
-  color: var(--nt-ink);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.side__signout {
-  padding: 0;
-  background: none;
-  border: 0;
-  font-family: inherit;
-  font-size: 0.875rem;
-  line-height: 1.3;
-  color: var(--nt-muted);
-  text-decoration: none;
-  cursor: pointer;
-}
-.side__signout:hover {
-  color: var(--nt-plum);
-  text-decoration: underline;
-  text-underline-offset: 3px;
 }
 
 @media (max-width: 991px) {

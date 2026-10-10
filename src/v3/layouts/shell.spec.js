@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
+import { createPinia, setActivePinia } from "pinia";
 import { V3_ROUTES } from "@/v3/routes";
 
-const state = vi.hoisted(() => ({ members: [], household: null }));
+const state = vi.hoisted(() => ({ members: [], household: null, handovers: [] }));
 
 vi.mock("@/api/firebase", () => ({ default: {}, auth: {} }));
 vi.mock("@/v3/api/db", () => ({ db: {} }));
@@ -26,6 +27,13 @@ vi.mock("@/v3/api/entries", () => ({
     return () => {};
   },
 }));
+vi.mock("@/v3/api/handovers", () => ({
+  HANDOVERS_MAX: 30,
+  subscribeHandovers: (_id, onData) => {
+    queueMicrotask(() => onData(state.handovers));
+    return () => {};
+  },
+}));
 
 import V3AppShell from "./V3AppShell.vue";
 
@@ -39,7 +47,9 @@ async function mountShell() {
   });
   router.push(V3_ROUTES.HOME);
   await router.isReady();
-  const wrapper = mount(V3AppShell, { global: { plugins: [router] } });
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const wrapper = mount(V3AppShell, { global: { plugins: [router, pinia] } });
   await flushPromises();
   return { wrapper, router };
 }
@@ -50,15 +60,17 @@ beforeEach(() => {
     { uid: "u1", displayName: "daniel Tan", role: "parent" },
     { uid: "u2", displayName: "Mei Lin", role: "partner" },
   ];
+  state.handovers = [];
 });
 
 describe("V3 app shell", () => {
-  it("renders the main nav with seven items and Today as the current page", async () => {
+  it("renders the main nav with eight items and Today as the current page", async () => {
     const { wrapper } = await mountShell();
     const links = wrapper.findAll('nav[aria-label="Main"] a');
     expect(links.map((a) => a.text())).toEqual([
       "Today",
       "Care log",
+      "Handover",
       "Sleep rota",
       "Return to work",
       "Calendar",
@@ -66,16 +78,39 @@ describe("V3 app shell", () => {
       "Support",
     ]);
     expect(links.map((a) => a.attributes("href"))).toEqual([
-      "/v3/home",
-      "/v3/care-log",
-      "/v3/rota",
-      "/v3/return-to-work",
-      "/v3/calendar",
-      "/v3/wellness",
-      "/v3/support",
+      "/home",
+      "/care-log",
+      "/handover",
+      "/rota",
+      "/return-to-work",
+      "/calendar",
+      "/wellness",
+      "/support",
     ]);
     expect(links[0].attributes("aria-current")).toBe("page");
     expect(links.slice(1).every((a) => !a.attributes("aria-current"))).toBe(true);
+  });
+
+  it("badges the Handover nav item only while one is waiting for me", async () => {
+    const { wrapper } = await mountShell();
+    expect(wrapper.find(".side__count").exists()).toBe(false);
+
+    state.handovers = [
+      { id: "ho1", from: "u2", to: "u1", sentAt: new Date(), acceptedAt: null },
+      { id: "ho0", from: "u1", to: "u2", sentAt: new Date(), acceptedAt: null },
+    ];
+    const second = await mountShell();
+    const badge = second.wrapper.get(".side__count");
+    expect(badge.text()).toBe("1");
+    expect(badge.attributes("aria-hidden")).toBe("true");
+    const link = second.wrapper.findAll('nav[aria-label="Main"] a')[2];
+    expect(link.text()).toContain("1 handover waiting for you");
+  });
+
+  it("drops the badge once it has been accepted", async () => {
+    state.handovers = [{ id: "ho1", from: "u2", to: "u1", sentAt: new Date(), acceptedAt: new Date() }];
+    const { wrapper } = await mountShell();
+    expect(wrapper.find(".side__count").exists()).toBe(false);
   });
 
   it("shows the household chip with both parents and the baby line", async () => {
@@ -109,6 +144,26 @@ describe("V3 app shell", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     await flushPromises();
     expect(button.attributes("aria-expanded")).toBe("false");
+    wrapper.unmount();
+  });
+
+  it("turns the user row into an account menu with Profile, Settings and Sign out", async () => {
+    const { wrapper } = await mountShell();
+    const trigger = wrapper.get(".side__user button");
+    expect(trigger.attributes("aria-expanded")).toBe("false");
+    expect(trigger.text()).toContain("Daniel");
+    // The two new pages are reachable from here and are not in the main nav.
+    expect(wrapper.findAll('nav[aria-label="Main"] a[href="/settings"]')).toHaveLength(0);
+    expect(wrapper.findAll('nav[aria-label="Main"] a[href="/profile"]')).toHaveLength(0);
+
+    await trigger.trigger("click");
+    await flushPromises();
+    const items = wrapper.findAll("#v3-user-menu [role=menuitem]");
+    expect(items.map((i) => i.text())).toEqual(["Profile", "Settings", "Sign out"]);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await flushPromises();
+    expect(trigger.attributes("aria-expanded")).toBe("false");
     wrapper.unmount();
   });
 });

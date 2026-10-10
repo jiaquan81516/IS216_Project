@@ -1,7 +1,9 @@
 import { computed, ref } from "vue";
 import { useAuth } from "@/composables/useAuth";
 import { babySummary, getHousehold, getHouseholdMembers, getUserProfile } from "@/v3/api/profile";
+import { normaliseSettings } from "@/v3/api/settingsHelpers";
 import { withTimeout } from "@/v3/api/timeout";
+import { setV3Display } from "@/v3/composables/useV3Prefs";
 
 // Key used by the layout to share one household load with its child pages.
 export const V3_HOME_KEY = Symbol("v3-home");
@@ -54,6 +56,8 @@ export function useV3Home() {
       if (!loadedHousehold) throw new Error("Household not found");
       if (id !== run) return;
       profile.value = loadedProfile;
+      // The display preferences travel with the profile, so every V3 page can read them.
+      setV3Display(normaliseSettings(loadedProfile.settings).display);
       householdData.value = loadedHousehold;
       members.value = loadedMembers;
     } catch (cause) {
@@ -69,7 +73,7 @@ export function useV3Home() {
     const user = currentUser.value;
     const displayName = profile.value?.displayName || user?.displayName || "";
     const email = profile.value?.email || user?.email || "";
-    return { uid: user?.uid ?? "", firstName: firstNameOf(displayName, email), displayName };
+    return { uid: user?.uid ?? "", firstName: firstNameOf(displayName, email), displayName, email };
   });
 
   const partner = computed(() => {
@@ -80,8 +84,21 @@ export function useV3Home() {
   const baby = computed(() => babySummary(householdData.value ?? {}));
   const householdId = computed(() => profile.value?.householdId ?? "");
   const inviteCode = computed(() => householdData.value?.inviteCode ?? "");
+  const settings = computed(() => normaliseSettings(profile.value?.settings));
 
   reload();
 
-  return { loading, error, reload, me, partner, household: householdData, householdId, baby, inviteCode };
+  return {
+    loading,
+    error,
+    reload,
+    me,
+    partner,
+    profile,
+    settings,
+    household: householdData,
+    householdId,
+    baby,
+    inviteCode,
+  };
 }

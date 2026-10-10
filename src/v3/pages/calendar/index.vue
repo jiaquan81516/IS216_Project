@@ -20,15 +20,19 @@ import {
   weekdayLabels,
 } from "@/v3/api/calendarHelpers";
 import { addDays, parseIso, toIso } from "@/v3/api/rotaHelpers";
+import { describeSharedError, ownerKey, ownerLabel, ownerUid } from "@/v3/api/sharedHelpers";
 import { displayName, V3_HOME_KEY } from "@/v3/composables/useV3Home";
+import { useV3Prefs } from "@/v3/composables/useV3Prefs";
+import { V3_SHARED_KEY } from "@/v3/composables/useV3Shared";
 import { useCalendarStore } from "@/v3/stores/calendar";
 import { useRotaStore } from "@/v3/stores/rota";
 
 defineOptions({ name: "V3CalendarPage" });
 
-// The layout provides the household. Only names are needed, so the page falls back to
-// "Me" and "Your partner" when it is used on its own.
+// The layout provides the household and the bound stores. Names fall back to "Me" and
+// "Your partner" when the page is used on its own.
 const home = inject(V3_HOME_KEY, null);
+const shared = inject(V3_SHARED_KEY, null);
 const store = useCalendarStore();
 const rota = useRotaStore();
 
@@ -37,8 +41,22 @@ const names = computed(() => {
   const theirs = home?.partner?.value?.firstName;
   return { me: mine ? displayName(mine) : "Me", partner: theirs ? displayName(theirs) : "Your partner" };
 });
-const ownerName = (owner) => (owner === "both" ? "Both" : names.value[owner]);
+const myUid = computed(() => home?.me?.value?.uid || store.meUid);
+// One quiet line when Google Calendar is linked, and nothing at all when it is not. The
+// connecting and the syncing both live on Settings; this page only says what is true.
+const googleSynced = computed(() => Boolean(home?.profile?.value?.settings?.calendar?.connected));
+// An owner is a uid or "both": the name comes from the signed in uid, the colour from a key.
+const ownerName = (owner) => ownerLabel(owner, myUid.value, names.value.me, names.value.partner);
+const ownerTone = (owner) => ownerKey(owner, myUid.value) ?? "both";
 const typeLabel = (type) => EVENT_TYPES.find((t) => t.value === type)?.label ?? "";
+
+// Shared data state. The page waits for the household id, so it never shows an error first.
+const householdId = computed(() => home?.householdId?.value ?? store.householdId);
+const loading = computed(() => !householdId.value || store.loading);
+const errorInfo = computed(() => (store.error ? describeSharedError(store.error.code, "calendar") : null));
+function retry() {
+  shared?.retry();
+}
 
 const todayIso = toIso(new Date());
 const now = parseIso(todayIso);
@@ -50,13 +68,14 @@ const VIEWS = [
 const view = ref("month");
 const cursor = reactive({ year: now.getFullYear(), month: now.getMonth() });
 
-const WEEK_START = 1;
-const weekdays = weekdayLabels(WEEK_START);
+// The week start comes from Settings (Display), so changing it there changes this grid.
+const { weekStart } = useV3Prefs();
+const weekdays = computed(() => weekdayLabels(weekStart.value));
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const weekdayNames = weekdays.map((_, i) => WEEKDAY_NAMES[(WEEK_START + i) % 7]);
+const weekdayNames = computed(() => weekdays.value.map((_, i) => WEEKDAY_NAMES[(weekStart.value + i) % 7]));
 
 const label = computed(() => monthLabel(cursor.year, cursor.month));
-const grid = computed(() => monthGrid(cursor.year, cursor.month, WEEK_START));
+const grid = computed(() => monthGrid(cursor.year, cursor.month, weekStart.value));
 
 const dayEvents = computed(() => {
   const map = {};
@@ -66,11 +85,11 @@ const dayEvents = computed(() => {
   return map;
 });
 
-// Night duty comes from the sleep rota store (local too).
+// Night duty comes from the shared sleep rota.
 const nights = computed(() => {
   const map = {};
   for (const week of grid.value) {
-    for (const day of week) map[day.iso] = nightOwner(rota, day.iso);
+    for (const day of week) map[day.iso] = nightOwner(rota.view, day.iso);
   }
   return map;
 });
@@ -109,7 +128,7 @@ const panelDate = ref(todayIso);
 const panelAdding = ref(false);
 const selectedDay = ref(null);
 const panelEvents = computed(() => sortDayEvents(eventsOnDay(store.events, panelDate.value)));
-const panelNight = computed(() => nightOwner(rota, panelDate.value));
+const panelNight = computed(() => nightOwner(rota.view, panelDate.value));
 
 function openDay(iso, trigger = null, adding = false) {
   trigger?.focus?.();
@@ -137,9 +156,10 @@ function openAdd(event) {
 function closePanel() {
   panelOpen.value = false;
 }
-function onSave(payload) {
-  const { id, ...data } = payload;
-  const saved = id ? store.updateEvent(id, data) : store.addEvent(data);
+async function onSave(payload) {
+  const { id, owner, ...rest } = payload;
+  const data = { ...rest, owner: ownerUid(owner, myUid.value, rota.partnerUid || store.partnerUid) ?? "both" };
+  const saved = id ? await store.updateEvent(id, data) : await store.addEvent(data);
   if (!saved) return;
   panelDate.value = saved.date;
   selectedDay.value = saved.date;
@@ -156,7 +176,8 @@ function onDelete(id) {
   <div class="cal">
     <header class="cal__head">
       <h1 class="nt-title cal__title">Calendar</h1>
-      <p class="cal__sub">Appointments, family plans and who is on duty.</p>
+      <p class="cal__sub">Appointments, family plans and who is on duty. You both see the same calendar.</p>
+      <p v-if="googleSynced" class="cal__synced">Synced with Google Calendar</p>
     </header>
 
     <section class="cal__bar" aria-label="Calendar controls">
@@ -182,6 +203,18 @@ function onDelete(id) {
       </div>
     </section>
 
+    <div aria-live="polite">
+      <p v-if="loading" class="cal__status">Loading the calendar...</p>
+    </div>
+
+    <div v-if="!loading && errorInfo" class="cal__error alert alert-danger" role="alert">
+      <p class="mb-0">{{ errorInfo.text }}</p>
+      <p v-if="errorInfo.detail" class="cal__status">{{ errorInfo.detail }}</p>
+      <button type="button" class="btn btn-outline btn-sm" @click="retry">Try again</button>
+    </div>
+
+    <p v-if="store.writeError" class="v3-error-text" role="alert">{{ store.writeError }}</p>
+
     <ul class="cal__legend" aria-label="Legend">
       <li><span class="cal__swatch" data-owner="me" aria-hidden="true"></span>{{ names.me }}</li>
       <li><span class="cal__swatch" data-owner="partner" aria-hidden="true"></span>{{ names.partner }}</li>
@@ -190,7 +223,7 @@ function onDelete(id) {
     </ul>
 
     <!-- Month -->
-    <div v-if="view === 'month'" class="cal__wrap">
+    <div v-if="view === 'month' && !loading && !errorInfo" class="cal__wrap">
       <table class="cal__table" aria-labelledby="cal-month">
         <thead>
           <tr>
@@ -236,7 +269,7 @@ function onDelete(id) {
                   v-for="event in dayEvents[day.iso].slice(0, 2)"
                   :key="event.id"
                   class="cal__chip"
-                  :data-owner="event.owner"
+                  :data-owner="ownerTone(event.owner)"
                   :data-event="event.id"
                 >
                   <span class="visually-hidden">{{ ownerName(event.owner) }}: </span>{{ event.title }}
@@ -256,7 +289,7 @@ function onDelete(id) {
                   v-for="event in dayEvents[day.iso].slice(0, 4)"
                   :key="event.id"
                   class="cal__dot"
-                  :data-owner="event.owner"
+                  :data-owner="ownerTone(event.owner)"
                 ></span>
               </span>
             </td>
@@ -266,7 +299,7 @@ function onDelete(id) {
     </div>
 
     <!-- Agenda -->
-    <div v-else class="cal__agenda">
+    <div v-else-if="!loading && !errorInfo" class="cal__agenda">
       <p v-if="!agenda.length" class="cal__empty">{{ agendaEmpty }}</p>
       <section v-for="group in agenda" :key="group.date" class="cal__group" :aria-labelledby="`cal-ag-${group.date}`">
         <h3 :id="`cal-ag-${group.date}`" class="cal__group-title">
@@ -280,7 +313,7 @@ function onDelete(id) {
               <span class="cal__atext">
                 <span class="cal__atitle">{{ event.title }}</span>
                 <span class="cal__ameta">
-                  <span class="cal__owner" :data-owner="event.owner">{{ ownerName(event.owner) }}</span>
+                  <span class="cal__owner" :data-owner="ownerTone(event.owner)">{{ ownerName(event.owner) }}</span>
                   <span>{{ typeLabel(event.type) }}</span>
                   <span v-if="event.endDate !== event.date">{{ dateRangeLabel(event.date, event.endDate) }}</span>
                 </span>
@@ -297,6 +330,7 @@ function onDelete(id) {
       :events="panelEvents"
       :night="panelNight"
       :names="names"
+      :me-uid="myUid"
       :adding="panelAdding"
       @close="closePanel"
       @save="onSave"
@@ -310,6 +344,7 @@ function onDelete(id) {
 .cal__head { display: flex; flex-direction: column; gap: 8px; }
 .cal__title { font-size: 2.5rem; line-height: 1.2; }
 .cal__sub { margin: 0; color: var(--nt-muted); }
+.cal__synced { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
 
 .cal__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
 .cal__nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -320,6 +355,8 @@ function onDelete(id) {
 .cal__icon:hover { background: var(--nt-gray); }
 .cal__icon:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 
+.cal__status { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
+.cal__error { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-width: 720px; }
 .cal__legend { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 0; list-style: none; font-size: 0.875rem; color: var(--nt-muted); }
 .cal__legend li { display: inline-flex; align-items: center; gap: 8px; }
 .cal__swatch { width: 14px; height: 14px; border-radius: 4px; background: var(--nt-gray); border: 1px solid var(--nt-line); }

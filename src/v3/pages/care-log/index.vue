@@ -10,7 +10,6 @@ import {
   describeEntriesError,
   ENTRY_TYPES,
   formatMinutes,
-  formatTime,
   groupByDay,
   lastFeedHeading,
   lastOfType,
@@ -20,6 +19,9 @@ import {
 } from "@/v3/api/entryHelpers";
 import { displayName, useV3Home, V3_HOME_KEY } from "@/v3/composables/useV3Home";
 import { ENTRIES_PAGE_SIZE, useV3Entries, V3_ENTRIES_KEY } from "@/v3/composables/useV3Entries";
+import { useV3Handovers, V3_HANDOVERS_KEY } from "@/v3/composables/useV3Handovers";
+import { useV3Prefs } from "@/v3/composables/useV3Prefs";
+import { handoverRows } from "@/v3/api/handoverHelpers";
 
 defineOptions({ name: "V3CareLogPage" });
 
@@ -30,6 +32,9 @@ const { loading, error, reload, me, partner, baby, householdId } = home;
 
 const route = useRoute();
 const router = useRouter();
+
+// Times follow the 12h or 24h choice in Settings (Display).
+const { formatTime: prefTime } = useV3Prefs();
 
 const now = ref(new Date());
 let clockTimer = null;
@@ -71,7 +76,15 @@ const visibleEntries = computed(() => {
   if (filter.value === "new") return allEntries.value.filter((e) => newIds.value.has(e.id));
   return allEntries.value;
 });
-const groups = computed(() => groupByDay(visibleEntries.value, now.value));
+// Handover boundaries are drawn from the handovers the shell already listens to, so the
+// timeline reads as shifts without a second query.
+const handoversShared = inject(V3_HANDOVERS_KEY, null) ?? useV3Handovers(householdId, myUid);
+const groups = computed(() =>
+  groupByDay(visibleEntries.value, now.value).map((group) => ({
+    ...group,
+    rows: handoverRows(group.entries, handoversShared.handovers.value),
+  })),
+);
 
 const partnerFirst = computed(() => (partner.value ? displayName(partner.value.firstName) : ""));
 const babyName = computed(() => baby.value.name || "Baby");
@@ -376,31 +389,33 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
             <section v-for="group in groups" :key="group.key" class="cl__day" :aria-label="group.label">
               <h3 class="cl__day-title">{{ group.label }}</h3>
               <ul class="cl__rows">
-                <li v-for="entry in group.entries" :key="entry.id" class="cl__row">
-                  <span class="cl__time">{{ formatTime(entry.at) }}</span>
-                  <span class="cl__icon" :class="isMine(entry) ? 'cl__icon--me' : 'cl__icon--partner'">
-                    <V3Icon :name="iconOf(entry)" :size="18" />
+                <template v-for="row in group.rows" :key="row.key">
+                <li v-if="row.kind === 'divider'" class="cl__handover">{{ row.label }}</li>
+                <li v-else class="cl__row">
+                  <span class="cl__time">{{ prefTime(row.entry.at) }}</span>
+                  <span class="cl__icon" :class="isMine(row.entry) ? 'cl__icon--me' : 'cl__icon--partner'">
+                    <V3Icon :name="iconOf(row.entry)" :size="18" />
                   </span>
                   <div class="cl__body">
-                    <p class="cl__row-title">{{ summary(entry).title }}</p>
-                    <p v-if="summary(entry).detail" class="cl__row-detail">{{ summary(entry).detail }}</p>
-                    <p v-if="summary(entry).note" class="cl__row-detail">{{ summary(entry).note }}</p>
+                    <p class="cl__row-title">{{ summary(row.entry).title }}</p>
+                    <p v-if="summary(row.entry).detail" class="cl__row-detail">{{ summary(row.entry).detail }}</p>
+                    <p v-if="summary(row.entry).note" class="cl__row-detail">{{ summary(row.entry).note }}</p>
                     <p class="cl__row-by">
-                      <span>by {{ byLabel(entry) }}</span>
-                      <span v-if="seenByPartner(entry)">Seen by {{ partnerFirst }}</span>
+                      <span>by {{ byLabel(row.entry) }}</span>
+                      <span v-if="seenByPartner(row.entry)">Seen by {{ partnerFirst }}</span>
                     </p>
-                    <p v-if="rowError.id === entry.id" class="cl__row-error" role="alert">{{ rowError.text }}</p>
+                    <p v-if="rowError.id === row.entry.id" class="cl__row-error" role="alert">{{ rowError.text }}</p>
                   </div>
                   <div class="cl__side">
-                    <AppBadge v-if="!isMine(entry) && newIds.has(entry.id)" color="blue">New</AppBadge>
-                    <template v-if="isMine(entry)">
-                      <div v-if="confirmingId === entry.id" class="cl__confirm">
+                    <AppBadge v-if="!isMine(row.entry) && newIds.has(row.entry.id)" color="blue">New</AppBadge>
+                    <template v-if="isMine(row.entry)">
+                      <div v-if="confirmingId === row.entry.id" class="cl__confirm">
                         <span class="cl__confirm-text">Delete this entry?</span>
                         <button
                           type="button"
                           class="btn btn-outline btn-sm cl__btn-danger"
-                          :disabled="deletingId === entry.id"
-                          @click="confirmDelete(entry)"
+                          :disabled="deletingId === row.entry.id"
+                          @click="confirmDelete(row.entry)"
                         >
                           Delete
                         </button>
@@ -411,7 +426,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
                           type="button"
                           class="cl__icon-btn cl__icon-btn--edit"
                           aria-label="Edit entry"
-                          @click="openEdit(entry, $event)"
+                          @click="openEdit(row.entry, $event)"
                         >
                           <V3Icon name="edit" :size="18" />
                         </button>
@@ -419,7 +434,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
                           type="button"
                           class="cl__icon-btn cl__icon-btn--delete"
                           aria-label="Delete entry"
-                          @click="askDelete(entry)"
+                          @click="askDelete(row.entry)"
                         >
                           <V3Icon name="trash" :size="18" />
                         </button>
@@ -427,6 +442,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
                     </template>
                   </div>
                 </li>
+                </template>
               </ul>
             </section>
 
@@ -493,6 +509,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 
 .cl__day-title { margin: 0 0 8px; font-family: var(--nt-serif); font-size: 1.125rem; font-weight: 400; line-height: 1.3; color: var(--nt-ink); }
 .cl__rows { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
+.cl__handover { padding: 8px 0; border-bottom: 1px solid var(--nt-line); font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
 .cl__row { display: grid; grid-template-columns: 72px 36px minmax(0, 1fr) auto; gap: 16px; align-items: start; padding: 16px 0; border-bottom: 1px solid var(--nt-line); }
 .cl__time { font-size: 0.875rem; line-height: 36px; color: var(--nt-muted); }
 .cl__icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; color: var(--nt-ink); }

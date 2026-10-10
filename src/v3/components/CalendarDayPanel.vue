@@ -11,6 +11,7 @@ import {
   NOTES_MAX,
   validateEvent,
 } from "@/v3/api/calendarHelpers";
+import { ownerKey, ownerLabel } from "@/v3/api/sharedHelpers";
 
 defineOptions({ name: "CalendarDayPanel" });
 
@@ -20,6 +21,7 @@ const props = defineProps({
   events: { type: Array, default: () => [] }, // events on that day, already sorted
   night: { type: Object, default: null }, // { who, shared, second } from nightOwner
   names: { type: Object, default: () => ({ me: "Me", partner: "Your partner" }) },
+  meUid: { type: String, default: "" }, // the signed in uid, so an owner uid gets a name
   adding: { type: Boolean, default: false }, // open straight into the add form
 });
 const emit = defineEmits(["close", "save", "delete"]);
@@ -52,7 +54,9 @@ const ownerOptions = computed(() => [
   { value: "both", label: "Both" },
 ]);
 const typeOptions = EVENT_TYPES.map((t) => ({ value: t.value, label: t.label }));
-const ownerName = (owner) => (owner === "me" ? props.names.me : owner === "partner" ? props.names.partner : "Both");
+// An owner is a uid or "both" in Firestore, and a chip key inside the form.
+const ownerName = (owner) => ownerLabel(owner, props.meUid, props.names.me, props.names.partner);
+const ownerTone = (owner) => ownerKey(owner, props.meUid) ?? "both";
 const typeLabel = (type) => EVENT_TYPES.find((t) => t.value === type)?.label ?? "";
 
 const heading = computed(() => (props.date ? dayHeading(props.date) : ""));
@@ -75,7 +79,7 @@ async function startForm(event = null) {
   form.allDay = event ? event.allDay : true;
   form.start = event?.start ?? "09:00";
   form.end = event?.end ?? "10:00";
-  form.owner = event?.owner ?? "both";
+  form.owner = event ? (ownerKey(event.owner, props.meUid) ?? "both") : "both";
   form.type = event?.type ?? "family";
   form.notes = event?.notes ?? "";
   formOpen.value = true;
@@ -198,7 +202,7 @@ onBeforeUnmount(() => {
                 <p class="cdp__time">{{ eventTimeLabel(event) }}</p>
                 <p class="cdp__name">{{ event.title }}</p>
                 <p class="cdp__meta">
-                  <span class="cdp__owner" :data-owner="event.owner">{{ ownerName(event.owner) }}</span>
+                  <span class="cdp__owner" :data-owner="ownerTone(event.owner)">{{ ownerName(event.owner) }}</span>
                   <span>{{ typeLabel(event.type) }}</span>
                   <span v-if="event.endDate !== event.date">{{ dateRangeLabel(event.date, event.endDate) }}</span>
                 </p>
