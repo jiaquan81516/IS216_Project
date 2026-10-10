@@ -1,7 +1,8 @@
 // Pure helpers for the pumping room directory.
 import { toDate } from "./entryHelpers";
 
-const query = (room) => encodeURIComponent(`${room.name}, ${room.address}`);
+const query = (room) =>
+  encodeURIComponent(Number.isFinite(room.lat) && Number.isFinite(room.lng) ? `${room.lat},${room.lng}` : `${room.name}, ${room.address}`);
 
 export function mapEmbedUrl(room) {
   return "https://www.google.com/maps?q=" + query(room) + "&output=embed";
@@ -9,17 +10,6 @@ export function mapEmbedUrl(room) {
 
 export function mapOpenUrl(room) {
   return "https://www.google.com/maps/search/?api=1&query=" + query(room);
-}
-
-export function calendarUrl(room) {
-  return (
-    "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" +
-    encodeURIComponent(`Pumping at ${room.name}`) +
-    "&location=" +
-    encodeURIComponent(room.address) +
-    "&details=" +
-    encodeURIComponent("Planned visit from NurtureTrack")
-  );
 }
 
 export function statusText(room) {
@@ -80,6 +70,10 @@ export function roomView(id, data = {}, now = new Date()) {
     id,
     name: String(data.name ?? ""),
     address: String(data.address ?? ""),
+    details: String(data.details ?? ""),
+    placeId: String(data.placeId ?? ""),
+    lat: Number.isFinite(data.lat) ? data.lat : null,
+    lng: Number.isFinite(data.lng) ? data.lng : null,
     region: data.region ?? null,
     features: featureLabels(data.features),
     status: verified ? "verified" : "needs verification",

@@ -1,144 +1,136 @@
 <script setup>
 import { RouterLink } from "vue-router";
-import Header from "@/app/components/Header.vue";
-import Icon from "@/app/components/Icon.vue";
-import TonightTimeline from "@/app/components/TonightTimeline.vue";
-import AppLink from "@/components/ui/AppLink.vue";
+import BrandLogo from "@/components/ui/BrandLogo.vue";
 import { ROUTES } from "@/app/routes";
+import newbornFamily from "@/assets/images/landing/newborn-family.png";
+import preparingNursery from "@/assets/images/landing/preparing-nursery.png";
+import expectingParents from "@/assets/images/landing/expecting-parents.png";
+import workingParent from "@/assets/images/landing/working-parent-at-home.jpg";
 import "@/app/app.css";
 
 defineOptions({ name: "LandingPage" });
 
-// Fixed sample for the decorative preview: Tuesday 6 October, 9:40 PM.
-const PREVIEW_NOW = new Date(2026, 9, 6, 21, 40);
-
-const TILES = [
-  { id: "preparing", title: "Expecting", line: "Set up your household before the baby arrives." },
-  { id: "newborn", title: "New at home", line: "Share feeds, sleep and night shifts from week one." },
-  { id: "return", title: "Going back to work", line: "Plan childcare and handovers before the first day." },
+const JOURNEYS = [
+  { eyebrow: "Newly postpartum", title: "Just gave birth", description: "Coordinate feeds, sleep, handovers and rest while you both learn what your newborn needs.", action: "Start with shared care", image: newbornFamily, alt: "Two parents smiling with their newborn baby" },
+  { eyebrow: "Preparing together", title: "Expecting a baby", description: "Build confidence before the birth with practical preparation and guided what-if scenarios.", action: "Prepare together", image: expectingParents, alt: "Expecting parents preparing clothes in a nursery" },
+  { eyebrow: "Planning the transition", title: "Returning to work", description: "Plan childcare, workplace conversations and home routines without carrying it alone.", action: "Build the roadmap", image: preparingNursery, alt: "Parents assembling a cot together before their baby arrives" },
 ];
 </script>
 
 <template>
-  <div class="landing">
-    <Header :bordered="false">
-      <AppLink :to="ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
-    </Header>
+  <div class="landing-page">
+    <header class="landing-header border-bottom">
+      <div class="container-xl d-flex align-items-center justify-content-between py-4">
+        <BrandLogo :to="ROUTES.LANDING" />
+        <nav class="d-flex align-items-center gap-4 gap-lg-5" aria-label="Main navigation">
+          <a class="d-none d-md-inline landing-nav-link" href="#how-it-works">How it works</a>
+          <a class="d-none d-md-inline landing-nav-link" href="#for-parents">For both parents</a>
+          <RouterLink class="landing-nav-link landing-nav-link--sign-in" :to="ROUTES.SIGN_IN">Sign in</RouterLink>
+        </nav>
+      </div>
+    </header>
 
-    <main class="landing__main">
-      <section class="app-container landing__hero" aria-labelledby="landing-title">
-        <div class="landing__copy">
-          <h1 id="landing-title" class="landing__headline">Who is up tonight? Now you both know.</h1>
-          <p class="landing__sub">
-            NurtureTrack keeps feeds, naps and night shifts in one place, so neither of you has to ask or guess.
-          </p>
-          <RouterLink :to="ROUTES.JOURNEY" class="app-btn app-btn--primary">Get started</RouterLink>
-          <p class="landing__caption">Use your email or Google. Setup takes about four minutes.</p>
-        </div>
+    <main>
+      <section class="hero-section" aria-labelledby="landing-title">
+        <div class="container-xl"><div class="row align-items-center g-5">
+          <div class="col-lg-6">
+            <p class="section-label">Shared care for the newborn stage</p>
+            <h1 id="landing-title" class="hero-title">Share the care.<br /><span>Share the load.</span></h1>
+            <p class="hero-copy">NurtureTrack helps couples stay connected through the newborn stage—from the next handover to the first day back at work.</p>
+            <div class="d-flex flex-wrap align-items-center gap-4 mt-5">
+              <RouterLink :to="ROUTES.JOURNEY" class="btn app-btn--primary landing-btn landing-btn--primary">Create your household <span aria-hidden="true">→</span></RouterLink>
+              <a href="#how-it-works" class="landing-inline-link">See how it works <span aria-hidden="true">↓</span></a>
+            </div>
+            <div class="hero-note d-flex align-items-center mt-5 pt-2">
+              <span class="initial initial--coral">D</span><span class="initial initial--mint">J</span>
+              <p class="mb-0 ms-3"><strong>Made for both parents.</strong><br />No one has to carry the whole day alone.</p>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="handover-demo" aria-label="Example of an evening care handover">
+              <div class="d-flex justify-content-between align-items-start gap-3 pb-4 border-bottom">
+                <div><p class="section-label mb-2">Evening handover</p><h2 class="demo-heading mb-0">Here’s what changed.</h2></div>
+                <p class="demo-time mb-0 text-nowrap">Today · 6:42 PM</p>
+              </div>
+              <div class="row g-0 demo-exchange">
+                <div class="col-sm-6 demo-note demo-note--left">
+                  <div class="d-flex align-items-center gap-2 mb-3"><span class="initial initial--coral">D</span><strong>Dylan</strong></div>
+                  <p>Aria fed for 18 minutes and settled after her nap.</p><small>6:18 PM · Care log</small>
+                </div>
+                <div class="col-sm-6 demo-note demo-note--right">
+                  <div class="d-flex align-items-center gap-2 mb-3"><span class="initial initial--mint">J</span><strong>Jocelyn</strong></div>
+                  <p>I’ll take the next feed. You take the first rest block.</p><small>6:42 PM · Handover note</small>
+                </div>
+              </div>
+              <div class="demo-next d-flex align-items-center justify-content-between gap-3"><div><small>Next shared step</small><strong>Review tonight’s sleep rota</strong></div><span aria-hidden="true">→</span></div>
+            </div>
+          </div>
+        </div></div>
+      </section>
 
-        <div class="landing__preview" aria-hidden="true">
-          <div class="landing__panel">
-            <p class="landing__panel-title">Tonight</p>
-            <p class="landing__panel-date">Tuesday 6 October, 6 PM to 6 AM</p>
-            <TonightTimeline me-name="Daniel" partner-name="Mei" :now="PREVIEW_NOW" />
-            <p class="landing__panel-note">Last feed 9:05 PM, logged by Daniel</p>
-            <p class="landing__panel-note landing__panel-note--muted">Next feed due about 12 AM</p>
+      <section id="for-parents" class="journeys-section" aria-labelledby="journeys-title">
+        <div class="container-xl">
+          <div class="row align-items-end g-4 mb-5">
+            <div class="col-lg-8"><p class="section-label">Who NurtureTrack is for</p><h2 id="journeys-title" class="section-title">Support for your <em>next chapter.</em></h2></div>
+            <div class="col-lg-4"><p class="section-intro mb-0">Wherever you are in the transition, NurtureTrack helps both parents feel prepared, connected and supported.</p></div>
+          </div>
+          <div class="row g-4">
+            <div v-for="journey in JOURNEYS" :key="journey.title" class="col-md-4">
+              <article class="journey-card h-100"><img :src="journey.image" :alt="journey.alt" class="journey-card__image" /><div class="journey-card__body">
+                <p class="section-label mb-3">{{ journey.eyebrow }}</p><h3>{{ journey.title }}</h3><p>{{ journey.description }}</p>
+                <RouterLink :to="ROUTES.JOURNEY" class="journey-card__link">{{ journey.action }} <span aria-hidden="true">→</span></RouterLink>
+              </div></article>
+            </div>
           </div>
         </div>
       </section>
 
-      <section class="landing__bridge" aria-labelledby="bridge-title">
-        <div class="app-container landing__bridge-inner">
-          <h2 id="bridge-title" class="landing__h2">Where are you right now?</h2>
-          <ul class="landing__tiles">
-            <li v-for="tile in TILES" :key="tile.id">
-              <RouterLink :to="ROUTES.JOURNEY" class="landing__tile">
-                <span class="landing__tile-text">
-                  <span class="landing__tile-title">{{ tile.title }}</span>
-                  <span class="landing__tile-line">{{ tile.line }}</span>
-                </span>
-                <Icon name="chevron" :size="20" />
-              </RouterLink>
-            </li>
-          </ul>
+      <section id="how-it-works" class="support-section" aria-labelledby="support-title">
+        <div class="container-xl">
+          <div class="row align-items-end g-4 mb-5">
+            <div class="col-lg-8"><p class="section-label section-label--dark">More than a care tracker</p><h2 id="support-title" class="section-title section-title--dark">Support for the <em>whole transition.</em></h2></div>
+            <div class="col-lg-4"><p class="support-intro mb-0">New parenthood changes everything. Navigate the practical and emotional parts together.</p></div>
+          </div>
+          <div class="row g-4">
+            <div class="col-lg-7"><article class="feature-story">
+              <img :src="workingParent" alt="A parent balancing work and childcare at home" /><div class="feature-story__overlay">
+                <p class="section-label section-label--dark">Plan ahead · Featured</p><h3>Return to work, together.</h3>
+                <p>Prepare childcare, workplace conversations and handover tasks on one shared timeline.</p><RouterLink :to="ROUTES.RETURN_TO_WORK">Build your return-to-work roadmap →</RouterLink>
+              </div>
+            </article></div>
+            <div class="col-lg-5 d-flex flex-column gap-4">
+              <article class="support-item flex-fill"><span class="support-item__icon" aria-hidden="true">↔</span><p class="section-label section-label--dark">Make it fair</p><h3>Both parents count.</h3><p>Make invisible work visible with shared responsibilities, sleep rotations and protected rest.</p><RouterLink :to="ROUTES.ROTA">See shared care →</RouterLink></article>
+              <article class="support-item flex-fill"><span class="support-item__icon" aria-hidden="true">♡</span><p class="section-label section-label--dark">Check in</p><h3>Care for the caregiver.</h3><p>Private wellbeing check-ins help each parent notice when they need rest, support or a conversation.</p><RouterLink :to="ROUTES.WELLNESS">Explore wellbeing →</RouterLink></article>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section class="app-container landing__final" aria-labelledby="final-title">
-        <div class="landing__final-copy">
-          <h2 id="final-title" class="landing__h2">Built for the 3 AM handover.</h2>
-          <p class="landing__muted">Log a feed and your partner sees it straight away.</p>
-          <p class="landing__muted">How you are feeling stays with you. Check-ins are not shared.</p>
-        </div>
-        <div class="landing__final-cta">
-          <RouterLink :to="ROUTES.JOURNEY" class="app-btn app-btn--outline">Set up your household</RouterLink>
-        </div>
-      </section>
+      <section class="final-cta" aria-labelledby="final-title"><div class="container-xl"><div class="row align-items-center g-4">
+        <div class="col-lg-8"><p class="section-label">A better way to share the load</p><h2 id="final-title" class="section-title">Care feels lighter.<br /><em>When you carry it together.</em></h2></div>
+        <div class="col-lg-4"><p>Bring care logs, handovers, responsibilities and wellbeing into one shared space for both parents.</p><RouterLink :to="ROUTES.JOURNEY" class="btn app-btn--primary landing-btn landing-btn--primary mt-3">Create your household <span aria-hidden="true">→</span></RouterLink></div>
+      </div></div></section>
     </main>
 
-    <footer class="app-container landing__footer">
-      <p class="mb-0">NurtureTrack is a support tool, not medical advice. For anything urgent, contact your doctor.</p>
-    </footer>
+    <footer class="landing-footer"><div class="container-xl d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 py-4"><BrandLogo :to="ROUTES.LANDING" /><p class="mb-0">Two parents. One shared load.</p><p class="mb-0">© 2026 NurtureTrack</p></div></footer>
   </div>
 </template>
 
 <style scoped>
-.landing {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  overflow: hidden;
-  background:
-    radial-gradient(circle 560px at 220px 180px, rgba(246, 216, 198, 0.95), rgba(246, 216, 198, 0) 100%),
-    radial-gradient(circle 520px at 1210px 390px, rgba(220, 230, 242, 0.95), rgba(220, 230, 242, 0) 100%),
-    radial-gradient(circle 560px at 800px 940px, rgba(245, 231, 184, 0.95), rgba(245, 231, 184, 0) 100%),
-    #fbf8f4;
-}
-.landing__main { flex: 1; }
-
-.landing__hero { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; padding-top: 24px; padding-bottom: 64px; }
-.landing__copy { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 24px; }
-.landing__headline { margin: 0; font-family: var(--nt-serif); font-weight: 400; font-size: 56px; line-height: 64px; letter-spacing: -1.12px; color: var(--nt-plum); }
-.landing__sub { margin: 0; font-size: 18px; line-height: 28px; color: var(--nt-muted); }
-.landing__caption { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
-
-.landing__preview { min-width: 0; align-self: center; }
-.landing__panel { display: flex; flex-direction: column; gap: 12px; width: 100%; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
-.landing__panel-title { margin: 0; font-family: var(--nt-serif); font-size: 24px; line-height: 1.2; color: var(--nt-ink); }
-.landing__panel-date { margin: -6px 0 4px; font-size: 0.875rem; color: var(--nt-muted); }
-.landing__panel-note { margin: 0; font-size: 14px; line-height: 20px; color: var(--nt-ink); }
-.landing__panel-note--muted { margin-top: -8px; color: var(--nt-muted); }
-
-.landing__bridge { background: rgba(255, 255, 255, 0.7); border-top: 1px solid var(--nt-line); }
-.landing__bridge-inner { padding-top: 48px; padding-bottom: 48px; display: flex; flex-direction: column; gap: 24px; }
-.landing__h2 { margin: 0; font-family: var(--nt-serif); font-weight: 400; font-size: 32px; line-height: 40px; color: var(--nt-ink); }
-.landing__tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 0; padding: 0; list-style: none; }
-.landing__tile { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 100%; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; color: var(--nt-muted); text-decoration: none; transition: background-color 0.15s, color 0.15s; }
-.landing__tile:hover { background: var(--nt-gray); color: var(--nt-ink); }
-.landing__tile-text { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.landing__tile-title { font-family: var(--nt-serif); font-size: 20px; line-height: 1.25; color: var(--nt-ink); }
-.landing__tile-line { font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
-
-.landing__final { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; padding-top: 48px; padding-bottom: 64px; border-top: 1px solid var(--nt-line); }
-.landing__final-copy { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.landing__muted { margin: 0; font-size: 1rem; line-height: 24px; color: var(--nt-muted); }
-.landing__final-cta { display: flex; justify-content: flex-end; }
-
-.landing a:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
-
-.landing__footer { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-bottom: 32px; font-size: 0.875rem; color: var(--nt-muted); }
-
-@media (max-width: 991px) {
-  .landing__hero { grid-template-columns: 1fr; padding-bottom: 48px; }
-  .landing__headline { font-size: 44px; line-height: 1.15; }
-}
-@media (max-width: 767px) {
-  .landing__tiles { grid-template-columns: 1fr; }
-  .landing__final { grid-template-columns: 1fr; gap: 24px; }
-  .landing__final-cta { justify-content: flex-start; }
-}
-@media (max-width: 575px) {
-  .landing__footer { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .landing__panel { padding: 20px; }
-}
+.landing-page { --cream: #f7f1e8; --paper: #fffaf4; --plum: #30273b; --orange: #dc7648; --muted: #6d655f; background: var(--cream); color: var(--plum); font-family: Arial, Helvetica, sans-serif; }
+.landing-header { background: var(--paper); border-color: rgba(48, 39, 59, .14) !important; }.landing-nav-link { color: var(--plum); font-weight: 600; text-decoration: none; }.landing-nav-link:hover { color: var(--orange); }.landing-nav-link--sign-in { border-bottom: 1px solid currentColor; }
+.hero-section, .journeys-section, .support-section, .final-cta { padding: clamp(5rem, 9vw, 9rem) 0; }.hero-section { background: var(--paper); }
+.section-label { display: flex; align-items: center; gap: .75rem; margin: 0 0 1.75rem; color: #9a5a3e; font-size: .75rem; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }.section-label::before { width: 2rem; height: 1px; background: var(--orange); content: ""; }
+.hero-title { margin: 0; max-width: 700px; font-size: clamp(3.5rem, 6.5vw, 6.7rem); font-weight: 400; line-height: .96; letter-spacing: -.065em; }.hero-title span, .section-title em { color: var(--orange); font-style: normal; }
+.hero-copy { max-width: 650px; margin: 2.5rem 0 0; color: var(--muted); font-size: clamp(1.1rem, 1.5vw, 1.4rem); line-height: 1.55; }.landing-btn { border-radius: 2px; padding: 1rem 1.5rem; font-weight: 700; }.landing-btn--primary { background: var(--plum); color: white; }.landing-btn--primary:hover { background: #17121e; color: white; }.landing-inline-link, .journey-card__link { color: var(--plum); font-weight: 700; text-underline-offset: 4px; }
+.hero-note { color: var(--muted); font-size: .9rem; }.hero-note strong { color: var(--plum); }.initial { display: inline-grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 50%; color: var(--plum); font-size: .8rem; font-weight: 800; }.initial + .initial { margin-left: -.25rem; }.initial--coral { background: #efb092; }.initial--mint { background: #a7d1c8; }
+.handover-demo { position: relative; padding: clamp(1.5rem, 3vw, 2.5rem); background: #fffdfa; border: 1px solid #d8cec4; box-shadow: 20px 22px 0 #e5ded3, 38px 38px 0 #dfe8e4; transform: rotate(.5deg); }.demo-heading, .section-title, .journey-card h3, .feature-story h3, .support-item h3 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; }.demo-heading { font-size: clamp(1.8rem, 3vw, 2.6rem); }.demo-time { color: var(--muted); font-size: .85rem; }
+.demo-exchange { margin: 2rem 0; border: 1px solid #ded5cc; }.demo-note { min-height: 190px; padding: 1.5rem; }.demo-note--left { border-right: 1px solid #ded5cc; }.demo-note--right { background: #e3eeeb; }.demo-note p { color: #554d48; }.demo-note small { color: #81756c; }.demo-next { padding: 1.2rem 1.4rem; background: var(--plum); color: white; }.demo-next div { display: flex; flex-direction: column; }.demo-next small { font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.journeys-section { border-top: 1px solid #ded5cc; }.section-title { margin: 0; font-size: clamp(2.5rem, 5vw, 4.5rem); line-height: 1.05; letter-spacing: -.045em; }.section-intro, .support-intro, .final-cta p { color: var(--muted); font-size: 1.08rem; line-height: 1.55; }
+.journey-card { background: var(--paper); border: 1px solid #d8cec4; }.journey-card__image { display: block; width: 100%; height: 250px; object-fit: cover; }.journey-card__body { padding: 1.75rem; }.journey-card h3 { margin-bottom: .75rem; font-size: 2rem; }.journey-card__body > p:not(.section-label) { min-height: 4.8rem; color: var(--muted); line-height: 1.55; }.journey-card__link { display: inline-block; margin-top: 1rem; text-decoration: none; }.journey-card__link:hover { color: var(--orange); }
+.support-section { background: var(--plum); color: #fffaf4; }.section-label--dark { color: #dc8a61; }.section-title--dark em { color: #ef9a70; }.support-intro { color: #cec5d1; }.feature-story { position: relative; min-height: 625px; overflow: hidden; border: 1px solid #746b7b; }.feature-story > img { position: absolute; width: 100%; height: 100%; object-fit: cover; }.feature-story::after { position: absolute; inset: 0; background: linear-gradient(0deg, rgba(31, 23, 38, .94), rgba(31, 23, 38, .02) 75%); content: ""; }.feature-story__overlay { position: absolute; z-index: 1; right: 0; bottom: 0; left: 0; padding: 2rem; }.feature-story h3 { font-size: clamp(2.4rem, 4vw, 4rem); }.feature-story p { max-width: 620px; }.feature-story a, .support-item a { color: #fff; font-weight: 700; text-decoration: none; }
+.support-item { padding: clamp(1.7rem, 3vw, 2.5rem); border: 1px solid #6b6173; background: #3d3448; }.support-item__icon { display: grid; place-items: center; width: 3.5rem; height: 3.5rem; margin-bottom: 2rem; background: var(--paper); color: var(--plum); font-size: 1.6rem; }.support-item h3 { font-size: clamp(2rem, 3vw, 2.8rem); }.support-item > p:not(.section-label) { color: #d7cfda; }
+.final-cta { background: var(--paper); }.landing-footer { background: #261f2e; color: #cec5d1; }.landing-footer :deep(.brand) { color: #fffaf4; }.landing-footer p { font-size: .85rem; }.landing-page a:focus-visible { outline: 3px solid var(--orange); outline-offset: 4px; }
+@media (max-width: 991.98px) { .handover-demo { margin: 1rem 1.5rem 2.5rem 0; }.feature-story { min-height: 540px; } }
+@media (max-width: 575.98px) { .hero-section, .journeys-section, .support-section, .final-cta { padding: 4.5rem 0; }.demo-note--left { border-right: 0; border-bottom: 1px solid #ded5cc; }.journey-card__body > p:not(.section-label) { min-height: 0; }.handover-demo { box-shadow: 10px 12px 0 #e5ded3; margin-right: .75rem; }.feature-story { min-height: 500px; } }
 </style>

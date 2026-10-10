@@ -191,6 +191,26 @@ describe("App return to work page, plan tab", () => {
     expect(buttonByText(wrapper, "Change date")).toBeTruthy();
   });
 
+  it("summarises progress and surfaces the next open task", async () => {
+    api.plan = { returnDate: "2026-11-04" };
+    api.tasks = [
+      task({ title: "Book childcare", group: "childcare", done: true }),
+      task({ title: "Plan the morning handover", group: "home" }),
+    ];
+    const { wrapper } = await mountPage();
+    expect(wrapper.get('[role="progressbar"]').attributes("aria-valuenow")).toBe("50");
+    expect(wrapper.text()).toContain("1 of 2 preparation tasks complete");
+    expect(wrapper.get(".rw__next").text()).toContain("Plan the morning handover");
+  });
+
+  it("filters the existing task list by preparation category", async () => {
+    api.tasks = [task({ title: "Book childcare", group: "childcare" }), task({ title: "Talk to work", group: "work" })];
+    const { wrapper } = await mountPage();
+    await buttonByText(wrapper, "Childcare · 0/1").trigger("click");
+    expect(wrapper.text()).toContain("Book childcare");
+    expect(wrapper.findAll(".rw__task").some((item) => item.text().includes("Talk to work"))).toBe(false);
+  });
+
   it("adds a task through the inline form, with the owner as a uid", async () => {
     api.plan = { returnDate: "2026-11-04" };
     const { wrapper } = await mountPage();

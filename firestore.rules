@@ -270,6 +270,14 @@ service cloud.firestore {
         && request.resource.data.address is string
         && request.resource.data.address.size() > 0
         && request.resource.data.address.size() <= 200
+        && request.resource.data.details is string
+        && request.resource.data.details.size() > 0
+        && request.resource.data.details.size() <= 200
+        && request.resource.data.placeId is string
+        && request.resource.data.placeId.size() > 0
+        && request.resource.data.placeId.size() <= 200
+        && request.resource.data.lat is number
+        && request.resource.data.lng is number
         && request.resource.data.createdAt == request.time;
 
       // Only the verification state moves, and only ever through a report.

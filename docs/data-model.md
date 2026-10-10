@@ -203,7 +203,8 @@ room for everyone. While the collection is empty the Support page shows the two 
 
 ### pumpingRooms/{roomId}
 - name (string, at most 80), address (string, at most 200), region (string or null)
-- lat, lng (number or null), placeId (string, from Google Places or OneMap; not written yet)
+- details (string, at most 200): the precise floor and room location entered by the member
+- lat, lng (number), placeId (string, at most 200): selected through Google Places autocomplete
 - features (map): { chair, power, lockable, sink, stroller }, each a boolean. The UI shows
   labels ("Power outlet"); `featureLabels` and `featureMap` in `src/app/api/roomHelpers.js` are
   the only place the two shapes meet.

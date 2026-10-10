@@ -16,33 +16,28 @@ describe("App landing", () => {
   it("renders exactly one h1 with the headline", () => {
     const wrapper = mountLanding();
     expect(wrapper.findAll("h1")).toHaveLength(1);
-    expect(wrapper.get("h1").text()).toBe("Who is up tonight? Now you both know.");
+    expect(wrapper.get("h1").text()).toBe("Share the care.Share the load.");
   });
 
-  it("has exactly one solid primary button, linked to the journey step", () => {
+  it("has two primary calls to action linked to the journey step", () => {
     const wrapper = mountLanding();
     const primary = wrapper.findAll(".app-btn--primary");
-    expect(primary).toHaveLength(1);
-    expect(primary[0].text()).toBe("Get started");
-    expect(primary[0].attributes("href")).toBe(ROUTES.JOURNEY);
-  });
-
-  it("repeats the journey link as an outline button in the final row", () => {
-    const wrapper = mountLanding();
-    const outline = wrapper.get(".app-btn--outline");
-    expect(outline.text()).toBe("Set up your household");
-    expect(outline.attributes("href")).toBe(ROUTES.JOURNEY);
+    expect(primary).toHaveLength(2);
+    primary.forEach((button) => {
+      expect(button.text()).toContain("Create your household");
+      expect(button.attributes("href")).toBe(ROUTES.JOURNEY);
+    });
   });
 
   it("links the three journey tiles to the journey route", () => {
     const wrapper = mountLanding();
-    const tiles = wrapper.findAll(".landing__tile");
+    const tiles = wrapper.findAll(".journey-card__link");
     expect(tiles).toHaveLength(3);
     tiles.forEach((t) => expect(t.attributes("href")).toBe(ROUTES.JOURNEY));
-    expect(tiles.map((t) => t.get(".landing__tile-title").text())).toEqual([
-      "Expecting",
-      "New at home",
-      "Going back to work",
+    expect(tiles.map((t) => t.text())).toEqual([
+      "Start with shared care →",
+      "Prepare together →",
+      "Build the roadmap →",
     ]);
   });
 
@@ -52,9 +47,9 @@ describe("App landing", () => {
     expect(wrapper.find(".landing__private").exists()).toBe(false);
   });
 
-  it("marks the product preview as decorative", () => {
+  it("labels the handover example", () => {
     const wrapper = mountLanding();
-    expect(wrapper.get(".landing__preview").attributes("aria-hidden")).toBe("true");
+    expect(wrapper.get(".handover-demo").attributes("aria-label")).toBe("Example of an evening care handover");
   });
 
   it("links Sign in to the App sign in page", () => {
