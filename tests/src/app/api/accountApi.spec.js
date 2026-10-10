@@ -253,19 +253,21 @@ describe("rooms api", () => {
   });
 
   it("adds a room as unverified, with the features as a map", async () => {
-    const id = await addRoom(ME, { name: "  Mall room  ", address: " 1 Road ", features: ["Chair", "Sink"] });
+    const id = await addRoom(ME, { name: "  Mall room  ", address: " 1 Road ", details: " Level 2 ", placeId: "place-1", lat: 1.3, lng: 103.8, features: ["Chair", "Sink"] });
     expect(id).toBe("room-new");
     const [ref, data] = fs.addDoc.mock.calls[0];
     expect(ref.path).toEqual(["pumpingRooms"]);
     expect(data).toEqual({
       name: "Mall room",
       address: "1 Road",
+      details: "Level 2",
+      placeId: "place-1",
       region: null,
       features: { chair: true, power: false, lockable: false, sink: true, stroller: false },
       status: "unverified",
       verifiedAt: null,
-      lat: null,
-      lng: null,
+      lat: 1.3,
+      lng: 103.8,
       createdBy: ME,
       createdAt: "STAMP",
     });

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import {
-  calendarUrl,
   featureLabels,
   featureMap,
   filterRooms,
@@ -42,7 +41,12 @@ vi.mock("@/app/api/rooms", () => ({
 async function mountPage() {
   const pinia = createPinia();
   setActivePinia(pinia);
-  const wrapper = mount(SupportPage, { global: { plugins: [pinia] } });
+  const wrapper = mount(SupportPage, {
+    global: {
+      plugins: [pinia],
+      stubs: { GooglePlaceAutocomplete: { name: "GooglePlaceAutocomplete", emits: ["selected"], template: '<div class="google-place-stub" />' } },
+    },
+  });
   await flushPromises();
   return wrapper;
 }
@@ -73,18 +77,10 @@ describe("room helpers", () => {
     expect(smu.features).toEqual(["Chair", "Power outlet", "Lockable"]);
     expect(smu.verifiedDaysAgo).toBe(4);
   });
-  it("builds the map and calendar urls", () => {
+  it("builds map urls for room locations", () => {
     const q = encodeURIComponent("SMU Library Nursing Room, 70 Stamford Road, Singapore 178901");
     expect(mapEmbedUrl(smu)).toBe(`https://www.google.com/maps?q=${q}&output=embed`);
     expect(mapOpenUrl(smu)).toBe(`https://www.google.com/maps/search/?api=1&query=${q}`);
-    expect(calendarUrl(smu)).toBe(
-      "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" +
-        encodeURIComponent("Pumping at SMU Library Nursing Room") +
-        "&location=" +
-        encodeURIComponent("70 Stamford Road, Singapore 178901") +
-        "&details=" +
-        encodeURIComponent("Planned visit from NurtureTrack"),
-    );
   });
   it("describes status", () => {
     expect(statusText(smu)).toBe("Verified 4 days ago");
@@ -133,6 +129,10 @@ describe("the Firestore room shape", () => {
       id: "r1",
       name: "Office room",
       address: "1 Road",
+      details: "",
+      placeId: "",
+      lat: null,
+      lng: null,
       region: null,
       features: ["Chair"],
       status: "verified",
@@ -186,7 +186,7 @@ describe("App support page", () => {
     expect(wrapper.text()).toContain("Your doctor or clinic");
   });
 
-  it("shows both rooms, the first on the map, with no solid button", async () => {
+  it("shows both rooms with the first room in the map and detail panel", async () => {
     const wrapper = await mountPage();
     await openRooms(wrapper);
     expect(roomNames(wrapper)).toEqual(["SMU Library Nursing Room", "Raffles City Family Room"]);
@@ -197,20 +197,30 @@ describe("App support page", () => {
     expect(frame.attributes("title")).toBe("Map of SMU Library Nursing Room");
     expect(frame.attributes("loading")).toBe("lazy");
     expect(frame.attributes("referrerpolicy")).toBe("no-referrer-when-downgrade");
-    expect(wrapper.findAll("button.btn-primary")).toHaveLength(0);
+    expect(wrapper.text()).toContain("Community listings may be unverified. Check details before visiting.");
+    expect(wrapper.get(".sp__selected-details").text()).toContain("SMU Library Nursing Room");
   });
 
-  it("changes the map and links the calendar for the selected room", async () => {
+  it("changes the map and offers directions for the selected room", async () => {
     const wrapper = await mountPage();
     await openRooms(wrapper);
     await wrapper.findAll("button").filter((b) => b.text() === "Show on map")[1].trigger("click");
     expect(wrapper.get("iframe").attributes("src")).toBe(mapEmbedUrl(SAMPLE_ROOMS[1]));
-    const open = wrapper.findAll("a").find((a) => a.text() === "Open in Google Maps");
+    const open = wrapper.findAll("a").find((a) => a.text() === "Get directions" && a.classes().includes("btn-primary"));
     expect(open.attributes("href")).toBe(mapOpenUrl(SAMPLE_ROOMS[1]));
-    const cal = wrapper.findAll("a").filter((a) => a.text() === "Add to Google Calendar");
-    expect(cal[0].attributes("href")).toBe(calendarUrl(SAMPLE_ROOMS[0]));
-    expect(cal[0].attributes("target")).toBe("_blank");
-    expect(cal[0].attributes("rel")).toBe("noopener noreferrer");
+    const directions = wrapper.findAll("a").filter((a) => a.text() === "Get directions");
+    expect(directions[0].attributes("href")).toBe(mapOpenUrl(SAMPLE_ROOMS[0]));
+    expect(wrapper.text()).not.toContain("Add to Google Calendar");
+  });
+
+  it("saves places on this device and shows them in the saved view", async () => {
+    const wrapper = await mountPage();
+    await openRooms(wrapper);
+    await wrapper.findAll(".sp__save")[0].trigger("click");
+    expect(JSON.parse(localStorage.getItem("nurturetrack:saved-pumping-rooms"))).toEqual([SAMPLE_ROOMS[0].id]);
+    await btn(wrapper, "Saved places · 1").trigger("click");
+    expect(roomNames(wrapper)).toEqual(["SMU Library Nursing Room"]);
+    expect(wrapper.text()).not.toContain("Raffles City Family Room");
   });
 
   it("filters by status, feature and search, with an empty state", async () => {
@@ -235,39 +245,56 @@ describe("App support page", () => {
   it("validates and saves a new room to the directory", async () => {
     const wrapper = await mountPage();
     await openRooms(wrapper);
-    await btn(wrapper, "Add a room").trigger("click");
-    expect(wrapper.findAll("button.btn-primary")).toHaveLength(1);
+    await btn(wrapper, "Add a place").trigger("click");
+    expect(wrapper.findAll("button.btn-primary").some((button) => button.text() === "Save room")).toBe(true);
     await btn(wrapper, "Save room").trigger("click");
     await flushPromises();
-    expect(wrapper.text()).toContain("Enter the room name.");
-    expect(wrapper.text()).toContain("Enter the address.");
+    expect(wrapper.text()).toContain("Choose a building or address from Google suggestions.");
+    expect(wrapper.text()).toContain("Add the floor and exact room location.");
     expect(api.addRoom).not.toHaveBeenCalled();
 
-    const inputs = wrapper.findAll("form input");
-    await inputs[0].setValue("Orchard Mall Parent Room");
-    await inputs[1].setValue("1 Orchard Road, Singapore 238824");
+    wrapper.getComponent({ name: "GooglePlaceAutocomplete" }).vm.$emit("selected", {
+      name: "Orchard Mall",
+      address: "1 Orchard Road, Singapore 238824",
+      details: "",
+      placeId: "place-1",
+      lat: 1.304,
+      lng: 103.832,
+    });
+    await flushPromises();
+    await wrapper.get('form input[type="text"]').setValue("Level 3, beside the accessible toilet");
     await wrapper.findAll('form button[aria-pressed]').find((b) => b.text() === "Stroller access").trigger("click");
     await btn(wrapper, "Save room").trigger("click");
     await flushPromises();
 
     expect(api.addRoom).toHaveBeenCalledWith("u1", {
-      name: "Orchard Mall Parent Room",
+      name: "Orchard Mall",
       address: "1 Orchard Road, Singapore 238824",
+      details: "Level 3, beside the accessible toilet",
+      placeId: "place-1",
+      lat: 1.304,
+      lng: 103.832,
       features: ["Stroller access"],
     });
     expect(wrapper.find("form").exists()).toBe(false);
-    expect(wrapper.text()).toContain("Orchard Mall Parent Room added. It needs verification.");
-    expect(wrapper.findAll("button.btn-primary")).toHaveLength(0);
+    expect(wrapper.text()).toContain("Orchard Mall added. It needs verification.");
+    expect(wrapper.findAll("button.btn-primary").some((button) => button.text() === "Save room")).toBe(false);
   });
 
   it("says so and does not clear the form when the room could not be saved", async () => {
     api.addRoom.mockRejectedValue({ code: "permission-denied" });
     const wrapper = await mountPage();
     await openRooms(wrapper);
-    await btn(wrapper, "Add a room").trigger("click");
-    const inputs = wrapper.findAll("form input");
-    await inputs[0].setValue("A room");
-    await inputs[1].setValue("1 Road");
+    await btn(wrapper, "Add a place").trigger("click");
+    wrapper.getComponent({ name: "GooglePlaceAutocomplete" }).vm.$emit("selected", {
+      name: "A building",
+      address: "1 Road",
+      placeId: "place-2",
+      lat: 1.3,
+      lng: 103.8,
+    });
+    await flushPromises();
+    await wrapper.get('form input[type="text"]').setValue("Level 2 toilet lobby");
     await btn(wrapper, "Save room").trigger("click");
     await flushPromises();
     expect(wrapper.find("form").exists()).toBe(true);
@@ -277,7 +304,7 @@ describe("App support page", () => {
   it("cancels the add form without saving", async () => {
     const wrapper = await mountPage();
     await openRooms(wrapper);
-    await btn(wrapper, "Add a room").trigger("click");
+    await btn(wrapper, "Add a place").trigger("click");
     await btn(wrapper, "Cancel").trigger("click");
     expect(wrapper.find("form").exists()).toBe(false);
     expect(api.addRoom).not.toHaveBeenCalled();
@@ -286,8 +313,10 @@ describe("App support page", () => {
   it("falls back to the seed rooms while the directory is empty, and cannot report them", async () => {
     const wrapper = await mountPage();
     await openRooms(wrapper);
-    expect(wrapper.text()).toContain("Seed rooms for now, not confirmed.");
-    expect(wrapper.text()).toContain("Seed data, so it cannot be confirmed or flagged yet.");
+    expect(wrapper.text()).toContain("Community listings may be unverified.");
+    expect(wrapper.text()).toContain("Community submitted");
+    expect(wrapper.text()).not.toContain("Seed data");
+    expect(wrapper.text()).not.toContain("Seed rooms");
     expect(btns(wrapper, "Confirm this room")).toHaveLength(0);
     expect(btns(wrapper, "Flag as gone")).toHaveLength(0);
   });
@@ -308,7 +337,7 @@ describe("App support page", () => {
     expect(roomNames(wrapper)).toEqual(["Office nursing room"]);
     expect(wrapper.text()).not.toContain("Seed rooms for now");
     expect(wrapper.text()).toContain("Verified 3 days ago");
-    expect(wrapper.findAll(".sp__pills .app-pill").map((p) => p.text())).toEqual(["Chair", "Power outlet"]);
+    expect(wrapper.findAll(".sp__room .sp__pills .app-pill").map((p) => p.text())).toEqual(["Chair", "Power outlet"]);
   });
 
   it("confirms and flags a real room, and thanks you either way", async () => {

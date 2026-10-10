@@ -76,6 +76,7 @@ const rooms = computed(() => roomsStore.rooms);
 
     <section class="rtp__section" aria-labelledby="rtp-rooms">
       <h2 id="rtp-rooms" class="nt-heading nt-heading--sm">Rooms near work</h2>
+      <AppButton variant="outline" size="sm" :to="ROUTES.ROOMS">Open the map</AppButton>
       <p class="rtp__muted">Sample rooms for now, plus any you added in Support. Check details before you go.</p>
       <ul class="rtp__rooms" aria-label="Pumping rooms">
         <li v-for="room in rooms" :key="room.id" class="rtp__room">

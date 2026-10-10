@@ -22,6 +22,7 @@ export const ROOMS_MAX = 200;
 export const NAME_MAX = 80;
 export const ADDRESS_MAX = 200;
 export const NOTE_MAX = 400;
+export const PLACE_ID_MAX = 200;
 
 const roomsRef = () => collection(db, "pumpingRooms");
 
@@ -42,28 +43,35 @@ export function subscribeRooms(onData, onError) {
   );
 }
 
-export async function addRoom(uid, { name, address, region = null, features = [] } = {}) {
+export async function addRoom(
+  uid,
+  { name, address, details = "", placeId = "", lat = null, lng = null, region = null, features = [] } = {},
+) {
   const cleanName = String(name ?? "").trim().slice(0, NAME_MAX);
   const cleanAddress = String(address ?? "").trim().slice(0, ADDRESS_MAX);
+  const cleanDetails = String(details ?? "").trim().slice(0, ADDRESS_MAX);
+  const cleanPlaceId = String(placeId ?? "").trim().slice(0, PLACE_ID_MAX);
   if (!uid) {
     const error = new Error("Sign in again to add a room.");
     error.code = "rooms/no-user";
     throw error;
   }
-  if (!cleanName || !cleanAddress) {
-    const error = new Error("A room needs a name and an address.");
+  if (!cleanName || !cleanAddress || !cleanDetails || !cleanPlaceId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    const error = new Error("A room needs a Google place and exact location details.");
     error.code = "rooms/incomplete";
     throw error;
   }
   const created = await addDoc(roomsRef(), {
     name: cleanName,
     address: cleanAddress,
+    details: cleanDetails,
+    placeId: cleanPlaceId,
     region: region ? String(region).slice(0, NAME_MAX) : null,
     features: featureMap(features),
     status: "unverified",
     verifiedAt: null,
-    lat: null,
-    lng: null,
+    lat,
+    lng,
     createdBy: uid,
     createdAt: serverTimestamp(),
   });

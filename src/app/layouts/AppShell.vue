@@ -19,6 +19,7 @@ defineOptions({ name: "AppShell" });
 const route = useRoute();
 const router = useRouter();
 const { logout } = useAuth();
+const sageBackdrop = computed(() => [ROUTES.WELLNESS, ROUTES.SUPPORT].includes(route.path));
 
 // Load the household once here; the sidebar and the page share it.
 const home = useHome();
@@ -136,7 +137,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       </div>
     </aside>
 
-    <main id="app-main" class="appshell__main" tabindex="-1">
+    <main id="app-main" class="appshell__main" :class="{ 'appshell__main--sage': sageBackdrop }" tabindex="-1">
       <div class="appshell__content">
         <RouterView />
       </div>
@@ -171,6 +172,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .appshell__main {
   min-width: 0;
   padding: 32px;
+}
+.appshell__main--sage {
+  background: #e3e8e4;
 }
 .appshell__main:focus {
   outline: none;

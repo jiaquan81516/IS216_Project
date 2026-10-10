@@ -52,7 +52,12 @@ console.
    picker at the top says the Firebase project.
 2. **Enable the Calendar API.** APIs and services, Library, search "Google Calendar API",
    Enable.
-3. **OAuth consent screen.** APIs and services, OAuth consent screen.
+3. **Enable place suggestions.** In the same Library, enable **Maps JavaScript API** and
+   **Places API (New)**. Create a separate API key for the browser, restrict it to the app's
+   local and production web origins, restrict its API access to those two APIs, and save it as
+   `VITE_GOOGLE_MAPS_API_KEY`. This key powers building/address suggestions when adding a
+   pumping place; it is intentionally separate from the Calendar OAuth credentials.
+4. **OAuth consent screen.** APIs and services, OAuth consent screen.
    - User type: External. Publishing status can stay "Testing" for the module.
    - App name: NurtureTrack. Support email and developer email: your own.
    - **Scopes:** add exactly these two, and nothing else:
@@ -63,7 +68,7 @@ console.
    - **Test users:** add every Google account that will sign in during the demo, including
      the marker's if they will try it. In Testing mode an account that is not on this list
      gets "access blocked" from Google and the app can do nothing about it. The cap is 100.
-4. **OAuth client.** APIs and services, Credentials, Create credentials, OAuth client ID.
+5. **OAuth client.** APIs and services, Credentials, Create credentials, OAuth client ID.
    - Application type: Web application. Name: NurtureTrack web.
    - **Authorised redirect URIs**, both of them, spelled exactly like this:
      - `http://localhost:3000/api/google/callback`
@@ -107,6 +112,7 @@ console.
    | `OAUTH_STATE_SECRET` | any long random string: `openssl rand -base64 48` |
    | `APP_URL` | `https://your-app.vercel.app`, with no trailing slash |
    | `VITE_FIREBASE_*` | the web config, only if you have moved it out of `src/api/firebase.js` |
+   | `VITE_GOOGLE_MAPS_API_KEY` | browser-restricted key with Maps JavaScript API and Places API (New) |
 
    Everything without a `VITE_` prefix stays on the server: Vite only puts `VITE_` variables
    into the browser bundle, which is why the names are what they are. Never put a service
