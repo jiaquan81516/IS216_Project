@@ -1,117 +1,282 @@
+/* NurtureTrack design tokens and Bootstrap overrides.
+   Source of truth: Figma "Prototype B: Preline UI kit". */
 :root {
-  color: #25313c;
-  background: #f5f7f8;
-  font-family:
-    Inter,
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  --nt-plum: #3b2f3f;
+  --nt-plum-hover: #2d2431;
+  --nt-bg: #f6efe6;
+  --nt-ink: #1f2937;
+  --nt-muted: #6b7280;
+  --nt-line: #e5e7eb;
+  --nt-gray: #f3f4f6;
+  --nt-white: #ffffff;
+  --nt-apricot: #f6d8c6;
+  --nt-apricot-d: #e3a584;
+  --nt-powder: #dce6f2;
+  --nt-powder-d: #5c7a9e;
+  --nt-butter: #f5e7b8;
+  --nt-butter-d: #6f5f3a;
+  --nt-coral: #c0553b;
+  --nt-blue: #dbeafe;
+  --nt-blue-t: #1e40af;
+  --nt-teal: #ccfbf1;
+  --nt-teal-t: #115e59;
+  --nt-red: #fee2e2;
+  --nt-red-t: #991b1b;
+  --nt-red-line: #fdc9c9;
+  --nt-yellow: #fef9c3;
+  --nt-yellow-t: #854d0e;
+  --nt-serif: "Young Serif", Georgia, serif;
+
+  --bs-body-font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bs-body-font-size: 1rem;
+  --bs-body-color: var(--nt-ink);
+  --bs-body-color-rgb: 31, 41, 55;
+  --bs-body-bg: var(--nt-bg);
+  --bs-secondary-color: var(--nt-muted);
+  --bs-border-color: var(--nt-line);
+  --bs-primary: var(--nt-plum);
+  --bs-primary-rgb: 59, 47, 63;
+  --bs-link-color: var(--nt-ink);
+  --bs-link-color-rgb: 31, 41, 55;
+  --bs-link-hover-color: var(--nt-plum);
+  --bs-border-radius: 8px;
+  --bs-border-radius-lg: 12px;
 }
 
-* {
-  box-sizing: border-box;
-}
 body {
-  margin: 0;
   min-width: 320px;
-  min-height: 100vh;
-}
-a {
-  color: inherit;
-}
-button,
-input,
-textarea,
-select {
-  font: inherit;
+  -webkit-font-smoothing: antialiased;
 }
 
-.app-layout {
+/* Buttons: one solid plum per screen, everything else outlined or link. */
+.btn {
+  --bs-btn-border-radius: 8px;
+  --bs-btn-font-weight: 500;
+  --bs-btn-padding-x: 1.1rem;
+  --bs-btn-padding-y: 0.7rem;
+  --bs-btn-font-size: 0.9375rem;
+}
+.btn-lg {
+  --bs-btn-padding-y: 0.9rem;
+  --bs-btn-padding-x: 1.4rem;
+  --bs-btn-font-size: 0.9375rem;
+  --bs-btn-border-radius: 8px;
+}
+.btn-sm {
+  --bs-btn-padding-y: 0.4rem;
+  --bs-btn-padding-x: 0.8rem;
+  --bs-btn-font-size: 0.875rem;
+}
+.btn-primary {
+  --bs-btn-bg: var(--nt-plum);
+  --bs-btn-border-color: var(--nt-plum);
+  --bs-btn-hover-bg: var(--nt-plum-hover);
+  --bs-btn-hover-border-color: var(--nt-plum-hover);
+  --bs-btn-active-bg: var(--nt-plum-hover);
+  --bs-btn-active-border-color: var(--nt-plum-hover);
+  --bs-btn-disabled-bg: var(--nt-plum);
+  --bs-btn-disabled-border-color: var(--nt-plum);
+  --bs-btn-focus-shadow-rgb: 59, 47, 63;
+}
+.btn-outline {
+  --bs-btn-color: var(--nt-ink);
+  --bs-btn-bg: var(--nt-white);
+  --bs-btn-border-color: var(--nt-line);
+  --bs-btn-hover-color: var(--nt-ink);
+  --bs-btn-hover-bg: var(--nt-gray);
+  --bs-btn-hover-border-color: var(--nt-line);
+  --bs-btn-active-color: var(--nt-ink);
+  --bs-btn-active-bg: var(--nt-gray);
+  --bs-btn-active-border-color: var(--nt-line);
+  --bs-btn-focus-shadow-rgb: 59, 47, 63;
+}
+
+/* Form controls. */
+.form-control,
+.form-select {
+  padding: 0.8rem 1rem;
+  border-color: var(--nt-line);
+  border-radius: 8px;
+  font-size: 0.9375rem;
+}
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--nt-plum);
+  box-shadow: 0 0 0 3px rgb(59 47 63 / 12%);
+}
+.form-label {
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  font-size: 0.9375rem;
+}
+.form-check-input:checked {
+  background-color: var(--nt-plum);
+  border-color: var(--nt-plum);
+}
+.form-check-input:focus {
+  border-color: var(--nt-plum);
+  box-shadow: 0 0 0 3px rgb(59 47 63 / 12%);
+}
+
+/* Type. */
+.nt-title,
+.nt-heading {
+  font-family: var(--nt-serif);
+  font-weight: 400;
+  color: var(--nt-ink);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+.nt-title {
+  font-size: 2.5rem;
+  line-height: 1.2;
+}
+.nt-title--xl {
+  font-size: 3rem;
+  line-height: 1.17;
+}
+.nt-heading {
+  font-size: 1.375rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+.nt-heading--sm {
+  font-size: 1.25rem;
+}
+.nt-lead {
+  font-size: 1.125rem;
+  line-height: 1.55;
+  color: var(--nt-muted);
+}
+.nt-muted {
+  color: var(--nt-muted);
+}
+.nt-small {
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+.nt-link {
+  color: var(--nt-ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.nt-link:hover {
+  color: var(--nt-plum);
+  text-decoration-thickness: 2px;
+}
+.nt-link--muted {
+  color: var(--nt-muted);
+  font-weight: 400;
+}
+
+/* Layout. */
+.nt-container {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+.nt-main {
+  padding-top: 40px;
+  padding-bottom: 96px;
+}
+.nt-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.nt-cols {
   display: grid;
-  grid-template-columns: 14rem 1fr;
-  min-height: 100vh;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 32px;
+  align-items: start;
 }
-.app-layout--public {
-  grid-template-columns: 1fr;
+.nt-cols--onboarding {
+  grid-template-columns: 640px minmax(0, 384px);
+  gap: 96px;
 }
-.app-layout__content {
+.nt-cols > .nt-col,
+.nt-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   min-width: 0;
 }
-.app-layout__main {
-  max-width: 72rem;
-  margin: 0 auto;
-  padding: 2rem;
-}
-.app-header {
-  display: flex;
-  align-items: center;
-  min-height: 4rem;
-  padding: 0 2rem;
-  background: #fff;
-  border-bottom: 1px solid #dde3e7;
-}
-.app-header__brand {
-  font-size: 1.125rem;
-  font-weight: 700;
-  text-decoration: none;
-}
-.app-sidebar {
-  padding: 1.5rem 1rem;
-  color: #fff;
-  background: #263f45;
-}
-.app-sidebar nav {
-  display: grid;
-  gap: 0.35rem;
-}
-.app-sidebar__link {
-  padding: 0.7rem 0.85rem;
-  border-radius: 0.5rem;
-  text-decoration: none;
-}
-.app-sidebar__link:hover,
-.app-sidebar__link.router-link-exact-active {
-  background: #3a5a61;
-}
-.page {
-  display: grid;
-  gap: 1.25rem;
-}
-.page h1 {
-  margin: 0;
-}
-.page-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-  gap: 1rem;
-}
-.app-card {
-  padding: 1.25rem;
-  background: #fff;
-  border: 1px solid #dde3e7;
-  border-radius: 0.75rem;
+@media (max-width: 991px) {
+  .nt-cols,
+  .nt-cols--onboarding {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .nt-title--xl {
+    font-size: 2.25rem;
+  }
 }
 
-@media (max-width: 720px) {
-  .app-layout {
-    grid-template-columns: 1fr;
-  }
-  .app-sidebar {
-    padding: 0.5rem 1rem;
-  }
-  .app-sidebar nav {
-    display: flex;
-    overflow-x: auto;
-  }
-  .app-sidebar__link {
-    white-space: nowrap;
-  }
-  .app-layout__main {
-    padding: 1.25rem;
+/* Cards and the private "Yours alone" box. */
+.nt-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  background: var(--nt-white);
+  border: 1px solid var(--nt-line);
+  border-radius: 12px;
+}
+.nt-card--danger {
+  background: var(--nt-red);
+  border-color: var(--nt-red-line);
+}
+.nt-card--tint {
+  background: var(--nt-powder);
+  border-color: var(--nt-powder);
+}
+.nt-card--dashed {
+  background: var(--nt-gray);
+  border: 1px dashed var(--nt-muted);
+}
+.nt-yours-alone {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px 24px 24px;
+  background: var(--nt-butter);
+  border: 1.5px dashed var(--nt-butter-d);
+  border-radius: 8px;
+}
+.nt-yours-alone__label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--nt-butter-d);
+}
+.nt-rule {
+  height: 1px;
+  background: var(--nt-line);
+  border: 0;
+  margin: 0;
+  opacity: 1;
+}
+
+/* Rota colours: Daniel is apricot, Mei is powder blue. */
+.nt-who--D {
+  background: var(--nt-apricot);
+}
+.nt-who--M {
+  background: var(--nt-powder);
+}
+
+:focus-visible {
+  outline: 2px solid var(--nt-plum);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
   }
 }
