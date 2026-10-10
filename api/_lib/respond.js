@@ -2,7 +2,7 @@
 //
 // Error shape. The task asks for `{ error: { code, message } }` and
 // docs/account-deletion.md promises a flat `{ code, message }`, which is what the client in
-// src/v3/api/server.js reads. Rather than break one of the two, every error carries both: the
+// src/app/api/server.js reads. Rather than break one of the two, every error carries both: the
 // nested `error` object and the same code and message at the top level. Adding fields is
 // safe for both readers.
 
