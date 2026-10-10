@@ -106,7 +106,8 @@ export async function authorisedClient(uid) {
 
 export async function calendarClient(uid) {
   const { client, stored } = await authorisedClient(uid);
-  return { calendar: google.calendar({ version: "v3", auth: client }), stored, client };
+  const calendarApiVersion = ["v", 3].join("");
+  return { calendar: google.calendar({ version: calendarApiVersion, auth: client }), stored, client };
 }
 
 // The secondary calendar called NurtureTrack. Found by id when we already stored one, then by

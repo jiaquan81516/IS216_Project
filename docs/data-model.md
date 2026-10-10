@@ -77,8 +77,8 @@ Settings
 ### households/{id}/members/{uid}
 - displayName, photoURL, role, joinedAt
 - Copied from the user profile when they join and when they edit it, so the partner can see a name and photo without reading the private user document.
-- V3: the Profile page writes `users/{uid}` and this document in one batch (`saveProfile` in
-  `src/v3/api/account.js`), so the two copies of the name and role can never disagree. Only
+- App: the Profile page writes `users/{uid}` and this document in one batch (`saveProfile` in
+  `src/app/api/account.js`), so the two copies of the name and role can never disagree. Only
   the member themselves may write or delete their own member document.
 
 ### households/{id}/entries/{entryId}  (the care log)
@@ -88,7 +88,7 @@ Settings
 - details (map): method, side, minutes, ml, nappyType, drug, text
 - seenBy (map uid to timestamp): drives the unseen marker and "N new from Mei"
 - createdAt (timestamp)
-- V3 care log: `byName` (string) is the author's first name at the time of logging, and `details.text` is an optional note on any type (the whole body of a `note`). `details.nappyType` is wet | dirty | both; `details.method` is breast | bottle | expressed.
+- App care log: `byName` (string) is the author's first name at the time of logging, and `details.text` is an optional note on any type (the whole body of a `note`). `details.nappyType` is wet | dirty | both; `details.method` is breast | bottle | expressed.
 - A subcollection, not an array, so two parents logging at once do not collide and the document size limit is never hit.
 
 ### households/{id}/handovers/{handoverId}
@@ -104,7 +104,7 @@ Settings
   "Needs attention", never colour alone
 - summary: { feeds, sleepMinutes, nappies }: a snapshot of the care log between periodStart
   and sentAt, worked out at send time (`summariseWindow` in
-  `src/v3/api/handoverHelpers.js`) and then frozen, so editing an entry later never rewrites
+  `src/app/api/handoverHelpers.js`) and then frozen, so editing an entry later never rewrites
   a handover that has already been sent
 - nextUp (array of string, at most 3): short lines, offered from real data by
   `suggestedNextUp` or typed by hand
@@ -119,7 +119,7 @@ Settings
 - startDate ("YYYY-MM-DD"): the day the pattern starts counting from
 - handoverTime ("HH:MM")
 - updatedAt (timestamp), updatedBy (uid): drives the "Updated by Mei 5 minutes ago" line
-- V3: the plan maths stays in `src/v3/api/rotaHelpers.js`. A settings map cannot hold the
+- App: the plan maths stays in `src/app/api/rotaHelpers.js`. A settings map cannot hold the
   per night overrides, because two parents editing different nights would overwrite each
   other, so each night is its own document (below).
 
@@ -146,10 +146,10 @@ Settings
 - title (string), type: appointment | family | work
 - date, endDate ("YYYY-MM-DD"): endDate equals date for a single day event
 - allDay (boolean), start, end ("HH:MM" or null when allDay)
-- owner (uid, or the string "both"): the local V3 stores used "me" and "partner", which mean
+- owner (uid, or the string "both"): the local App stores used "me" and "partner", which mean
   nothing once the data is shared, so an owner is now a uid. The UI shows Me, the partner's
   name or Both by comparing with the signed in uid (`ownerLabel` in
-  `src/v3/api/sharedHelpers.js`).
+  `src/app/api/sharedHelpers.js`).
 - notes (string, 280 characters)
 - googleEventId (string or null): so syncing never duplicates
 - googleUpdatedAt (string or null): Google's own `updated` stamp from the last sync, which is
@@ -175,7 +175,7 @@ Settings
 
 ### households/{id}/rtw/plan  (the return to work plan, one document)
 - returnDate ("YYYY-MM-DD" or null)
-- responsibilities (map): area key (see `src/v3/data/rtw.js`) to uid, "both" or null
+- responsibilities (map): area key (see `src/app/data/rtw.js`) to uid, "both" or null
 - pumping: { items (map of checklist key to boolean), sessions (2 to 4 or null),
   times (array of morning | midday | afternoon) }
 - updatedAt (timestamp), updatedBy (uid)
@@ -192,20 +192,20 @@ Settings
   kept, never deleted, so an old code answers "That code was replaced" rather than "not
   found".
 - Helpers: `inviteState`, `describeInviteState`, `expiresInText` in
-  `src/v3/api/inviteHelpers.js`. Writes: `createHousehold`, `joinHousehold`,
-  `regenerateInviteCode` in `src/v3/api/profile.js`.
+  `src/app/api/inviteHelpers.js`. Writes: `createHousehold`, `joinHousehold`,
+  `regenerateInviteCode` in `src/app/api/profile.js`.
 
 ## 4. Pumping rooms (global, shared by all households)
 
 The real directory, shared by every household, because a nursing room at a mall is the same
 room for everyone. While the collection is empty the Support page shows the two seed rooms in
-`src/v3/data/pumpingRooms.js`, which are marked as seed data and cannot be reported.
+`src/app/data/pumpingRooms.js`, which are marked as seed data and cannot be reported.
 
 ### pumpingRooms/{roomId}
 - name (string, at most 80), address (string, at most 200), region (string or null)
 - lat, lng (number or null), placeId (string, from Google Places or OneMap; not written yet)
 - features (map): { chair, power, lockable, sink, stroller }, each a boolean. The UI shows
-  labels ("Power outlet"); `featureLabels` and `featureMap` in `src/v3/api/roomHelpers.js` are
+  labels ("Power outlet"); `featureLabels` and `featureMap` in `src/app/api/roomHelpers.js` are
   the only place the two shapes meet.
 - status: verified | unverified. The page calls `unverified` "needs verification", which is
   what it has always said.
@@ -268,7 +268,7 @@ room for everyone. While the collection is empty the Support page shows the two 
 - swaps: createdAt descending
 - handovers: sentAt descending
 - pumpingRooms: name ascending (one field, so Firestore's single field indexes are enough)
-- No composite index is needed for V3: every shared query orders by, and ranges over, the
+- No composite index is needed for App: every shared query orders by, and ranges over, the
   same single field, which is why `firestore.indexes.json` is still empty. Status is
   filtered in the page, not in the swaps query, to keep it that way, and the pumping room
   filters are applied in the page too rather than in the query.
@@ -285,13 +285,13 @@ room for everyone. While the collection is empty the Support page shows the two 
 - **Built.** `GET /api/google/connect`, `GET /api/google/callback`,
   `POST /api/google/disconnect`, `POST /api/google/sync`: the Google Calendar consent flow and
   the two way sync. `GET /api/health` reports which environment variable groups are set.
-  The client calls them through `src/v3/api/server.js`, which adds
+  The client calls them through `src/app/api/server.js`, which adds
   `Authorization: Bearer <Firebase ID token>` to every call and still shows "The calendar
   server is not set up yet." when the functions are not deployed. Setup in `docs/setup.md`.
 - **Still needed.** A Cloud Function or Vercel endpoint to send FCM pushes. Not built: there is
   no FCM, no service worker and no `firebase/messaging` import anywhere, and
   `VITE_FIREBASE_VAPID_KEY` is the variable it will need.
-- Rate limiting. `src/v3/api/limits.js` keeps a sliding window in `localStorage` (5 room
+- Rate limiting. `src/app/api/limits.js` keeps a sliding window in `localStorage` (5 room
   reports, 10 entries, 3 invite regenerations, 3 deletion attempts per 10 minutes), which is a
   courtesy guard, not security: anyone can clear their own storage. The real counters are now
   on the server in `serverLimits/{uid}` for the endpoints that exist (3 account deletions, 10
@@ -349,9 +349,9 @@ it. None of them is ever read by `src/`.
   Linked partner screen as a page of its own is not needed: the Partner section on Settings
   does the job.
 - Replace the in-memory sample data in src/data with Firestore reads, starting with entries.
-- Wellness check-ins stay private and on the device for now (`nt.v3.checkins`). The user
-  settings document holds a `checkins` subcollection in this model but V3 does not write it
+- Wellness check-ins stay private and on the device for now (`nt.app.checkins`). The user
+  settings document holds a `checkins` subcollection in this model but App does not write it
   yet; moving the check-ins there is the next step, and they must stay private to the one uid.
-- The pumping rooms are in Firestore now and `nt.v3.rooms` is gone.
+- The pumping rooms are in Firestore now and `nt.app.rooms` is gone.
 - `lat`, `lng` and `placeId` on a room are never written. The map is a Google Maps embed built
   from the name and the address, which is good enough until somebody adds Places lookup.

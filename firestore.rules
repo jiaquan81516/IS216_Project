@@ -1,4 +1,4 @@
-// NurtureTrack V3 Firestore rules.
+// NurtureTrack App Firestore rules.
 // users: private to the owner. households: members only. invites: any signed in
 // user can read a code, only the creator can write it once.
 rules_version = '2';
