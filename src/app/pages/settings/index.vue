@@ -36,6 +36,16 @@ import { ROUTES } from "@/app/routes";
 
 defineOptions({ name: "SettingsPage" });
 
+const NAV = [
+  { id: "st-notif", label: "Notifications" },
+  { id: "st-cal", label: "Google Calendar" },
+  { id: "st-display", label: "Display" },
+  { id: "st-privacy", label: "Privacy" },
+  { id: "st-partner-h", label: "Partner" },
+  { id: "st-house", label: "Household" },
+  { id: "st-danger", label: "Danger zone" },
+];
+
 const router = useRouter();
 const route = useRoute();
 const home = inject(HOME_KEY, null) ?? useHome();
@@ -347,12 +357,16 @@ async function confirmDelete() {
       <AppButton variant="outline" size="sm" @click="reload">Try again</AppButton>
     </div>
 
-    <template v-else>
+    <div v-else class="st__layout">
+      <nav class="st__nav" aria-label="Settings sections">
+        <a v-for="item in NAV" :key="item.id" class="st__nav-link" :href="`#${item.id}`">{{ item.label }}</a>
+      </nav>
+      <div class="st__cards">
       <p class="st__save" role="status" aria-live="polite">{{ savedAt }}</p>
       <p v-if="saveError" class="app-error-text" role="alert">{{ saveError }}</p>
 
       <!-- Notifications -->
-      <section class="st__section" aria-labelledby="st-notif">
+      <section class="st__card" aria-labelledby="st-notif">
         <h2 id="st-notif" class="st__h">Notifications</h2>
         <p class="st__muted">
           Push notifications need the server set up. These preferences are saved now and used
@@ -447,7 +461,7 @@ async function confirmDelete() {
       </section>
 
       <!-- Calendar -->
-      <section class="st__section" aria-labelledby="st-cal">
+      <section class="st__card" aria-labelledby="st-cal">
         <h2 id="st-cal" class="st__h">Google Calendar</h2>
         <p v-if="form.calendar.connected" class="st__text">Connected.</p>
         <p v-else class="st__muted">Not connected. Appointments stay inside NurtureTrack.</p>
@@ -496,7 +510,7 @@ async function confirmDelete() {
       </section>
 
       <!-- Display -->
-      <section class="st__section" aria-labelledby="st-display">
+      <section class="st__card" aria-labelledby="st-display">
         <h2 id="st-display" class="st__h">Display</h2>
         <div class="st__rows">
           <div class="st__field">
@@ -528,7 +542,7 @@ async function confirmDelete() {
       </section>
 
       <!-- Privacy -->
-      <section class="st__section" aria-labelledby="st-privacy">
+      <section class="st__card" aria-labelledby="st-privacy">
         <h2 id="st-privacy" class="st__h">Privacy</h2>
         <Toggle
           id="st-lastseen"
@@ -540,7 +554,7 @@ async function confirmDelete() {
       </section>
 
       <!-- Partner -->
-      <section class="st__section" aria-labelledby="st-partner-h">
+      <section class="st__card" aria-labelledby="st-partner-h">
         <h2 id="st-partner-h" class="st__h">Partner</h2>
         <template v-if="partner">
           <p class="st__text">{{ partnerName }} shares this household.</p>
@@ -564,7 +578,7 @@ async function confirmDelete() {
       </section>
 
       <!-- Household -->
-      <section class="st__section" aria-labelledby="st-house">
+      <section class="st__card" aria-labelledby="st-house">
         <h2 id="st-house" class="st__h">Household</h2>
         <div class="st__rows">
           <div class="st__field">
@@ -624,7 +638,7 @@ async function confirmDelete() {
       </section>
 
       <!-- Danger zone -->
-      <section class="st__section st__section--last" aria-labelledby="st-danger">
+      <section class="st__card st__card--danger" aria-labelledby="st-danger">
         <h2 id="st-danger" class="st__h">Danger zone</h2>
         <div v-if="!deleteOpen" class="st__actions">
           <AppButton variant="outline" size="sm" @click="deleteOpen = true">Delete my account</AppButton>
@@ -655,19 +669,26 @@ async function confirmDelete() {
         </div>
         <p v-if="deleteError" class="app-error-text" role="alert">{{ deleteError }}</p>
       </section>
-    </template>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.st { display: flex; flex-direction: column; gap: 0; max-width: 720px; font-size: 1rem; }
-.st__head { display: flex; flex-direction: column; gap: 8px; padding-bottom: 16px; }
+.st { display: flex; flex-direction: column; gap: 24px; max-width: 960px; font-size: 1rem; }
+.st__head { display: flex; flex-direction: column; gap: 8px; }
 .st__title { font-size: 2.5rem; line-height: 1.2; }
 .st__sub { margin: 0; color: var(--nt-muted); }
-.st__section { display: flex; flex-direction: column; gap: 12px; padding: 20px 0; border-top: 1px solid var(--nt-line); }
-.st__section--last { border-bottom: 1px solid var(--nt-line); }
-.st__h { margin: 0; font-family: var(--nt-serif); font-size: 1.125rem; font-weight: 400; color: var(--nt-ink); }
-.st__rows { display: flex; flex-direction: column; gap: 14px; }
+.st__layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 40px; align-items: start; }
+.st__nav { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 2px; }
+.st__nav-link { padding: 8px 12px; border-radius: 8px; font-size: 0.9375rem; color: var(--nt-muted); text-decoration: none; }
+.st__nav-link:hover { background: var(--nt-gray); color: var(--nt-ink); }
+.st__nav-link:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
+.st__cards { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.st__card { display: flex; flex-direction: column; gap: 14px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; scroll-margin-top: 24px; }
+.st__h { margin: 0; font-size: 1.125rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
+.st__card--danger .st__h { color: var(--nt-coral); }
+.st__rows { display: flex; flex-direction: column; gap: 16px; }
 .st__field { display: flex; flex-direction: column; gap: 6px; }
 .st__pair { display: flex; flex-wrap: wrap; gap: 16px; }
 .st__label { font-size: 0.875rem; font-weight: 600; color: var(--nt-ink); }
@@ -681,5 +702,10 @@ async function confirmDelete() {
 .st__points { margin: 0; padding-left: 20px; font-size: 0.875rem; line-height: 1.5; color: var(--nt-ink); }
 .st__kept { display: flex; flex-direction: column; gap: 8px; }
 .st__retry { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
-@media (max-width: 991px) { .st__title { font-size: 2rem; } }
+@media (max-width: 991px) {
+  .st__title { font-size: 2rem; }
+  .st__layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .st__nav { display: none; }
+}
+@media (max-width: 575px) { .st__card { padding: 20px 16px; } }
 </style>

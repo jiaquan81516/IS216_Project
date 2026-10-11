@@ -35,6 +35,14 @@ describe("RoomCard", () => {
     expect(w.text()).toContain("Mall, nursing room not confirmed");
     expect(w.text()).not.toContain("Verified");
   });
+  it("offers Show on map, Open in Google Maps and Directions links", async () => {
+    const w = mount(RoomCard, { props: { room: { ...base } } });
+    const links = w.findAll("a").map((a) => a.text());
+    expect(links[0]).toContain("Open in Google Maps");
+    expect(links[1]).toContain("Directions");
+    await w.findAll("button").find((b) => b.text().startsWith("Show on map")).trigger("click");
+    expect(w.emitted("select")).toHaveLength(1);
+  });
   it("emits select from the name and toggle-save from the save button", async () => {
     const w = mount(RoomCard, { props: { room: { ...base } } });
     await w.get(".rc__name-btn").trigger("click");

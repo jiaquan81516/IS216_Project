@@ -23,6 +23,7 @@ const props = defineProps({
   names: { type: Object, default: () => ({ me: "Me", partner: "Your partner" }) },
   meUid: { type: String, default: "" }, // the signed in uid, so an owner uid gets a name
   adding: { type: Boolean, default: false }, // open straight into the add form
+  startEditId: { type: String, default: "" }, // open straight into the edit form for this event
 });
 const emit = defineEmits(["close", "save", "delete"]);
 
@@ -159,7 +160,9 @@ watch(
       editId.value = "";
       confirmingId.value = "";
       error.value = "";
-      if (props.adding) await startForm();
+      const target = props.startEditId ? props.events.find((e) => e.id === props.startEditId) : null;
+      if (target) await startForm(target);
+      else if (props.adding) await startForm();
       else {
         await nextTick();
         closeButton.value?.focus();
@@ -306,10 +309,10 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .cdp { position: fixed; inset: 0; z-index: 1050; }
-.cdp__backdrop { position: absolute; inset: 0; background: rgb(31 41 55 / 35%); }
-.cdp__panel { position: absolute; top: 0; right: 0; bottom: 0; display: flex; flex-direction: column; width: 380px; max-width: 100%; background: var(--nt-bg); border-left: 1px solid var(--nt-line); color: var(--nt-ink); }
+.cdp__backdrop { position: absolute; inset: 0; background: rgb(31 41 55 / 20%); }
+.cdp__panel { position: absolute; top: 0; right: 0; bottom: 0; display: flex; flex-direction: column; width: 380px; max-width: 100%; background: #fff; border-left: 1px solid var(--nt-line); color: var(--nt-ink); }
 .cdp__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--nt-line); }
-.cdp__title { margin: 0; font-family: var(--nt-serif); font-size: 1.5rem; font-weight: 400; line-height: 1.3; letter-spacing: -0.01em; }
+.cdp__title { margin: 0; font-family: inherit; font-size: 1.25rem; font-weight: 600; line-height: 1.3; }
 .cdp__close { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; background: transparent; border: 0; border-radius: 8px; color: var(--nt-muted); cursor: pointer; transition: background-color 0.15s, color 0.15s; }
 .cdp__close:hover { background: var(--nt-gray); color: var(--nt-ink); }
 .cdp__close:focus-visible, .cdp__icon:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
@@ -324,7 +327,7 @@ onBeforeUnmount(() => {
 .cdp__time { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
 .cdp__name { margin: 2px 0 0; font-size: 1rem; font-weight: 600; overflow-wrap: anywhere; }
 .cdp__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0 0; font-size: 0.875rem; color: var(--nt-muted); }
-.cdp__owner { padding: 1px 8px; border-radius: 6px; color: var(--nt-ink); background: var(--nt-gray); border: 1px solid var(--nt-line); }
+.cdp__owner { padding: 1px 6px; border-radius: 4px; color: var(--nt-ink); background: var(--nt-gray); border: 1px solid var(--nt-line); }
 .cdp__owner[data-owner="me"] { background: var(--nt-apricot); border-color: var(--nt-apricot); }
 .cdp__owner[data-owner="partner"] { background: var(--nt-powder); border-color: var(--nt-powder); }
 .cdp__owner[data-owner="both"] { border-left: 1px solid var(--nt-plum); }

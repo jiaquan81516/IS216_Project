@@ -86,7 +86,8 @@ async function mountPage({ named = true, householdId = "h1" } = {}) {
 const solid = (wrapper) => wrapper.findAll("button.btn-primary, a.btn-primary");
 const buttonByText = (wrapper, text) => wrapper.findAll("button").find((b) => b.text() === text);
 const radio = (wrapper, text) => wrapper.findAll('[role="radio"]').find((b) => b.text() === text);
-const cell = (wrapper, iso) => wrapper.get(`td[data-date="${iso}"]`);
+const cell = (wrapper, iso) => wrapper.get(`[role="gridcell"][data-date="${iso}"]`);
+const bars = (wrapper) => wrapper.findAll(".cal__bar");
 let nextId = 0;
 const event = (over = {}) => ({
   id: `e${(nextId += 1)}`,
@@ -120,37 +121,70 @@ afterEach(() => {
 });
 
 describe("App calendar page, month view", () => {
-  it("shows the heading, subtitle, month label and view switch without tabs", async () => {
+  it("shows the heading, subtitle, TimeTree style title and the Monthly or Weekly toggle", async () => {
     const { wrapper } = await mountPage();
     expect(wrapper.get("h1").text()).toBe("Calendar");
     expect(wrapper.text()).toContain("You both see the same calendar.");
-    expect(wrapper.get(".cal__month").text()).toBe("October 2026");
+    expect(wrapper.get(".cal__month").text()).toBe("October, 2026");
     expect(wrapper.find('[role="tablist"]').exists()).toBe(false);
-    expect(wrapper.findAll('[role="radio"]').map((b) => b.text())).toEqual(["Month", "Agenda"]);
+    expect(wrapper.findAll('[role="radio"]').map((b) => b.text())).toEqual(["Monthly", "Weekly"]);
+    expect(radio(wrapper, "Monthly").attributes("aria-checked")).toBe("true");
     expect(wrapper.text()).not.toMatch(/[\u2013\u2014]/);
   });
 
-  it("has exactly one solid button when the panel is closed", async () => {
+  it("has no solid button when the panel is closed, and an outlined plus button", async () => {
     const { wrapper } = await mountPage();
-    expect(solid(wrapper)).toHaveLength(1);
-    expect(solid(wrapper)[0].text()).toBe("Add event");
+    expect(solid(wrapper)).toHaveLength(0);
+    expect(wrapper.get('button[aria-label="Add event"]').classes()).toContain("cal__sq");
+  });
+
+  it("switches to the weekly view and back", async () => {
+    const { wrapper } = await mountPage();
+    await radio(wrapper, "Weekly").trigger("click");
+    expect(radio(wrapper, "Weekly").attributes("aria-checked")).toBe("true");
+    expect(wrapper.findAll(".cal__wkcol")).toHaveLength(7);
+    expect(wrapper.findAll('[role="columnheader"]')).toHaveLength(7);
+    expect(wrapper.get(".cal__month").text()).toBe("October, 2026");
+    await radio(wrapper, "Monthly").trigger("click");
+    expect(wrapper.findAll(".cal__cell")).toHaveLength(42);
   });
 
   it("draws 7 weekday headers and 42 days, with today marked once", async () => {
     const { wrapper } = await mountPage();
-    expect(wrapper.findAll("th").map((h) => h.text())).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
-    expect(wrapper.findAll("td.cal__cell")).toHaveLength(42);
+    expect(wrapper.findAll('[role="columnheader"]').map((h) => h.text())).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    expect(wrapper.find('[role="grid"]').exists()).toBe(true);
+    expect(wrapper.findAll("[role='gridcell'].cal__cell")).toHaveLength(42);
+    expect(wrapper.findAll('[aria-current="date"]')).toHaveLength(1);
     const today = wrapper.findAll(".cal__num--today");
     expect(today).toHaveLength(1);
     expect(today[0].text()).toBe("14");
+    expect(cell(wrapper, "2026-10-14").attributes("aria-current")).toBe("date");
   });
 
-  it("shows who is on night duty from the shared rota", async () => {
+  it("labels each day with its date and event count, and colours Sundays", async () => {
+    api.events = [event({ title: "A", date: "2026-10-11" }), event({ title: "B", date: "2026-10-11" })];
+    const { wrapper } = await mountPage();
+    expect(cell(wrapper, "2026-10-11").attributes("aria-label")).toBe("Sunday 11 October, 2 events");
+    expect(cell(wrapper, "2026-10-12").attributes("aria-label")).toBe("Monday 12 October");
+    expect(wrapper.findAll(".cal__num--sun").length).toBeGreaterThan(4);
+  });
+
+  it("shows who is on night duty as a thin line from the shared rota", async () => {
     const { wrapper } = await mountPage();
     const mine = cell(wrapper, "2026-10-14").get(".cal__night");
     expect(mine.attributes("aria-label")).toBe("Night duty: Daniel");
-    expect(mine.text()).toBe("D");
+    expect(mine.attributes("title")).toBe("Night duty: Daniel");
+    expect(mine.get(".cal__nightpart").attributes("data-who")).toBe("me");
     expect(cell(wrapper, "2026-10-15").get(".cal__night").attributes("aria-label")).toBe("Night duty: Mei");
+    expect(cell(wrapper, "2026-10-15").get(".cal__nightpart").attributes("data-who")).toBe("partner");
+    expect(wrapper.find(".cal__cell .cal__night svg").exists()).toBe(false);
+  });
+
+  it("hides the night line when the Night duty layer is switched off", async () => {
+    const { wrapper } = await mountPage();
+    const toggle = wrapper.findAll(".cal__layer").find((l) => l.text() === "Night duty").get("input");
+    await toggle.setValue(false);
+    expect(wrapper.find(".cal__night").exists()).toBe(false);
   });
 
   it("uses generic names when the household is unknown", async () => {
@@ -163,7 +197,7 @@ describe("App calendar page, month view", () => {
     const { wrapper } = await mountPage({ householdId: "" });
     expect(wrapper.text()).toContain("Loading the calendar...");
     expect(wrapper.find('[role="alert"]').exists()).toBe(false);
-    expect(wrapper.find("table").exists()).toBe(false);
+    expect(wrapper.find('[role="grid"]').exists()).toBe(false);
   });
 
   it("explains permission-denied and offers Try again", async () => {
@@ -175,46 +209,68 @@ describe("App calendar page, month view", () => {
     expect(retry).toHaveBeenCalled();
   });
 
-  it("names the owner of each event from the uid stored with it", async () => {
+  it("colours each event by the owner uid stored with it", async () => {
     api.events = [event({ title: "Mine", owner: ME }), event({ title: "Theirs", owner: PARTNER })];
     const { wrapper } = await mountPage();
-    const c = cell(wrapper, "2026-10-14");
-    expect(c.findAll(".cal__chip").map((x) => x.attributes("data-owner"))).toEqual(["me", "partner"]);
-    expect(c.findAll(".cal__chip")[0].text()).toContain("Daniel");
-    expect(c.findAll(".cal__chip")[1].text()).toContain("Mei");
+    expect(bars(wrapper).map((x) => x.attributes("data-owner"))).toEqual(["me", "partner"]);
+    expect(bars(wrapper)[0].attributes("aria-label")).toContain("Daniel");
+    expect(bars(wrapper)[1].attributes("aria-label")).toContain("Mei");
   });
 
-  it("limits a cell to two chips and opens the day for the rest", async () => {
+  it("draws a timed event as a row with a dot, title and right-aligned time", async () => {
+    api.events = [event({ title: "Feed", allDay: false, start: "19:00", end: "19:30", owner: PARTNER })];
+    const { wrapper } = await mountPage();
+    const row = wrapper.get(".cal__ev");
+    expect(row.find(".cal__evdot").exists()).toBe(true);
+    expect(row.get(".cal__evtitle").text()).toBe("Feed");
+    expect(row.get(".cal__evtime").text()).toBe("7:00 PM");
+    expect(wrapper.find(".cal__bar").exists()).toBe(false);
+  });
+
+  it("shows three rows and a +N chip for the rest, which opens the day", async () => {
     api.events = [
-      event({ title: "Mine", owner: ME }),
-      event({ title: "Theirs", owner: PARTNER }),
-      event({ title: "Ours", owner: "both" }),
+      event({ title: "One", owner: ME }),
+      event({ title: "Two", owner: PARTNER }),
+      event({ title: "Three", owner: "both" }),
+      event({ title: "Four", owner: ME }),
+      event({ title: "Five", owner: ME }),
     ];
     const { wrapper } = await mountPage();
-    const c = cell(wrapper, "2026-10-14");
-    expect(c.findAll(".cal__chip")).toHaveLength(2);
-    const more = c.get(".cal__more");
-    expect(more.text()).toBe("+1 more");
+    expect(wrapper.findAll(".cal__item")).toHaveLength(3);
+    const more = wrapper.findAll(".cal__more").find((m) => m.isVisible());
+    expect(more.text()).toBe("+2");
+    expect(more.attributes("aria-label")).toBe("2 more events on Wednesday 14 October");
     await more.trigger("click");
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
-    expect(wrapper.findAll(".cdp__item")).toHaveLength(3);
+    expect(wrapper.findAll(".cdp__item")).toHaveLength(5);
   });
 
-  it("shows a multi-day event on every day it covers", async () => {
+  it("spans a multi-day event as one bar across the days it covers", async () => {
     api.events = [event({ title: "Leave", date: "2026-10-20", endDate: "2026-10-22" })];
     const { wrapper } = await mountPage();
-    for (const iso of ["2026-10-20", "2026-10-21", "2026-10-22"]) {
-      expect(cell(wrapper, iso).findAll(".cal__chip")).toHaveLength(1);
-    }
-    expect(cell(wrapper, "2026-10-19").find(".cal__chip").exists()).toBe(false);
+    expect(bars(wrapper)).toHaveLength(1);
+    expect(bars(wrapper)[0].attributes("style")).toContain("span 3");
+  });
+
+  it("hides a person's events when their layer is switched off", async () => {
+    api.events = [event({ title: "Mine", owner: ME }), event({ title: "Theirs", owner: PARTNER })];
+    const { wrapper } = await mountPage();
+    const toggle = wrapper.findAll(".cal__layer").find((l) => l.text() === "Mei's events").get("input");
+    await toggle.setValue(false);
+    expect(bars(wrapper).map((x) => x.attributes("data-owner"))).toEqual(["me"]);
+    const all = wrapper.findAll(".cal__layer").find((l) => l.text().endsWith("Everything")).get("input");
+    await all.setValue(true);
+    expect(bars(wrapper)).toHaveLength(2);
+    await all.setValue(false);
+    expect(bars(wrapper)).toHaveLength(0);
   });
 
   it("moves between months and back to today", async () => {
     const { wrapper } = await mountPage();
     await wrapper.get('button[aria-label="Next month"]').trigger("click");
-    expect(wrapper.get(".cal__month").text()).toBe("November 2026");
+    expect(wrapper.get(".cal__month").text()).toBe("November, 2026");
     await buttonByText(wrapper, "Today").trigger("click");
-    expect(wrapper.get(".cal__month").text()).toBe("October 2026");
+    expect(wrapper.get(".cal__month").text()).toBe("October, 2026");
   });
 });
 
@@ -229,12 +285,12 @@ describe("App calendar page, day panel", () => {
     await dialog.trigger("keydown", { key: "Escape" });
     await flushPromises();
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
-    expect(document.activeElement).toBe(cell(wrapper, "2026-10-16").get("button.cal__daybtn").element);
+    expect(document.activeElement).toBe(cell(wrapper, "2026-10-16").element);
   });
 
   it("opens the add form from the toolbar, with Save event as the only solid button", async () => {
     const { wrapper } = await mountPage();
-    await buttonByText(wrapper, "Add event").trigger("click");
+    await wrapper.get('button[aria-label="Add event"]').trigger("click");
     await flushPromises();
     const dialog = wrapper.get('[role="dialog"]');
     expect(dialog.get("h2").text()).toBe("Wednesday 14 October");
@@ -247,7 +303,7 @@ describe("App calendar page, day panel", () => {
 
   it("saves a new event with the partner's uid as the owner", async () => {
     const { wrapper } = await mountPage();
-    const addButton = buttonByText(wrapper, "Add event");
+    const addButton = wrapper.get('button[aria-label="Add event"]');
     await addButton.trigger("click");
     await flushPromises();
 
@@ -290,7 +346,7 @@ describe("App calendar page, day panel", () => {
 
   it("rejects an end time that is not after the start time", async () => {
     const { wrapper } = await mountPage();
-    await buttonByText(wrapper, "Add event").trigger("click");
+    await wrapper.get('button[aria-label="Add event"]').trigger("click");
     await flushPromises();
     await wrapper.get('[role="dialog"] input[type="text"]').setValue("Call");
     await wrapper.get('input[role="switch"]').setValue(false);
@@ -341,35 +397,36 @@ describe("App calendar page, day panel", () => {
     await buttonByText(wrapper, "Delete").trigger("click");
     await flushPromises();
     expect(wrapper.text()).toContain("could not delete the event");
-    expect(wrapper.findAll("td.cal__cell")).toHaveLength(42);
+    expect(wrapper.findAll(".cal__cell")).toHaveLength(42);
   });
 });
 
-describe("App calendar page, agenda view", () => {
-  it("shows the empty state with only the toolbar button to click", async () => {
-    const { wrapper } = await mountPage();
-    await radio(wrapper, "Agenda").trigger("click");
-    expect(wrapper.find("table").exists()).toBe(false);
-    expect(wrapper.get(".cal__empty").text()).toBe("No events yet. Add the first one.");
-    expect(solid(wrapper)).toHaveLength(1);
-  });
-
-  it("lists upcoming events by date and skips past ones", async () => {
+describe("App calendar page, weekly view", () => {
+  it("shows an all day row, an hour grid and timed blocks", async () => {
     api.events = [
-      event({ title: "Past", date: "2026-10-01" }),
-      event({ title: "Now", date: "2026-10-14" }),
-      event({ title: "Soon", date: "2026-10-15", allDay: false, start: "09:30", owner: ME }),
-      event({ title: "Later", date: "2026-10-30", endDate: "2026-11-02", owner: PARTNER }),
+      event({ title: "Trip", date: "2026-10-13", endDate: "2026-10-15" }),
+      event({ title: "Jab", date: "2026-10-14", allDay: false, start: "09:00", end: "10:00", owner: PARTNER }),
     ];
     const { wrapper } = await mountPage();
-    await radio(wrapper, "Agenda").trigger("click");
-    const headings = wrapper.findAll(".cal__group-title").map((h) => h.text());
-    expect(headings[0]).toContain("Today");
-    expect(headings[1]).toContain("Tomorrow");
-    expect(headings[2]).toBe("Fri 30 October");
-    expect(wrapper.text()).not.toContain("Past");
-    expect(wrapper.text()).toContain("9:30 AM");
-    expect(wrapper.text()).toContain("30 October to 2 November");
-    expect(wrapper.findAll(".cal__owner").map((o) => o.text())).toContain("Mei");
+    await radio(wrapper, "Weekly").trigger("click");
+    expect(wrapper.text()).toContain("All day");
+    expect(wrapper.findAll(".cal__wkline")).toHaveLength(24);
+    expect(wrapper.findAll(".cal__bar")).toHaveLength(1);
+    const block = wrapper.get(".cal__block");
+    expect(block.text()).toContain("Jab");
+    expect(block.text()).toContain("9:00 AM");
+    expect(block.attributes("style")).toContain("top: 433px");
+  });
+
+  it("steps by week and opens a block for editing", async () => {
+    api.events = [event({ title: "Jab", date: "2026-10-14", allDay: false, start: "09:00", end: "10:00", owner: PARTNER })];
+    const { wrapper } = await mountPage();
+    await radio(wrapper, "Weekly").trigger("click");
+    await wrapper.get(".cal__block").trigger("click");
+    await flushPromises();
+    expect(wrapper.get('[role="dialog"] input[type="text"]').element.value).toBe("Jab");
+    await wrapper.get('[role="dialog"]').trigger("keydown", { key: "Escape" });
+    await wrapper.get('button[aria-label="Next week"]').trigger("click");
+    expect(wrapper.find(".cal__block").exists()).toBe(false);
   });
 });

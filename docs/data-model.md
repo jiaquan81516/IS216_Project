@@ -113,6 +113,19 @@ Settings
   accepted)
 - One document per handover, never deleted, so the history is the record of the shifts.
 
+### households/{id}/posts/{postId}  (the Home stream's plain messages)
+- text (string, 1 to 500 characters), authorUid (uid), createdAt (server timestamp)
+- ackedBy (array of uid): empty on create. The reader adds their own uid with one update
+  that also sets `ackedAt` (server timestamp). Nothing else on a post ever changes
+- No edits. Only the author may delete. Rules: members read; create needs `authorUid == uid`,
+  the text length and `createdAt == request.time`; update is the acknowledgement above and
+  only for a member who is not the author
+- Index: none. The query orders by `createdAt` only (newest 50)
+- The Home stream is not a collection. It is built in the browser by `buildStream` in
+  `src/app/api/stream.js` from posts, care log entries, handovers and tasks, so no existing
+  collection changed. Push alerts for new posts are not built; the stream relies on future
+  push (FCM) to tell a parent something arrived.
+
 ### households/{id}/rota/settings  (the shared sleep rota plan, one document)
 - pattern (string): alternate | split | manual
 - firstOnDuty (uid or null): who takes the first night of the pattern
@@ -253,6 +266,9 @@ room for everyone. While the collection is empty the Support page shows the two 
   member, with `acceptedAt` and `acceptedBy` null; only `from` may edit, and only while
   `acceptedAt` is still null; only `to` may accept, and that write may touch nothing but
   `acceptedAt` and `acceptedBy`, with `acceptedBy` equal to their own uid; no deletes.
+- posts: members read; create in your own name with 1 to 500 characters, `createdAt ==
+  request.time` and `ackedBy` empty; only a member who is not the author may update, and only
+  to add their own uid to `ackedBy` and set `ackedAt`; only the author may delete.
 - events and tasks: members read; `createdBy` must be the caller on create and may not
   change; either parent may update or delete, because these are shared plans rather than
   personal records. That is a deliberate choice: a shared calendar where only the author can

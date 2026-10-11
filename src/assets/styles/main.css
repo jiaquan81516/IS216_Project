@@ -3,7 +3,9 @@
 :root {
   --nt-plum: #3b2f3f;
   --nt-plum-hover: #2d2431;
-  --nt-bg: #f6efe6;
+  --nt-bg: #f5f5f3;
+  --nt-bg-care: #eef2ef;
+  --nt-bg-personal: #f7f1ee;
   --nt-ink: #1f2937;
   --nt-muted: #6b7280;
   --nt-line: #e5e7eb;

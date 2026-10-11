@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
+import { createPinia, setActivePinia } from "pinia";
 
 const state = vi.hoisted(() => ({
   profile: null,
@@ -10,6 +11,15 @@ const state = vi.hoisted(() => ({
   entries: [],
   entriesError: null,
   handovers: [],
+  posts: [],
+  postsError: null,
+  tasks: [],
+  acceptHandover: null,
+  addPost: null,
+  ackPost: null,
+  deletePost: null,
+  addTask: null,
+  toggleTask: null,
 }));
 
 vi.mock("@/api/firebase", () => ({ default: {}, auth: {} }));
@@ -29,7 +39,6 @@ vi.mock("@/app/api/profile", async (importOriginal) => ({
   getHousehold: vi.fn(async () => state.household),
   getHouseholdMembers: vi.fn(async () => state.members),
 }));
-
 vi.mock("@/app/api/entries", () => ({
   subscribeEntries: (_id, onData, onError) => {
     queueMicrotask(() => (state.entriesError ? onError(state.entriesError) : onData(state.entries)));
@@ -42,22 +51,55 @@ vi.mock("@/app/api/handovers", () => ({
     queueMicrotask(() => onData(state.handovers));
     return () => {};
   },
+  acceptHandover: (...a) => state.acceptHandover(...a),
+}));
+vi.mock("@/app/api/posts", () => ({
+  POST_TEXT_MAX: 500,
+  subscribePosts: (_id, onData, onError) => {
+    queueMicrotask(() => (state.postsError ? onError(state.postsError) : onData(state.posts)));
+    return () => {};
+  },
+  addPost: (...a) => state.addPost(...a),
+  ackPost: (...a) => state.ackPost(...a),
+  deletePost: (...a) => state.deletePost(...a),
+}));
+vi.mock("@/app/api/rtw", () => ({
+  subscribeRtwPlan: (_id, onData) => {
+    queueMicrotask(() => onData(null));
+    return () => {};
+  },
+  subscribeTasks: (_id, onData) => {
+    queueMicrotask(() => onData(state.tasks));
+    return () => {};
+  },
+  addTask: (...a) => state.addTask(...a),
+  toggleTask: (...a) => state.toggleTask(...a),
+  migrateLegacyRtw: vi.fn(async () => false),
 }));
 
 import HomePage from "@/app/pages/home/index.vue";
+import { SHARED_KEY } from "@/app/composables/useShared";
+import { usePostsStore } from "@/app/stores/posts";
+import { useReturnToWorkStore } from "@/app/stores/returnToWork";
 
-function isoDaysAgo(days) {
-  const d = new Date(Date.now() - days * 86400000);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
+const NOW = new Date(2026, 9, 11, 12, 0, 0);
+const ts = (date) => ({ toDate: () => date });
+const at = (day, h, m = 0) => new Date(2026, 9, day, h, m);
 
-async function mountHome() {
-  const router = createRouter({
+let router;
+async function mountHome({ rota = null } = {}) {
+  router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }],
   });
-  const wrapper = mount(HomePage, { global: { plugins: [router] } });
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const posts = usePostsStore();
+  const rtw = useReturnToWorkStore();
+  posts.bind("h1", "u1");
+  rtw.bind("h1", "u1", "u2");
+  const shared = { posts, rtw, rota };
+  const wrapper = mount(HomePage, { global: { plugins: [router, pinia], provide: { [SHARED_KEY]: shared } }, attachTo: document.body });
   await flushPromises();
   return wrapper;
 }
@@ -66,176 +108,312 @@ const daniel = { uid: "u1", displayName: "daniel Tan", role: "parent" };
 const mei = { uid: "u2", displayName: "Mei Lin", role: "partner" };
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
   state.fail = false;
   state.profile = { displayName: "daniel Tan", email: "daniel@example.com", householdId: "h1" };
-  state.household = {
-    inviteCode: "NT-4F7K",
-    babyName: "Aria",
-    babyStatus: "born",
-    babyDate: isoDaysAgo(42),
-  };
+  state.household = { inviteCode: "NT-4F7K", babyName: "Aria", babyStatus: "born", babyDate: "2026-08-30" };
   state.members = [daniel, mei];
   state.entries = [];
   state.entriesError = null;
   state.handovers = [];
+  state.posts = [];
+  state.postsError = null;
+  state.tasks = [];
+  state.acceptHandover = vi.fn(async () => {});
+  state.addPost = vi.fn(async () => "p-new");
+  state.ackPost = vi.fn(async () => {});
+  state.deletePost = vi.fn(async () => {});
+  state.addTask = vi.fn(async () => "t-new");
+  state.toggleTask = vi.fn(async () => {});
+});
+afterEach(() => {
+  document.body.innerHTML = "";
+  vi.useRealTimers();
 });
 
-const ts = (date) => ({ toDate: () => date });
-const minutesAgo = (n) => new Date(Date.now() - n * 60000);
-function feedFromMei(overrides = {}) {
-  return {
-    id: "e1",
-    type: "feed",
-    by: "u2",
-    byName: "mei",
-    at: ts(minutesAgo(20)),
-    details: { method: "breast", side: "left", minutes: 18 },
-    seenBy: { u2: ts(new Date()) },
-    ...overrides,
-  };
-}
+const partnerPost = (over = {}) => ({ id: "p1", text: "Home by 6", authorUid: "u2", createdAt: ts(at(11, 9, 10)), ackedBy: [], ...over });
+const buttonByText = (wrapper, text) => wrapper.findAll("button").find((b) => b.text() === text);
 
-describe("App home", () => {
-  it("greets the signed in parent by capitalised first name and shows the baby line", async () => {
+describe("Home layout", () => {
+  it("shows the Home title, one muted greeting line and the composer", async () => {
     const wrapper = await mountHome();
-    expect(wrapper.get("h1").text()).toMatch(/^Good (morning|afternoon|evening), Daniel$/);
-    expect(wrapper.text()).toContain("Aria is 6 weeks old");
+    expect(wrapper.get("h1").text()).toBe("Home");
+    expect(wrapper.get(".hp__sub").text()).toBe("Good afternoon, Daniel. Sunday, 11 October");
+    const input = wrapper.get("input[type=text]");
+    expect(input.attributes("aria-label")).toBe("Message, log, or add a task");
+    expect(input.attributes("placeholder")).toBe("Message, log, or add a task...");
   });
 
-  it("shows the empty state with no sample content", async () => {
+  it("drops the old cards and keeps the private check in link", async () => {
     const wrapper = await mountHome();
-    const headings = wrapper.findAll("h2").map((h) => h.text());
-    expect(headings).toContain("Log your first care entry");
-    expect(headings).toContain("Recent activity");
-    expect(headings).toContain("How are you holding up?");
-    expect(headings).not.toContain("Tonight");
-    expect(wrapper.text()).toContain("Feeds, naps and nappies you log show up here for both of you.");
-    expect(wrapper.text()).toContain("Latest from you and Mei");
-    expect(wrapper.text()).toContain("Nothing logged yet.");
-    expect(wrapper.text()).not.toContain("Sample");
-    expect(wrapper.text()).not.toContain("Feed due around");
-    expect(wrapper.text()).not.toContain("handover");
-    expect(wrapper.findAll(".btn-primary")).toHaveLength(1);
-    expect(wrapper.get(".btn-primary").text()).toBe("Log care");
+    const text = wrapper.text();
+    for (const gone of ["Last feed", "Sleep today", "Nappies today", "Coming up", "Recent activity"]) expect(text).not.toContain(gone);
+    const link = wrapper.findAll("a").find((a) => a.text() === "Check in privately");
+    expect(link.attributes("href")).toBe("/wellness");
   });
 
-  it("shows the last feed and recent rows from real entries", async () => {
-    state.entries = [
-      feedFromMei(),
-      {
-        id: "e2",
-        type: "nappy",
-        by: "u1",
-        byName: "Daniel",
-        at: ts(minutesAgo(90)),
-        details: { nappyType: "wet" },
-        seenBy: { u1: ts(new Date()) },
-      },
-    ];
+  it("shows the empty state when nothing has happened", async () => {
     const wrapper = await mountHome();
-    const headings = wrapper.findAll("h2").map((h) => h.text());
-    expect(headings.some((h) => h.startsWith("Last feed"))).toBe(true);
-    expect(wrapper.text()).toContain("Breastfeeding, left, 18 minutes by Mei.");
-    expect(wrapper.text()).not.toContain("Sample");
-    const rows = wrapper.findAll(".hp__row");
-    expect(rows).toHaveLength(2);
-    expect(rows[0].text()).toContain("New");
-    expect(rows[1].text()).toContain("by you");
-    expect(rows[1].text()).not.toContain("New");
-    expect(wrapper.findAll(".btn-primary")).toHaveLength(1);
-    expect(wrapper.get(".btn-primary").text()).toBe("Log a feed");
-    expect(wrapper.findAll("a").some((a) => a.text() === "Open care log")).toBe(true);
+    expect(wrapper.text()).toContain("Nothing here yet. Post a message or log something.");
   });
 
-  it("shows only the five newest entries", async () => {
-    state.entries = Array.from({ length: 8 }, (_, i) => feedFromMei({ id: `e${i}`, at: ts(minutesAgo(i + 1)) }));
-    const wrapper = await mountHome();
-    expect(wrapper.findAll(".hp__row")).toHaveLength(5);
-  });
-
-  it("shows a specific message when the entries cannot be read", async () => {
-    state.entriesError = { code: "permission-denied" };
-    const wrapper = await mountHome();
-    expect(wrapper.text()).toContain("Publish the latest firestore.rules");
-    expect(wrapper.text()).not.toContain("Sample");
-  });
-
-  it("hides the invite notice when a partner has joined", async () => {
-    const wrapper = await mountHome();
-    expect(wrapper.text()).not.toContain("Invite your partner");
-  });
-
-  it("shows the invite notice with the code when no partner has joined", async () => {
+  it("shows an invite line only while there is no partner", async () => {
+    expect((await mountHome()).text()).not.toContain("Invite your partner");
     state.members = [daniel];
-    const wrapper = await mountHome();
-    expect(wrapper.text()).toContain("Invite your partner with code NT-4F7K");
-    expect(wrapper.findAll("button").some((b) => b.text() === "Copy code")).toBe(true);
-    expect(wrapper.find("header").text()).not.toContain("Invite");
-    expect(wrapper.text()).toContain("Latest from you and your partner");
+    expect((await mountHome()).text()).toContain("Invite your partner with code NT-4F7K");
   });
 
   it("shows an alert with a retry button when the household cannot load", async () => {
     state.fail = true;
     const wrapper = await mountHome();
     expect(wrapper.get('[role="alert"]').text()).toContain("could not load your household");
-    expect(wrapper.find("h1").exists()).toBe(false);
-    const retry = wrapper.findAll("button").find((b) => b.text() === "Try again");
-    expect(retry).toBeTruthy();
     state.fail = false;
-    await retry.trigger("click");
+    await buttonByText(wrapper, "Try again").trigger("click");
     await flushPromises();
     expect(wrapper.find("h1").exists()).toBe(true);
   });
-});
 
-describe("App home private check-in box", () => {
-  it("links Check in privately to the App wellness page", async () => {
+  it("says why messages cannot be read", async () => {
+    state.postsError = { code: "permission-denied" };
     const wrapper = await mountHome();
-    const link = wrapper.findAll("a").find((a) => a.text() === "Check in privately");
-    expect(link.attributes("href")).toBe("/wellness");
+    expect(wrapper.text()).toContain("Publish the latest firestore.rules");
+  });
+
+  it("has exactly one solid plum control, and only once there is text", async () => {
+    const wrapper = await mountHome();
+    expect(wrapper.find(".hp__send").exists()).toBe(false);
+    await wrapper.get("input[type=text]").setValue("hello");
+    expect(wrapper.findAll(".hp__send")).toHaveLength(1);
+    expect(wrapper.findAll(".btn-primary")).toHaveLength(0);
+  });
+
+  it("adds the Tonight line from the rota and omits it without one", async () => {
+    expect((await mountHome()).find(".hp__tonight").exists()).toBe(false);
+    const rota = {
+      loading: false,
+      error: null,
+      settings: {},
+      view: { pattern: "alternate", firstOnDuty: "partner", startDate: "2026-10-11", handoverTime: "07:00", overrides: {}, swaps: [] },
+    };
+    const wrapper = await mountHome({ rota });
+    expect(wrapper.get(".hp__tonight").text()).toBe("Tonight: Mei Lin on duty, handover 7:00 AM");
   });
 });
 
-describe("App home and the handover", () => {
-  const waiting = {
-    id: "ho1",
-    from: "u2",
-    to: "u1",
-    sentAt: ts(new Date(new Date().setHours(7, 10, 0, 0))),
-    periodStart: ts(new Date(new Date().setHours(0, 0, 0, 0))),
-    summary: { feeds: 4, sleepMinutes: 220, nappies: 3 },
-    acceptedAt: null,
-  };
-
-  it("says nothing about a handover when there is none", async () => {
+describe("Home stream", () => {
+  it("groups by day, newest first, with plain text items", async () => {
+    state.posts = [partnerPost(), partnerPost({ id: "p2", text: "Old news", createdAt: ts(at(10, 20)) }), partnerPost({ id: "p3", text: "Earlier", createdAt: ts(at(9, 8, 5)) })];
     const wrapper = await mountHome();
-    expect(wrapper.find(".hp__handover").exists()).toBe(false);
-    expect(wrapper.get("#hp-recent").text()).toBe("Recent activity");
+    expect(wrapper.findAll(".hp__day").map((d) => d.text())).toEqual(["Today", "Yesterday", "Fri 9 Oct"]);
+    const first = wrapper.get(".hp__item");
+    expect(first.get(".hp__meta").text()).toBe("Mei, 9:10 AM");
+    expect(first.get(".hp__text").text()).toBe("Home by 6");
+    expect(wrapper.findAll("ul.hp__list").length).toBe(3);
   });
 
-  it("adds one quiet line linking to the page when one is waiting for me", async () => {
-    state.handovers = [waiting];
+  it("renders care entries as one line with no action", async () => {
+    state.entries = [{ id: "e1", type: "feed", by: "u2", byName: "mei", at: ts(at(11, 8)), details: { method: "bottle", ml: 120 } }];
     const wrapper = await mountHome();
-    const line = wrapper.get(".hp__handover");
-    expect(line.text()).toContain("Mei handed over at 7:10 AM");
-    expect(line.text()).toContain("12:00 AM to 7:10 AM");
-    expect(line.text()).toContain("4 feeds, 3 h 40 min sleep, 3 nappies");
-    expect(line.get("a").attributes("href")).toBe("/handover");
-    // Home keeps its single solid button: the handover line is quiet, not a second one.
-    expect(wrapper.findAll(".btn-primary")).toHaveLength(1);
+    const item = wrapper.get(".hp__item");
+    expect(item.get(".hp__meta").text()).toBe("Mei, 8:00 AM · Care");
+    expect(item.get(".hp__text").text()).toBe("Fed 120 ml");
+    expect(item.findAll("button")).toHaveLength(0);
   });
 
-  it("makes the recent section window aware once a handover exists", async () => {
-    state.handovers = [{ ...waiting, id: "ho2", from: "u1", to: "u2" }];
+  it("renders a received handover with counts and Needs attention in coral", async () => {
+    state.handovers = [
+      {
+        id: "ho1",
+        from: "u2",
+        to: "u1",
+        sentAt: ts(at(11, 7, 10)),
+        note: "Quiet night",
+        needsAttention: true,
+        attentionNote: "Cough",
+        summary: { feeds: 4, sleepMinutes: 220, nappies: 3 },
+        acceptedAt: null,
+      },
+    ];
     const wrapper = await mountHome();
-    expect(wrapper.get("#hp-recent").text()).toBe("Since the last handover");
-    expect(wrapper.find(".hp__handover").exists()).toBe(false);
+    const item = wrapper.get(".hp__item");
+    expect(item.text()).toContain("Mei, 7:10 AM · Handover");
+    expect(item.text()).toContain("Quiet night");
+    expect(item.text()).toContain("4 feeds, 3 h 40 min sleep, 3 nappies");
+    expect(item.get(".hp__attention").text()).toBe("Needs attention: Cough");
+    await buttonByText(wrapper, "Got it").trigger("click");
+    expect(state.acceptHandover).toHaveBeenCalledWith("h1", "ho1", "u1");
   });
 
-  it("drops the line once I have accepted it", async () => {
-    state.handovers = [{ ...waiting, acceptedAt: ts(new Date()), acceptedBy: "u1" }];
+  it("Got it acknowledges a partner message, then it reads Seen by you", async () => {
+    state.posts = [partnerPost()];
     const wrapper = await mountHome();
-    expect(wrapper.find(".hp__handover").exists()).toBe(false);
-    expect(wrapper.get("#hp-recent").text()).toBe("Since the last handover");
+    await buttonByText(wrapper, "Got it").trigger("click");
+    expect(state.ackPost).toHaveBeenCalledWith("h1", "p1", "u1");
+    state.posts = [partnerPost({ ackedBy: ["u1"] })];
+    const again = await mountHome();
+    expect(buttonByText(again, "Got it")).toBeUndefined();
+    expect(again.get(".hp__item").text()).toContain("Seen by you");
+  });
+
+  it("shows Seen by the partner on my own message once acknowledged, and nothing before", async () => {
+    state.posts = [partnerPost({ authorUid: "u1" })];
+    const before = await mountHome();
+    expect(before.get(".hp__item").text()).toContain("You, 9:10 AM");
+    expect(before.get(".hp__item").text()).not.toContain("Seen by");
+    expect(buttonByText(before, "Got it")).toBeUndefined();
+    state.posts = [partnerPost({ authorUid: "u1", ackedBy: ["u2"] })];
+    const after = await mountHome();
+    expect(after.get(".hp__item").text()).toContain("Seen by Mei");
+  });
+
+  it("lets me delete only my own message", async () => {
+    state.posts = [partnerPost({ id: "mine", authorUid: "u1" }), partnerPost({ id: "theirs", createdAt: ts(at(11, 8)) })];
+    const wrapper = await mountHome();
+    const deletes = wrapper.findAll("button").filter((b) => b.text() === "Delete");
+    expect(deletes).toHaveLength(1);
+    await deletes[0].trigger("click");
+    expect(state.deletePost).toHaveBeenCalledWith("h1", "mine");
+  });
+
+  it("shows an open task with Done and marks it done through the store", async () => {
+    state.tasks = [{ id: "t1", title: "Book jab", owner: "both", due: "2026-10-13", done: false, createdBy: "u2", createdAt: ts(at(10, 18)) }];
+    const wrapper = await mountHome();
+    const item = wrapper.get(".hp__item");
+    expect(item.get(".hp__meta").text()).toBe("Mei, 6:00 PM · Task, due Tue");
+    await buttonByText(wrapper, "Done").trigger("click");
+    expect(state.toggleTask).toHaveBeenCalledWith("h1", "t1", true, "u1");
+  });
+
+  it("shows a finished task without an action", async () => {
+    state.tasks = [{ id: "t1", title: "Book jab", owner: "both", done: true, doneAt: ts(at(11, 10)), createdBy: "u2", createdAt: ts(at(10, 18)) }];
+    const wrapper = await mountHome();
+    expect(buttonByText(wrapper, "Done")).toBeUndefined();
+    expect(wrapper.text()).toContain("Completed");
+  });
+});
+
+describe("Home composer", () => {
+  it("sends a plain message on Enter, clears the box and announces it", async () => {
+    const wrapper = await mountHome();
+    const input = wrapper.get("input[type=text]");
+    await input.setValue("  Running late  ");
+    await wrapper.get("form").trigger("submit");
+    await flushPromises();
+    expect(state.addPost).toHaveBeenCalledWith("h1", "u1", "Running late");
+    expect(input.element.value).toBe("");
+    expect(wrapper.get("[role=status].visually-hidden").text()).toBe("Message sent");
+  });
+
+  it("sends with the Send button too", async () => {
+    const wrapper = await mountHome();
+    await wrapper.get("input[type=text]").setValue("Hi");
+    await wrapper.get(".hp__send").trigger("click");
+    await wrapper.get("form").trigger("submit");
+    await flushPromises();
+    expect(state.addPost).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends nothing for blank text", async () => {
+    const wrapper = await mountHome();
+    await wrapper.get("input[type=text]").setValue("   ");
+    await wrapper.get("form").trigger("submit");
+    expect(state.addPost).not.toHaveBeenCalled();
+  });
+
+  it("shows a calm error when sending fails and keeps the text", async () => {
+    state.addPost = vi.fn(async () => {
+      throw { code: "unavailable" };
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const wrapper = await mountHome();
+    const input = wrapper.get("input[type=text]");
+    await input.setValue("Hi");
+    await wrapper.get("form").trigger("submit");
+    await flushPromises();
+    expect(wrapper.text()).toContain("could not send");
+    expect(input.element.value).toBe("Hi");
+  });
+});
+
+describe("Home plus menu", () => {
+  it("lists the six actions and is keyboard operable", async () => {
+    const wrapper = await mountHome();
+    const plus = wrapper.get(".hp__plus");
+    expect(plus.attributes("aria-expanded")).toBe("false");
+    await plus.trigger("click");
+    await flushPromises();
+    const items = wrapper.findAll('[role="menuitem"]').map((i) => i.text());
+    expect(items).toEqual(["Log feed", "Log sleep", "Log nappy", "Medicine", "Add a task", "Send handover"]);
+    expect(plus.attributes("aria-expanded")).toBe("true");
+    expect(document.activeElement.textContent.trim()).toBe("Log feed");
+
+    await wrapper.get("#hp-menu").trigger("keydown", { key: "ArrowDown" });
+    expect(document.activeElement.textContent.trim()).toBe("Log sleep");
+    await wrapper.get("#hp-menu").trigger("keydown", { key: "End" });
+    expect(document.activeElement.textContent.trim()).toBe("Send handover");
+    await wrapper.get("#hp-menu").trigger("keydown", { key: "ArrowDown" });
+    expect(document.activeElement.textContent.trim()).toBe("Log feed");
+
+    await wrapper.get("#hp-menu").trigger("keydown", { key: "Escape" });
+    expect(wrapper.find("#hp-menu").exists()).toBe(false);
+    expect(document.activeElement).toBe(plus.element);
+  });
+
+  it("opens with the arrow key from the plus button", async () => {
+    const wrapper = await mountHome();
+    await wrapper.get(".hp__plus").trigger("keydown", { key: "ArrowDown" });
+    await flushPromises();
+    expect(wrapper.find("#hp-menu").exists()).toBe(true);
+  });
+
+  it("deep links the log items to the care log with the type", async () => {
+    const wrapper = await mountHome();
+    const push = vi.spyOn(router, "push");
+    const choices = [["Log feed", "feed"], ["Log sleep", "sleep"], ["Log nappy", "nappy"], ["Medicine", "medication"]];
+    for (const [label, type] of choices) {
+      await wrapper.get(".hp__plus").trigger("click");
+      await wrapper.findAll('[role="menuitem"]').find((i) => i.text() === label).trigger("click");
+      expect(push).toHaveBeenLastCalledWith({ path: "/care-log", query: { log: type } });
+    }
+  });
+
+  it("goes to the handover page", async () => {
+    const wrapper = await mountHome();
+    const push = vi.spyOn(router, "push");
+    await wrapper.get(".hp__plus").trigger("click");
+    await wrapper.findAll('[role="menuitem"]').find((i) => i.text() === "Send handover").trigger("click");
+    expect(push).toHaveBeenLastCalledWith("/handover");
+  });
+
+  it("adds a task through the tasks store with who and due date", async () => {
+    const wrapper = await mountHome();
+    await wrapper.get(".hp__plus").trigger("click");
+    await wrapper.findAll('[role="menuitem"]').find((i) => i.text() === "Add a task").trigger("click");
+    await flushPromises();
+    const form = wrapper.get("form[aria-label='Add a task']");
+    expect(form.findAll("input[type=radio]")).toHaveLength(3);
+    await form.get("input[type=text]").setValue("Order nappies");
+    await form.get("input[value=partner]").setValue(true);
+    await form.get("input[type=date]").setValue("2026-10-14");
+    await form.trigger("submit");
+    await flushPromises();
+    expect(state.addTask).toHaveBeenCalledWith(
+      "h1",
+      "u1",
+      expect.objectContaining({ title: "Order nappies", owner: "u2", due: "2026-10-14" }),
+    );
+    expect(wrapper.find("form[aria-label='Add a task']").exists()).toBe(false);
+    expect(wrapper.get("[role=status].visually-hidden").text()).toBe("Task added");
+  });
+
+  it("asks for a title before adding a task", async () => {
+    const wrapper = await mountHome();
+    await wrapper.get(".hp__plus").trigger("click");
+    await wrapper.findAll('[role="menuitem"]').find((i) => i.text() === "Add a task").trigger("click");
+    await flushPromises();
+    await wrapper.get("form[aria-label='Add a task']").trigger("submit");
+    expect(wrapper.text()).toContain("Add a title for the task.");
+    expect(state.addTask).not.toHaveBeenCalled();
   });
 });

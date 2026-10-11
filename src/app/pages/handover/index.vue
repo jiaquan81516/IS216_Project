@@ -206,7 +206,7 @@ onBeforeUnmount(() => clearInterval(clockTimer));
     <template v-if="!loading && !error">
       <header class="ho__head">
         <h1 class="nt-title ho__title">Handover</h1>
-        <p class="ho__sub">Hand the shift over with everything that matters.</p>
+        <p class="ho__sub">Pass the shift on with a short note for {{ partnerLabel }}.</p>
       </header>
 
       <div aria-live="polite">
@@ -223,9 +223,10 @@ onBeforeUnmount(() => clearInterval(clockTimer));
         <button type="button" class="btn btn-outline btn-sm" @click="retry">Try again</button>
       </div>
 
-      <template v-if="!listLoading && !listErrorInfo">
+      <div v-if="!listLoading && !listErrorInfo" class="ho__cols">
+        <div class="ho__main">
         <!-- Waiting for me: read it, then accept it. -->
-        <section v-if="received" class="ho__panel" aria-labelledby="ho-received">
+        <section v-if="received" class="ho__panel ho__card" aria-labelledby="ho-received">
           <h2 id="ho-received" class="ho__panel-title">{{ received.heading }}</h2>
           <p class="ho__muted">{{ received.window }}</p>
 
@@ -245,7 +246,7 @@ onBeforeUnmount(() => clearInterval(clockTimer));
           </p>
 
           <template v-if="received.nextUp.length">
-            <h3 class="ho__sub-title">What is coming up</h3>
+            <h3 class="ho__sub-title">Coming up</h3>
             <ul class="ho__list">
               <li v-for="item in received.nextUp" :key="item">{{ item }}</li>
             </ul>
@@ -260,13 +261,16 @@ onBeforeUnmount(() => clearInterval(clockTimer));
         </section>
 
         <!-- Nothing waiting for me: send the shift on. -->
-        <section v-else class="ho__panel" aria-labelledby="ho-send">
-          <h2 id="ho-send" class="ho__panel-title">{{ sinceLine }}</h2>
-          <p class="ho__muted">
-            {{ latest ? `Everything logged since ${partnerLabel} last handed over.` : "Everything logged since midnight." }}
-          </p>
+        <section v-else class="ho__panel ho__card" aria-labelledby="ho-send">
+          <div class="ho__card-head">
+            <span class="ho__icon-sq" aria-hidden="true"><Icon name="handover" :size="18" /></span>
+            <div class="ho__card-titles">
+              <p class="ho__card-kicker">Write a handover</p>
+              <h2 id="ho-send" class="ho__panel-title">{{ sinceLine }}</h2>
+            </div>
+          </div>
 
-          <ul class="ho__stats" aria-label="This shift so far">
+          <ul class="ho__stats ho__stats--live" aria-label="This shift so far">
             <li v-for="block in liveBlocks" :key="block.key">
               <span class="ho__stat-value">{{ block.value }}</span>
               <span class="ho__stat-label">{{ block.label }}</span>
@@ -274,20 +278,20 @@ onBeforeUnmount(() => clearInterval(clockTimer));
           </ul>
 
           <div class="ho__field">
-            <label class="ho__label" for="ho-note">What should {{ partnerLabel }} know?</label>
+            <label class="ho__label" for="ho-note">Note for {{ partnerLabel }}</label>
             <textarea
               id="ho-note"
               v-model="note"
               class="app-control ho__textarea"
-              rows="4"
+              rows="6"
               :maxlength="NOTE_MAX"
               placeholder="Fussy after the 3 PM feed, settled by 4."
             ></textarea>
-            <p class="ho__muted">{{ noteLeft }} characters left</p>
+            <p v-if="noteLeft < 50" class="ho__muted">{{ noteLeft }} characters left</p>
           </div>
 
-          <div class="ho__check">
-            <input id="ho-attention" v-model="needsAttention" type="checkbox" class="ho__checkbox" />
+          <div class="ho__check ho__rule">
+            <input id="ho-attention" v-model="needsAttention" type="checkbox" role="switch" class="ho__checkbox" />
             <label class="ho__label" for="ho-attention">Needs attention</label>
           </div>
           <div v-if="needsAttention" class="ho__field">
@@ -302,9 +306,8 @@ onBeforeUnmount(() => clearInterval(clockTimer));
             />
           </div>
 
-          <div class="ho__field">
-            <h3 class="ho__sub-title">What is coming up</h3>
-            <p class="ho__muted">Up to three short things. {{ nextUp.length }} of {{ NEXT_UP_MAX }} added.</p>
+          <div class="ho__field ho__rule">
+            <h3 class="ho__sub-title">Coming up</h3>
             <ul v-if="nextUp.length" class="ho__chips">
               <li v-for="item in nextUp" :key="item" class="ho__chip">
                 <span>{{ item }}</span>
@@ -318,15 +321,14 @@ onBeforeUnmount(() => clearInterval(clockTimer));
                 </button>
               </li>
             </ul>
-            <div v-if="suggestions.length && !nextUpFull" class="ho__suggest">
-              <p class="ho__muted">From the care log and the rota</p>
-              <ul class="ho__suggest-list">
-                <li v-for="text in suggestions" :key="text" class="ho__suggest-row">
+            <ul v-if="suggestions.length && !nextUpFull" class="ho__suggest-list">
+              <li v-for="text in suggestions" :key="text" class="ho__suggest-row">
+                <button type="button" class="ho__suggest-btn" @click="addNextUp(text)">
+                  <span aria-hidden="true">+</span>
                   <span class="ho__suggest-text">{{ text }}</span>
-                  <button type="button" class="btn btn-outline btn-sm" @click="addNextUp(text)">Add</button>
-                </li>
-              </ul>
-            </div>
+                </button>
+              </li>
+            </ul>
             <form v-if="!nextUpFull" class="ho__add" @submit.prevent="addDraft">
               <label class="visually-hidden" for="ho-next">Add something that is coming up</label>
               <input
@@ -335,31 +337,39 @@ onBeforeUnmount(() => clearInterval(clockTimer));
                 type="text"
                 class="app-control"
                 maxlength="80"
-                placeholder="Bath at 7:30 PM"
+                placeholder="Add something, e.g. bath at 7:30 PM"
               />
-              <button type="submit" class="btn btn-outline" :disabled="!draft.trim()">Add</button>
+              <button type="submit" class="app-textbtn" :disabled="!draft.trim()">Add</button>
             </form>
           </div>
 
           <p v-if="!hasPartner" class="ho__muted ho__no-partner">
-            There is nobody to hand over to yet. Invite your partner from Today, then send the first handover.
+            Invite your partner from Today to send a handover.
           </p>
           <p v-if="sendError" class="ho__row-error" role="alert">{{ sendError }}</p>
-          <div class="ho__actions">
+          <div class="ho__actions ho__foot">
             <button type="button" class="btn btn-primary" :disabled="sending || !hasPartner" @click="send">
-              {{ sending ? "Sending..." : `Send handover to ${partnerLabel}` }}
+              {{ sending ? "Sending..." : "Send handover" }}
             </button>
           </div>
         </section>
 
+        </div>
+
         <!-- History -->
-        <section class="ho__history" aria-labelledby="ho-history">
-          <h2 id="ho-history" class="nt-heading">Earlier handovers</h2>
-          <p v-if="!history.length" class="ho__muted ho__none">No handovers yet. The first one you send shows up here.</p>
+        <section class="ho__history ho__card" aria-labelledby="ho-history">
+          <h2 id="ho-history" class="ho__h2">Earlier handovers</h2>
+          <div v-if="!history.length" class="ho__empty">
+            <Icon name="clock" :size="20" />
+            <p class="ho__muted ho__none">No handovers yet.</p>
+          </div>
           <ul v-else class="ho__rows">
             <li v-for="row in history" :key="row.id" class="ho__row">
               <div class="ho__row-head">
-                <span class="ho__row-time">{{ row.time }}</span>
+                <span class="ho__row-time">
+                  <Icon :name="/accepted/i.test(row.status) ? 'check' : 'clock'" :size="16" />
+                  {{ row.time }}
+                </span>
                 <div class="ho__row-body">
                   <p class="ho__row-who">{{ row.who }}</p>
                   <p class="ho__row-meta">{{ row.status }}. {{ row.summary }}</p>
@@ -379,13 +389,13 @@ onBeforeUnmount(() => clearInterval(clockTimer));
             </li>
           </ul>
         </section>
-      </template>
+      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
-.ho { display: flex; flex-direction: column; gap: 24px; max-width: 1120px; margin: 0 auto; font-size: 1rem; }
+.ho { display: flex; flex-direction: column; gap: 24px; margin: 0; font-size: 1rem; }
 .ho__status { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
 .ho__muted { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
 .ho__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 0; font-size: 0.875rem; border-radius: 8px; }
@@ -394,63 +404,85 @@ onBeforeUnmount(() => clearInterval(clockTimer));
 .ho__title { font-size: 2.5rem; line-height: 1.2; }
 .ho__sub { margin: 0; font-size: 1rem; color: var(--nt-muted); }
 
-.ho__panel { display: flex; flex-direction: column; gap: 12px; max-width: 680px; padding: 24px 0; border-top: 1px solid var(--nt-line); border-bottom: 1px solid var(--nt-line); }
-.ho__panel-title { margin: 0; font-family: var(--nt-serif); font-size: 1.5rem; font-weight: 400; line-height: 1.3; letter-spacing: -0.01em; color: var(--nt-ink); }
-.ho__sub-title { margin: 0; font-family: var(--nt-serif); font-size: 1.125rem; font-weight: 400; line-height: 1.3; color: var(--nt-ink); }
+.ho__cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: stretch; }
+.ho__main { min-width: 0; display: flex; flex-direction: column; }
+.ho__main > .ho__card { flex: 1; }
+.ho__history { min-width: 0; }
 
-.ho__stats { display: flex; flex-wrap: wrap; margin: 4px 0; padding: 0; list-style: none; }
-.ho__stats li { display: flex; flex-direction: column; gap: 2px; min-width: 96px; padding: 0 20px; border-left: 1px solid var(--nt-line); }
-.ho__stats li:first-child { padding-left: 0; border-left: 0; }
-.ho__stat-value { font-size: 1.125rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
-.ho__stat-label { font-size: 0.875rem; line-height: 1.3; color: var(--nt-muted); }
+.ho__card { background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; padding: 24px; }
+.ho__card-head { display: flex; align-items: center; gap: 12px; }
+.ho__icon-sq { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; border-radius: 8px; background: var(--nt-apricot); color: var(--nt-plum); }
+.ho__card-titles { min-width: 0; }
+.ho__card-kicker { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
+
+.ho__panel { display: flex; flex-direction: column; gap: 20px; }
+.ho__panel-title { margin: 0; font-size: 0.875rem; font-weight: 400; line-height: 1.3; color: var(--nt-muted); }
+#ho-received.ho__panel-title { font-size: 1.125rem; font-weight: 600; color: var(--nt-ink); }
+.ho__h2 { margin: 0 0 12px; font-size: 1.125rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
+.ho__sub-title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
+.ho__rule { padding-top: 20px; border-top: 1px solid var(--nt-line); }
+
+.ho__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 16px; margin: 0; padding: 0 0 20px; list-style: none; border-bottom: 1px solid var(--nt-line); }
+.ho__stats li { display: flex; flex-direction: column; gap: 2px; font-size: 0.875rem; color: var(--nt-muted); }
+.ho__stat-value { font-size: 1.75rem; font-weight: 600; line-height: 1.15; color: var(--nt-ink); }
+.ho__stat-label { font-size: 0.875rem; color: var(--nt-muted); }
 
 .ho__note { margin: 0; font-size: 1rem; line-height: 1.5; color: var(--nt-ink); overflow-wrap: anywhere; }
-.ho__attention { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 0; padding: 12px; border: 1px solid var(--nt-coral); border-radius: 8px; font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); }
+.ho__attention { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 0; padding-left: 12px; border-left: 2px solid var(--nt-coral); font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); }
 .ho__attention-label { font-weight: 600; color: var(--nt-coral); }
 
-.ho__list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ho__list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
 .ho__list li { padding: 8px 0; border-bottom: 1px solid var(--nt-line); font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); }
 
 .ho__field { display: flex; flex-direction: column; gap: 8px; }
 .ho__label { font-size: 0.875rem; font-weight: 500; color: var(--nt-ink); }
-.ho__textarea { resize: vertical; }
-.ho__check { display: flex; align-items: center; gap: 8px; }
-.ho__checkbox { width: 18px; height: 18px; accent-color: var(--nt-plum); }
+.ho__textarea { resize: vertical; min-height: 140px; }
+.ho__check { display: flex; align-items: center; gap: 10px; }
+.ho__checkbox { appearance: none; position: relative; flex: none; width: 32px; height: 18px; margin: 0; background: var(--nt-line); border-radius: 999px; cursor: pointer; transition: background-color 0.15s; }
+.ho__checkbox::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: #fff; border-radius: 50%; transition: transform 0.15s; }
+.ho__checkbox:checked { background: var(--nt-plum); }
+.ho__checkbox:checked::after { transform: translateX(14px); }
 .ho__checkbox:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 
-.ho__chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.ho__chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 4px 4px 12px; background: var(--nt-gray); border: 1px solid var(--nt-line); border-radius: 999px; font-size: 0.875rem; line-height: 20px; color: var(--nt-ink); }
-.ho__chip-remove { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: none; border: 0; border-radius: 999px; color: var(--nt-muted); cursor: pointer; }
+.ho__chips { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
+.ho__chip { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--nt-line); font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); }
+.ho__chip-remove { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: none; border: 0; color: var(--nt-muted); cursor: pointer; }
 .ho__chip-remove:hover { color: var(--nt-coral); }
-.ho__chip-remove:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
+.ho__chip-remove:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
 
-.ho__suggest { display: flex; flex-direction: column; gap: 4px; }
-.ho__suggest-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
-.ho__suggest-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 0; border-bottom: 1px solid var(--nt-line); }
-.ho__suggest-text { font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); }
-.ho__add { display: flex; gap: 8px; }
+.ho__suggest-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.ho__suggest-btn { display: inline-flex; gap: 8px; padding: 4px 0; background: none; border: 0; font-family: inherit; font-size: 0.875rem; line-height: 1.45; text-align: left; color: var(--nt-plum); cursor: pointer; }
+.ho__suggest-btn:hover .ho__suggest-text { text-decoration: underline; text-underline-offset: 3px; }
+.ho__suggest-btn:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
+.ho__add { display: flex; align-items: center; gap: 12px; }
+.ho__add .app-control { flex: 1; min-width: 0; }
 .ho__no-partner { max-width: 48ch; }
 
-.ho__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.ho__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ho__foot { margin-top: auto; padding-top: 20px; border-top: 1px solid var(--nt-line); }
 .ho__row-error { margin: 0; font-size: 0.875rem; color: var(--nt-coral); }
 
-.ho__history { display: flex; flex-direction: column; gap: 8px; }
-.ho__none { padding: 16px 0; border-top: 1px solid var(--nt-line); }
+.ho__history { display: flex; flex-direction: column; }
+.ho__empty { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 24px 0; color: var(--nt-muted); }
+.ho__none { padding: 0; }
 .ho__rows { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
 .ho__row { padding: 12px 0; border-bottom: 1px solid var(--nt-line); }
-.ho__row-head { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 16px; align-items: start; }
-.ho__row-time { font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
+.ho__row-head { display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.ho__row-time { display: inline-flex; align-items: center; gap: 6px; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); white-space: nowrap; }
 .ho__row-body { min-width: 0; }
 .ho__row-who { margin: 0; font-size: 0.875rem; font-weight: 600; line-height: 1.45; color: var(--nt-ink); }
 .ho__row-meta { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
-.ho__row-note { margin: 8px 0 0 88px; font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); overflow-wrap: anywhere; }
+.ho__row-note { margin: 8px 0 0 100px; font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); overflow-wrap: anywhere; }
 .ho__row-toggle { white-space: nowrap; }
 
+@media (min-width: 1100px) {
+  .ho__cols { grid-template-columns: minmax(0, 1fr) 380px; }
+}
 @media (max-width: 991px) {
   .ho__title { font-size: 2rem; }
 }
 @media (max-width: 575px) {
-  .ho__stats li { padding: 8px 0; border-left: 0; }
+  .ho__card { padding: 20px 16px; }
   .ho__row-head { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .ho__row-note { margin-left: 0; }
 }

@@ -196,6 +196,32 @@ service cloud.firestore {
         allow delete: if sharedMember();
       }
 
+      // The household stream's plain messages. Members read. You may only post in your own
+      // name, with 1 to 500 characters, stamped by the server clock and not yet acknowledged.
+      // Only a member who is not the author may acknowledge, and that write adds their own
+      // uid to ackedBy and sets ackedAt, nothing else. Only the author may delete.
+      match /posts/{postId} {
+        allow read: if sharedMember();
+
+        allow create: if sharedMember()
+          && request.resource.data.keys().hasOnly(['text', 'authorUid', 'createdAt', 'ackedBy'])
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() >= 1
+          && request.resource.data.text.size() <= 500
+          && request.resource.data.createdAt == request.time
+          && (!('ackedBy' in request.resource.data) || request.resource.data.ackedBy == []);
+
+        allow update: if sharedMember()
+          && resource.data.authorUid != request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ackedBy', 'ackedAt'])
+          && !(request.auth.uid in resource.data.get('ackedBy', []))
+          && request.resource.data.ackedBy == resource.data.get('ackedBy', []).concat([request.auth.uid])
+          && request.resource.data.ackedAt == request.time;
+
+        allow delete: if sharedMember() && resource.data.authorUid == request.auth.uid;
+      }
+
       // The return to work plan. One document, "plan", like the rota settings.
       match /rtw/{docId} {
         allow read: if sharedMember();
