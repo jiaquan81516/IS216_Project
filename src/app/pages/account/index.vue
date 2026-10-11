@@ -52,50 +52,52 @@ async function google() {
     <AppLink :to="ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
   </Header>
   <main class="app-container app-body">
-    <div class="app-stack app-stack--24 account">
-      <StepHeader :step="3" title="Create your account" lead="Use an email you can access on your phone." />
-      <form class="app-stack app-stack--24 w-100" novalidate :aria-busy="busy" @submit.prevent="submit">
-        <Field
-          id="app-name"
-          v-model="name"
-          label="Your name"
-          placeholder="Jocelyn"
-          autocomplete="name"
-          :error="errors.name"
-          :disabled="busy"
-        />
-        <Field
-          id="app-email"
-          v-model="email"
-          type="email"
-          label="Email address"
-          placeholder="you@example.com"
-          autocomplete="email"
-          :error="errors.email"
-          :disabled="busy"
-        />
-        <Field
-          id="app-password"
-          v-model="password"
-          type="password"
-          label="Create a password"
-          placeholder="••••••••"
-          autocomplete="new-password"
-          hint="At least 8 characters"
-          :minlength="8"
-          :error="errors.password"
-          :disabled="busy"
-        />
-        <div v-if="error" class="alert alert-danger app-alert" role="alert">{{ error }}</div>
-        <button type="submit" class="app-btn app-btn--primary app-btn--block" :disabled="busy">
-          {{ busy ? "Creating account..." : "Create account" }}
-        </button>
-      </form>
-      <OrDivider />
-      <GoogleButton :disabled="busy" @click="google" />
-      <p class="app-note">Your wellness responses are private by default. You decide what to share with your partner.</p>
-      <div class="account__foot">
+    <div class="account">
+      <div class="app-stack app-stack--24 account__intro">
+        <StepHeader :step="3" title="Create your account" lead="Use an email you can access on your phone." />
+        <p class="app-note">Your wellness responses are private by default. You decide what to share with your partner.</p>
         <AppLink :to="ROUTES.ROLE" class="app-text-link">Back</AppLink>
+      </div>
+      <div class="app-stack app-stack--24 account__card">
+        <form class="app-stack app-stack--24 w-100" novalidate :aria-busy="busy" @submit.prevent="submit">
+          <Field
+            id="app-name"
+            v-model="name"
+            label="Your name"
+            placeholder="Jocelyn"
+            autocomplete="name"
+            :error="errors.name"
+            :disabled="busy"
+          />
+          <Field
+            id="app-email"
+            v-model="email"
+            type="email"
+            label="Email address"
+            placeholder="you@example.com"
+            autocomplete="email"
+            :error="errors.email"
+            :disabled="busy"
+          />
+          <Field
+            id="app-password"
+            v-model="password"
+            type="password"
+            label="Create a password"
+            placeholder="••••••••"
+            autocomplete="new-password"
+            hint="At least 8 characters"
+            :minlength="8"
+            :error="errors.password"
+            :disabled="busy"
+          />
+          <div v-if="error" class="alert alert-danger app-alert" role="alert">{{ error }}</div>
+          <button type="submit" class="app-btn app-btn--primary app-btn--block" :disabled="busy">
+            {{ busy ? "Creating account..." : "Create account" }}
+          </button>
+        </form>
+        <OrDivider />
+        <GoogleButton :disabled="busy" @click="google" />
         <p class="account__signin">
           <span>Already have an account?</span>
           <AppLink :to="ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
@@ -106,7 +108,12 @@ async function google() {
 </template>
 
 <style scoped>
-.account { width: 480px; max-width: 100%; }
-.account__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+.account { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 64px; align-items: start; }
+.account__intro { min-width: 0; }
+.account__card { width: 100%; padding: 32px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
 .account__signin { display: flex; gap: 6px; margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
+@media (max-width: 991px) {
+  .account { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+}
+@media (max-width: 575px) { .account__card { padding: 24px 16px; } }
 </style>

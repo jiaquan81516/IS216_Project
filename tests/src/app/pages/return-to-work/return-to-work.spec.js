@@ -137,11 +137,11 @@ afterEach(() => {
 });
 
 describe("App return to work page, plan tab", () => {
-  it("shows the heading, subtitle and three tabs", async () => {
+  it("shows the heading, subtitle and two tabs", async () => {
     const { wrapper } = await mountPage();
     expect(wrapper.get("h1").text()).toBe("Return to work");
     expect(wrapper.text()).toContain("You both see the same plan.");
-    expect(wrapper.findAll('[role="tab"]').map((t) => t.text())).toEqual(["Plan", "Responsibilities", "Pumping preparation"]);
+    expect(wrapper.findAll('[role="tab"]').map((t) => t.text())).toEqual(["Plan", "Pumping preparation"]);
     expect(wrapper.text()).not.toMatch(/[\u2013\u2014]/);
   });
 
@@ -206,7 +206,7 @@ describe("App return to work page, plan tab", () => {
   it("filters the existing task list by preparation category", async () => {
     api.tasks = [task({ title: "Book childcare", group: "childcare" }), task({ title: "Talk to work", group: "work" })];
     const { wrapper } = await mountPage();
-    await buttonByText(wrapper, "Childcare · 0/1").trigger("click");
+    await buttonByText(wrapper, "Childcare 0/1").trigger("click");
     expect(wrapper.text()).toContain("Book childcare");
     expect(wrapper.findAll(".rw__task").some((item) => item.text().includes("Talk to work"))).toBe(false);
   });
@@ -223,8 +223,9 @@ describe("App return to work page, plan tab", () => {
     expect(wrapper.get('[role="alert"]').text()).toBe("Add a title for the task.");
 
     await wrapper.get('input[type="text"]').setValue("Book the nursery trial");
-    await chip(wrapper, "Childcare").trigger("click");
-    await chip(wrapper, "Mei").trigger("click");
+    const selects = wrapper.findAll("select");
+    await selects[0].setValue("childcare");
+    await selects[1].setValue("partner");
     const dateInputs = wrapper.findAll('input[type="date"]');
     await dateInputs[dateInputs.length - 1].setValue("2026-10-16");
     await buttonByText(wrapper, "Add task").trigger("click");
@@ -259,9 +260,9 @@ describe("App return to work page, plan tab", () => {
     expect(wrapper.get(".rw__overdue").text()).toBe("Overdue by 4 days");
     expect(wrapper.text()).toContain("Open tasks: Me 1, Mei 1, both 2.");
     const soon = wrapper.findAll(".rw__task").find((t) => t.text().includes("Soon task"));
-    expect(soon.get(".app-badge").text()).toBe("Me");
+    expect(soon.get(".rw__owner").text()).toBe("Me");
     const later = wrapper.findAll(".rw__task").find((t) => t.text().includes("Later task"));
-    expect(later.get(".app-badge").text()).toBe("Mei");
+    expect(later.get(".rw__owner").text()).toBe("Mei");
   });
 
   it("says who finished a task", async () => {
@@ -288,7 +289,7 @@ describe("App return to work page, plan tab", () => {
     const { wrapper } = await mountPage();
     await wrapper.get('button[aria-label="Edit Old title"]').trigger("click");
     expect(wrapper.get('input[type="text"]').element.value).toBe("Old title");
-    expect(chip(wrapper, "Me").attributes("aria-checked")).toBe("true");
+    expect(wrapper.findAll("select")[1].element.value).toBe("me");
     await wrapper.get('input[type="text"]').setValue("New title");
     await buttonByText(wrapper, "Save task").trigger("click");
     await flushPromises();
@@ -306,19 +307,19 @@ describe("App return to work page, plan tab", () => {
 
   it("adds a suggestion for both of you and drops it from the list", async () => {
     const { wrapper } = await mountPage();
-    expect(wrapper.findAll("#rtw-suggestions ~ ul li")).toHaveLength(6);
-    await wrapper.get('button[aria-label="Add Find a pumping room near work"]').trigger("click");
+    expect(wrapper.findAll("#rtw-suggestions ~ ul li")).toHaveLength(3);
+    await wrapper.get('button[aria-label="Add Arrange a childcare trial"]').trigger("click");
     await flushPromises();
     expect(api.addTask).toHaveBeenCalledWith("h1", ME, {
-      title: "Find a pumping room near work",
-      group: "pumping",
+      title: "Arrange a childcare trial",
+      group: "childcare",
       owner: "both",
       due: null,
       notes: "",
     });
-    api.cb.tasks([task({ title: "Find a pumping room near work", group: "pumping" })]);
+    api.cb.tasks([task({ title: "Arrange a childcare trial", group: "childcare" })]);
     await flushPromises();
-    expect(wrapper.findAll("#rtw-suggestions ~ ul li")).toHaveLength(5);
+    expect(wrapper.findAll("#rtw-suggestions ~ ul li")).toHaveLength(2);
   });
 
   it("falls back to generic names and shows a failed write", async () => {
@@ -330,53 +331,6 @@ describe("App return to work page, plan tab", () => {
     await flushPromises();
     expect(wrapper.get('[role="alert"]').text()).toContain("could not save the task");
     expect(wrapper.findAll("[data-task]")).toHaveLength(1);
-  });
-});
-
-describe("App return to work page, responsibilities tab", () => {
-  it("lists eight areas and counts everything as not decided at first", async () => {
-    const { wrapper } = await mountPage();
-    await openTab(wrapper, "Responsibilities");
-    expect(wrapper.findAll(".rtr__row")).toHaveLength(8);
-    expect(wrapper.get(".rtr__summary").text()).toBe("You cover 0, Mei covers 0, shared 0, not decided 8.");
-    expect(solid(wrapper)).toHaveLength(0);
-  });
-
-  it("saves a choice as a uid and reads a shared one back", async () => {
-    api.plan = { responsibilities: { "morning-routine": ME, dropoff: ME, pickup: PARTNER, meals: "both" } };
-    const { wrapper } = await mountPage();
-    await openTab(wrapper, "Responsibilities");
-    expect(wrapper.get(".rtr__summary").text()).toBe("You cover 2, Mei covers 1, shared 1, not decided 4.");
-    const rowChip = (area, text) => wrapper.get(`[data-area="${area}"]`).findAll('[role="radio"]').find((b) => b.text() === text);
-    expect(rowChip("pickup", "Mei").attributes("aria-checked")).toBe("true");
-    await rowChip("sick-days", "Mei").trigger("click");
-    await flushPromises();
-    expect(api.setResponsibility).toHaveBeenCalledWith("h1", ME, "sick-days", PARTNER);
-    await rowChip("pickup", "Not decided").trigger("click");
-    await flushPromises();
-    expect(api.setResponsibility).toHaveBeenLastCalledWith("h1", ME, "pickup", null);
-  });
-
-  it("suggests moving one when the split is uneven by two", async () => {
-    api.plan = { responsibilities: { "morning-routine": ME, dropoff: ME } };
-    const { wrapper } = await mountPage();
-    await openTab(wrapper, "Responsibilities");
-    expect(wrapper.get(".rtr__hint").text()).toBe("Daniel has 2 more than Mei. Consider moving one.");
-  });
-
-  it("makes a task assigned to the chosen owner", async () => {
-    api.plan = { responsibilities: { dropoff: PARTNER } };
-    const { wrapper } = await mountPage();
-    await openTab(wrapper, "Responsibilities");
-    await wrapper.get('[data-area="dropoff"]').get("button.rtr__make").trigger("click");
-    await flushPromises();
-    expect(api.addTask).toHaveBeenCalledWith("h1", ME, {
-      title: "Plan childcare drop-off",
-      group: "childcare",
-      owner: PARTNER,
-      due: null,
-      notes: "",
-    });
   });
 });
 

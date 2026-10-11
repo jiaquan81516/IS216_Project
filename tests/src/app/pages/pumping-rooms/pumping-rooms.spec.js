@@ -34,6 +34,7 @@ vi.mock("@/app/api/googleMaps", () => ({
   })),
 }));
 
+import { resetMapsState, setMapsState } from "@/app/api/mapsState";
 import PumpingRoomsPage from "@/app/pages/pumping-rooms/index.vue";
 
 const stubs = {
@@ -55,7 +56,8 @@ beforeEach(() => {
   localStorage.clear();
   api.rooms = [];
   api.addRoom.mockClear();
-  vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "test-key");
+  vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "AIzaTestKey1234567890");
+  resetMapsState();
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -135,22 +137,13 @@ describe("pumping rooms page", () => {
     expect(w.find("form[aria-label='Add a room']").exists()).toBe(false);
     expect(w.text()).toContain("Test Tower added. It needs verification.");
   });
-  it("shows the key notice and no map when the key is missing, and still filters", async () => {
-    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "");
-    const w = await mountPage();
-    const notice = w.get(".pr__notice[role='status']");
-    expect(notice.text()).toBe("The map needs a Google Maps key. Add VITE_GOOGLE_MAPS_API_KEY to your .env and restart.");
-    expect(w.findComponent({ name: "RoomMap" }).exists()).toBe(false);
-    await w.get("#pr-location").setValue("tampines");
-    expect(names(w)).toEqual(["Tampines Mall"]);
-  });
   it("explains a denied location request", async () => {
     Object.defineProperty(globalThis.navigator, "geolocation", {
       configurable: true,
       value: { getCurrentPosition: (_ok, fail) => fail({ code: 1 }) },
     });
     const w = await mountPage();
-    await w.get("button[aria-label='Use my location']").trigger("click");
+    await w.findAll("button").find((b) => b.text() === "Use my location").trigger("click");
     expect(w.text()).toContain("We could not access your location");
     delete globalThis.navigator.geolocation;
   });
@@ -161,6 +154,96 @@ describe("pumping rooms page", () => {
     });
     const w = await mountPage();
     expect(names(w)[0]).toBe("Causeway Point");
+    expect(w.get("[aria-live='polite']").text()).toContain("near you");
+    delete globalThis.navigator.geolocation;
+  });
+  it("still renders the interactive map instead of the embed when a key is present", async () => {
+    const w = await mountPage();
+    expect(w.findComponent({ name: "RoomMap" }).exists()).toBe(true);
+    expect(w.find("iframe").exists()).toBe(false);
+    expect(w.get("label[for='pr-location']").text()).toBe("Location");
+  });
+});
+
+describe("pumping rooms page without a Maps key", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "PASTE_MAPS_KEY");
+    resetMapsState();
+  });
+  const link = (w, text, i = 0) => w.findAll(".rc")[i].findAll("a").find((a) => a.text().startsWith(text));
+
+  it("shows the keyless embed over the whole island, with no map is off notice", async () => {
+    const w = await mountPage();
+    expect(w.findComponent({ name: "RoomMap" }).exists()).toBe(false);
+    const frame = w.get("iframe");
+    expect(frame.attributes("src")).toBe("https://www.google.com/maps?q=Singapore&z=11&output=embed");
+    expect(frame.attributes("title")).toBe("Map of Singapore");
+    expect(frame.attributes("loading")).toBe("lazy");
+    expect(frame.attributes("referrerpolicy")).toBe("no-referrer-when-downgrade");
+    expect(w.text()).not.toContain("Map view is off");
+    expect(w.find(".pr__notice").exists()).toBe(false);
+    expect(w.get("label[for='pr-location']").text()).toBe("Search rooms");
+    expect(w.get("#pr-location").attributes("placeholder")).toBe("Mall or street name");
+    expect(w.get("[aria-live='polite']").text()).toMatch(/^\d+ rooms in Singapore$/);
+    expect(w.text()).not.toMatch(/ away/);
+  });
+  it("moves the embed to a room when its Show on map link is used", async () => {
+    const w = await mountPage();
+    const card = w.findAll(".rc").find((c) => c.text().includes("JEM"));
+    await card.findAll("button").find((b) => b.text().startsWith("Show on map")).trigger("click");
+    const src = w.get("iframe").attributes("src");
+    expect(src).toMatch(/^https:\/\/www\.google\.com\/maps\?q=.*JEM.*&z=15&output=embed$/);
+    expect(decodeURIComponent(src)).toMatch(/q=1\.\d+,103\.\d+ \(JEM\)/);
+    expect(w.get("iframe").attributes("title")).toBe("Map of JEM");
+  });
+  it("uses the embed when the key was rejected, without any status notice", async () => {
+    vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "AIzaTestKey1234567890");
+    resetMapsState();
+    setMapsState("failed");
+    const w = await mountPage();
+    expect(w.findComponent({ name: "RoomMap" }).exists()).toBe(false);
+    expect(w.find("iframe").exists()).toBe(true);
+    expect(w.find(".pr__notice").exists()).toBe(false);
+  });
+  it("gives cards Google Maps links from name and address, place id, or coordinates", async () => {
+    api.rooms = [
+      { id: "a", name: "Zed Lounge", address: "9 Road", details: "L2", placeId: "PID1", lat: 1.5, lng: 103.9, features: {} },
+      { id: "b", name: "", address: "", details: "L2", placeId: "", lat: 1.5, lng: 103.9, features: {} },
+    ];
+    const w = await mountPage();
+    const open = w.findAll("a").filter((a) => a.text().startsWith("Open in Google Maps")).map((a) => a.attributes("href"));
+    const dirs = w.findAll("a").filter((a) => a.text().startsWith("Directions")).map((a) => a.attributes("href"));
+    expect(open).toContain("https://www.google.com/maps/search/?api=1&query=Zed%20Lounge%2C%209%20Road&query_place_id=PID1");
+    expect(dirs).toContain("https://www.google.com/maps/dir/?api=1&destination=Zed%20Lounge%2C%209%20Road");
+    expect(open.some((h) => h.includes("VivoCity") && !h.includes("query_place_id"))).toBe(true);
+    const a = link(w, "Open in Google Maps");
+    expect(a.attributes("target")).toBe("_blank");
+    expect(a.attributes("rel")).toBe("noopener noreferrer");
+    expect(a.text()).toContain("opens in a new tab");
+  });
+  it("filters by the text search", async () => {
+    const w = await mountPage();
+    await w.get("#pr-location").setValue("tampines");
+    expect(names(w)).toEqual(["Tampines Mall"]);
+  });
+  it("explains that adding a room is off, with no autocomplete and a disabled save", async () => {
+    const w = await mountPage();
+    await w.findAll("button").find((b) => b.text() === "Add a room").trigger("click");
+    expect(w.text()).toContain("Adding a room needs Google place search, which is turned off for now. You can still use Open in Google Maps to check a place.");
+    expect(w.findComponent({ name: "GooglePlaceAutocomplete" }).exists()).toBe(false);
+    expect(w.findAll("button").find((b) => b.text() === "Save room").attributes("disabled")).toBeDefined();
+    expect(api.addRoom).not.toHaveBeenCalled();
+  });
+  it("shows distance only after Use my location", async () => {
+    Object.defineProperty(globalThis.navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition: (ok) => ok({ coords: { latitude: 1.4361, longitude: 103.786 } }) },
+    });
+    const w = await mountPage();
+    expect(w.text()).not.toMatch(/ away/);
+    await w.findAll("button").find((b) => b.text() === "Use my location").trigger("click");
+    expect(names(w)[0]).toBe("Causeway Point");
+    expect(w.text()).toMatch(/ away/);
     expect(w.get("[aria-live='polite']").text()).toContain("near you");
     delete globalThis.navigator.geolocation;
   });

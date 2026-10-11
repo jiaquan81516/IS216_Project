@@ -84,82 +84,107 @@ async function save() {
     </div>
 
     <form v-else class="pf__form" novalidate :aria-busy="busy" @submit.prevent="save">
-      <section class="pf__section" aria-labelledby="pf-name-h">
-        <h2 id="pf-name-h" class="pf__h">Your name</h2>
-        <div class="pf__field">
-          <label class="pf__label" for="pf-name">Display name</label>
-          <input
-            id="pf-name"
-            v-model="name"
-            class="app-control pf__input"
-            :class="{ 'app-control--invalid': nameError }"
-            type="text"
-            required
-            :maxlength="DISPLAY_NAME_MAX"
-            autocomplete="name"
-            :aria-invalid="nameError ? 'true' : 'false'"
-            :aria-describedby="nameError ? 'pf-name-err pf-name-hint' : 'pf-name-hint'"
-            @input="saved = ''"
-          />
-          <p id="pf-name-hint" class="pf__muted">Up to {{ DISPLAY_NAME_MAX }} characters.</p>
-          <p v-if="nameError" id="pf-name-err" class="app-error-text" role="alert">{{ nameError }}</p>
+      <section class="pf__row" aria-labelledby="pf-name-h">
+        <div class="pf__side">
+          <h2 id="pf-name-h" class="pf__h">Your name</h2>
+          <p class="pf__muted">Shown on shared logs and tasks.</p>
+        </div>
+        <div class="pf__card">
+          <div class="pf__field">
+            <label class="pf__label" for="pf-name">Display name</label>
+            <input
+              id="pf-name"
+              v-model="name"
+              class="app-control pf__input"
+              :class="{ 'app-control--invalid': nameError }"
+              type="text"
+              required
+              :maxlength="DISPLAY_NAME_MAX"
+              autocomplete="name"
+              :aria-invalid="nameError ? 'true' : 'false'"
+              :aria-describedby="nameError ? 'pf-name-err pf-name-hint' : 'pf-name-hint'"
+              @input="saved = ''"
+            />
+            <p id="pf-name-hint" class="pf__muted">Up to {{ DISPLAY_NAME_MAX }} characters.</p>
+            <p v-if="nameError" id="pf-name-err" class="app-error-text" role="alert">{{ nameError }}</p>
+          </div>
         </div>
       </section>
 
-      <section class="pf__section" aria-labelledby="pf-role-h">
-        <h2 id="pf-role-h" class="pf__h">Your role</h2>
-        <div class="pf__chips" role="group" aria-labelledby="pf-role-h">
-          <button
-            v-for="option in PROFILE_ROLES"
-            :key="option.value"
-            type="button"
-            class="app-chip"
-            :aria-pressed="role === option.value ? 'true' : 'false'"
-            @click="pickRole(option.value)"
-          >
-            {{ option.label }}
-          </button>
+      <section class="pf__row" aria-labelledby="pf-role-h">
+        <div class="pf__side">
+          <h2 id="pf-role-h" class="pf__h">Your role</h2>
+          <p class="pf__muted">How you help with the baby.</p>
         </div>
-        <p class="pf__muted">Tap again to clear it.</p>
+        <div class="pf__card">
+          <div class="pf__chips" role="group" aria-labelledby="pf-role-h">
+            <button
+              v-for="option in PROFILE_ROLES"
+              :key="option.value"
+              type="button"
+              class="app-chip"
+              :aria-pressed="role === option.value ? 'true' : 'false'"
+              @click="pickRole(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+          <p class="pf__muted">Tap again to clear it.</p>
+        </div>
       </section>
 
-      <section class="pf__section" aria-labelledby="pf-email-h">
-        <h2 id="pf-email-h" class="pf__h">Email</h2>
-        <p class="pf__text">{{ email || "No email on this account." }}</p>
+      <section class="pf__row" aria-labelledby="pf-email-h">
+        <div class="pf__side">
+          <h2 id="pf-email-h" class="pf__h">Email</h2>
+          <p class="pf__muted">Used to sign in.</p>
+        </div>
+        <div class="pf__card">
+          <p class="pf__text">{{ email || "No email on this account." }}</p>
+          <p class="pf__muted">
+            This comes from the sign-in method and cannot be changed here. {{ provider }}.
+          </p>
+        </div>
+      </section>
+
+      <div class="pf__row pf__row--end">
+        <div class="pf__actions">
+          <AppButton size="sm" :disabled="busy" @click="save">Save changes</AppButton>
+          <p class="pf__status" role="status">{{ saved }}</p>
+        </div>
+        <p v-if="saveError" class="app-error-text" role="alert">{{ saveError }}</p>
         <p class="pf__muted">
-          This comes from the sign-in method and cannot be changed here. {{ provider }}.
+          Signed in as {{ displayName(me.firstName) }}.
         </p>
-      </section>
-
-      <div class="pf__actions">
-        <AppButton size="sm" :disabled="busy" @click="save">Save changes</AppButton>
-        <p class="pf__status" role="status">{{ saved }}</p>
       </div>
-      <p v-if="saveError" class="app-error-text" role="alert">{{ saveError }}</p>
-      <p class="pf__muted">
-        Signed in as {{ displayName(me.firstName) }}.
-      </p>
     </form>
   </div>
 </template>
 
 <style scoped>
-.pf { display: flex; flex-direction: column; gap: 24px; max-width: 720px; font-size: 1rem; }
+.pf { display: flex; flex-direction: column; gap: 24px; max-width: 960px; font-size: 1rem; }
 .pf__head { display: flex; flex-direction: column; gap: 8px; }
 .pf__title { font-size: 2.5rem; line-height: 1.2; }
 .pf__sub { margin: 0; color: var(--nt-muted); }
-.pf__form { display: flex; flex-direction: column; gap: 0; }
-.pf__section { display: flex; flex-direction: column; gap: 10px; padding: 20px 0; border-bottom: 1px solid var(--nt-line); }
-.pf__section:first-of-type { padding-top: 0; }
-.pf__h { margin: 0; font-family: var(--nt-serif); font-size: 1.125rem; font-weight: 400; color: var(--nt-ink); }
+.pf__form { display: flex; flex-direction: column; gap: 24px; }
+.pf__row { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px 40px; align-items: start; }
+.pf__row--end { align-items: center; }
+.pf__row--end > * { grid-column: 2; }
+.pf__side { display: flex; flex-direction: column; gap: 4px; }
+.pf__h { margin: 0; font-size: 1.125rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
+.pf__card { display: flex; flex-direction: column; gap: 12px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
 .pf__field { display: flex; flex-direction: column; gap: 6px; }
 .pf__label { font-size: 0.875rem; font-weight: 600; color: var(--nt-ink); }
 .pf__input { max-width: 360px; }
 .pf__muted { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
-.pf__text { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-ink); }
+.pf__text { margin: 0; font-size: 0.9375rem; line-height: 1.5; color: var(--nt-ink); }
 .pf__chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.pf__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 20px 0 8px; }
+.pf__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
 .pf__status { margin: 0; font-size: 0.875rem; line-height: 20px; color: var(--nt-muted); }
 .pf__alert { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
-@media (max-width: 991px) { .pf__title { font-size: 2rem; } }
+@media (max-width: 991px) {
+  .pf__title { font-size: 2rem; }
+  .pf__row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .pf__row--end > * { grid-column: 1; }
+}
+@media (max-width: 575px) { .pf__card { padding: 20px 16px; } }
 </style>

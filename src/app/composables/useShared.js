@@ -1,19 +1,21 @@
 import { getCurrentScope, onScopeDispose, watch } from "vue";
 import { useCalendarStore } from "@/app/stores/calendar";
+import { usePostsStore } from "@/app/stores/posts";
 import { useReturnToWorkStore } from "@/app/stores/returnToWork";
 import { useRotaStore } from "@/app/stores/rota";
 
 // Key used by the layout to share the bound shared stores with its child pages.
 export const SHARED_KEY = Symbol("app-shared");
 
-// Binds the three shared stores (sleep rota, calendar, return to work) to one household,
+// Binds the shared stores (sleep rota, calendar, return to work, household messages) to one household,
 // the way useEntries binds the care log. `householdId`, `meUid` and `partnerUid` are refs
 // that may be empty at first, so the pages show loading, never an error, until the id exists.
 export function useShared(householdId, meUid, partnerUid) {
   const rota = useRotaStore();
   const calendar = useCalendarStore();
   const rtw = useReturnToWorkStore();
-  const stores = [rota, calendar, rtw];
+  const posts = usePostsStore();
+  const stores = [rota, calendar, rtw, posts];
 
   function stop() {
     for (const store of stores) store.unbind();
@@ -39,5 +41,5 @@ export function useShared(householdId, meUid, partnerUid) {
   );
   if (getCurrentScope()) onScopeDispose(stop);
 
-  return { rota, calendar, rtw, retry: start, stop };
+  return { rota, calendar, rtw, posts, retry: start, stop };
 }

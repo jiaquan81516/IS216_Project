@@ -128,9 +128,9 @@ describe("App care log", () => {
     const strip = wrapper.get(".cl__strip").text();
     expect(strip).toContain("Last feed");
     expect(strip).toContain("18 minutes breastfeeding, logged by Mei");
-    expect(strip).toContain("1 feed");
-    expect(strip).toContain("1 nappy");
-    expect(strip).toContain("sleep");
+    expect(strip).toContain("Feed");
+    expect(strip).toContain("Nappy");
+    expect(strip).toContain("Sleep");
   });
 
   it("groups entries by day", async () => {
@@ -229,16 +229,11 @@ describe("App care log", () => {
     expect(state.deleteEntry).not.toHaveBeenCalled();
   });
 
-  it("filters to mine and to new", async () => {
+  it("has no filter chips and lists every entry", async () => {
     const { wrapper } = await mountPage();
-    const chips = () => wrapper.findAll(".cl__filters button");
-    await chips().find((b) => b.text() === "Mine").trigger("click");
-    expect(chips().find((b) => b.text() === "Mine").attributes("aria-pressed")).toBe("true");
-    expect(wrapper.findAll(".cl__row")).toHaveLength(2);
-    await chips().find((b) => b.text() === "New").trigger("click");
-    const rows = wrapper.findAll(".cl__row");
-    expect(rows).toHaveLength(1);
-    expect(rows[0].text()).toContain("by Mei");
+    expect(wrapper.find(".cl__filters").exists()).toBe(false);
+    expect(wrapper.findAll(".app-chip")).toHaveLength(0);
+    expect(wrapper.findAll(".cl__row")).toHaveLength(3);
   });
 
   it("badges unseen partner entries as New and marks them seen", async () => {
@@ -262,9 +257,9 @@ describe("App care log", () => {
     expect(wrapper.get(".btn-primary").text()).toBe("Save");
   });
 
-  it("opens the panel on a quick log tile with that type selected", async () => {
+  it("opens the panel on a quick log link with that type selected", async () => {
     const { wrapper } = await mountPage();
-    const tile = wrapper.findAll(".cl__tile").find((b) => b.text().includes("Medication"));
+    const tile = wrapper.findAll(".cl__link").find((b) => b.text().includes("Medication"));
     await tile.trigger("click");
     const selected = wrapper.get('[role="dialog"] [role="radio"][aria-checked="true"]');
     expect(selected.text()).toBe("Medication");

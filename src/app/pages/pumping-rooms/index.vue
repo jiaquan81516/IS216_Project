@@ -1,13 +1,17 @@
 <script setup>
 import "@/app/app.css";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
+import Tabs from "@/app/components/Tabs.vue";
 import AppButton from "@/components/ui/AppButton.vue";
 import Icon from "@/app/components/Icon.vue";
 import RoomCard from "@/app/components/RoomCard.vue";
 import RoomFilterPanel from "@/app/components/RoomFilterPanel.vue";
 import RoomMap from "@/app/components/RoomMap.vue";
 import GooglePlaceAutocomplete from "@/app/components/GooglePlaceAutocomplete.vue";
+import { embedUrlFor, DEFAULT_EMBED_URL } from "@/app/api/roomHelpers";
 import { loadGoogleMaps } from "@/app/api/googleMaps";
+import { mapsState, setMapsState, syncMapsState } from "@/app/api/mapsState";
 import { loadMalls, SEED_COORDS } from "@/app/api/malls";
 import {
   DEFAULT_CENTER,
@@ -24,14 +28,28 @@ import { useRoomsStore } from "@/app/stores/rooms";
 
 defineOptions({ name: "PumpingRoomsPage" });
 
-const KEY_NOTICE = "The map needs a Google Maps key. Add VITE_GOOGLE_MAPS_API_KEY to your .env and restart.";
+const ADD_OFF = "Adding a room needs Google place search, which is turned off for now. You can still use Open in Google Maps to check a place.";
 const SAVED_ROOMS_KEY = "nurturetrack:saved-pumping-rooms";
-const hasKey = Boolean(import.meta.env.VITE_GOOGLE_MAPS_API_KEY);
+syncMapsState();
+// Fallback mode: no key, or Google rejected it or did not load. The list works on its own.
+const fallback = computed(() => mapsState.value === "no-key" || mapsState.value === "failed");
+const located = ref(false);
 
 const roomsStore = useRoomsStore();
 const malls = ref([]);
-const mapFailed = ref("");
-const mapEnabled = computed(() => hasKey && !mapFailed.value);
+const mapEnabled = computed(() => !fallback.value);
+// Keyless embed shown when there is no working Maps key: whole island, or the chosen room / location.
+const embedPoint = computed(() => {
+  const room = visible.value.find((r) => r.id === selectedId.value);
+  if (room && Number.isFinite(room.lat) && Number.isFinite(room.lng)) return { point: room, label: room.name };
+  if (located.value) return { point: origin.value, label: "" };
+  return { point: null, label: "" };
+});
+const embedSrc = computed(() => embedUrlFor(embedPoint.value.point, embedPoint.value.label) || DEFAULT_EMBED_URL);
+const embedTitle = computed(() => {
+  const room = visible.value.find((r) => r.id === selectedId.value);
+  return `Map of ${room ? room.name : located.value ? "your area" : "Singapore"}`;
+});
 
 // Search, filters and view
 const query = ref("");
@@ -75,6 +93,8 @@ const textFilter = computed(() => (placeChosen.value ? "" : query.value));
 const visible = computed(() => {
   const base = view.value === "saved" ? allRooms.value.filter((r) => savedIds.value.includes(r.id)) : allRooms.value;
   const filtered = applyFilters(base, { text: textFilter.value, ...filters.value });
+  // In fallback mode distance only matters once the person has shared their location.
+  if (fallback.value && !located.value) return filtered;
   return sortByDistance(filtered, origin.value);
 });
 const savedCount = computed(() => allRooms.value.filter((r) => savedIds.value.includes(r.id)).length);
@@ -113,8 +133,8 @@ onMounted(async () => {
   roomsStore.bind();
   malls.value = await loadMalls();
   // Start at the user's location when they allow it; stay quiet when they do not.
+  if (fallback.value) return;
   locate({ silent: true });
-  if (!hasKey) return;
   try {
     const maps = await loadGoogleMaps();
     const { Autocomplete } = await maps.importLibrary("places");
@@ -137,7 +157,7 @@ onMounted(async () => {
       locationMessage.value = "";
     });
   } catch (cause) {
-    mapFailed.value = cause?.message || "Google Maps could not be loaded.";
+    setMapsState("failed");
   }
 });
 onBeforeUnmount(() => {
@@ -157,6 +177,7 @@ function locate({ silent = false } = {}) {
   navigator.geolocation.getCurrentPosition(
     ({ coords }) => {
       const point = { lat: coords.latitude, lng: coords.longitude };
+      located.value = true;
       placeChosen.value = false;
       query.value = "";
       origin.value = point;
@@ -174,8 +195,8 @@ function onCenterChanged(point) {
   origin.value = point;
   originLabel.value = "near the map centre";
 }
-function onMapUnavailable(text) {
-  mapFailed.value = text;
+function onMapUnavailable() {
+  setMapsState("failed");
 }
 function viewAll() {
   filters.value = { features: [], verifiedOnly: false };
@@ -185,6 +206,7 @@ function viewAll() {
   selectedId.value = "";
   origin.value = { ...DEFAULT_CENTER };
   originLabel.value = "in Singapore";
+  located.value = false;
   mapCenter.value = { ...DEFAULT_CENTER };
   mapZoom.value = DEFAULT_ZOOM;
 }
@@ -243,18 +265,36 @@ watch(formOpen, (open) => {
   else window.removeEventListener("keydown", onKeydown);
 });
 onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+
+const router = useRouter();
+const SUPPORT_TABS = [
+  { id: "guides", label: "Guides" },
+  { id: "rooms", label: "Pumping rooms" },
+  { id: "resources", label: "Trusted resources" },
+];
+const supportTab = ref("rooms");
+watch(supportTab, (id) => {
+  if (id === "guides") router.push("/support");
+  else if (id === "resources") router.push("/support?tab=resources");
+});
 </script>
 
 <template>
-  <div class="pr">
+  <div class="pr pr--list">
     <section class="pr__side" aria-label="Pumping room list">
       <div class="pr__scroll">
+        <Tabs
+          v-model="supportTab"
+          :tabs="SUPPORT_TABS"
+          label="Support sections"
+          id-base="support"
+        />
         <header class="pr__head">
           <h1 class="nt-title pr__title">Find a pumping room</h1>
           <AppButton ref="addButton" variant="outline" size="sm" @click="openForm">Add a room</AppButton>
         </header>
 
-        <div class="pr__field">
+        <div v-if="!fallback" class="pr__field">
           <input
             id="pr-location"
             ref="searchInput"
@@ -268,12 +308,29 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           <label class="pr__label" for="pr-location">Location</label>
           <span class="pr__icon"><Icon name="search" :size="18" /></span>
         </div>
-        <p v-if="!hasKey" class="pr__notice" role="status">{{ KEY_NOTICE }}</p>
-        <p v-else-if="mapFailed" class="pr__notice" role="status">{{ mapFailed }}</p>
+        <div v-else class="pr__field pr__field--plain">
+          <label class="pr__flabel" for="pr-location">Search rooms</label>
+          <div class="pr__plainwrap">
+            <input
+              id="pr-location"
+              class="pr__input pr__input--plain"
+              type="text"
+              placeholder="Mall or street name"
+              autocomplete="off"
+              :value="query"
+              @input="onInput"
+            />
+            <span class="pr__icon"><Icon name="search" :size="18" /></span>
+          </div>
+        </div>
         <p v-if="locationMessage" class="pr__notice" role="status">{{ locationMessage }}</p>
 
         <div class="pr__bar">
           <p class="pr__count" aria-live="polite">{{ countText }}</p>
+          <AppButton variant="outline" size="sm" @click="locate()">
+            <Icon name="locate" :size="16" />
+            Use my location
+          </AppButton>
           <AppButton
             variant="outline"
             size="sm"
@@ -286,6 +343,28 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           </AppButton>
         </div>
         <RoomFilterPanel v-if="filterOpen" id="pr-filters" v-model="filters" />
+
+        <section class="pr__mapslot" aria-label="Map"><div class="pr__mapbox">
+          <RoomMap
+            v-if="mapEnabled"
+            :rooms="visible"
+            :selected-id="selectedId"
+            :center="mapCenter"
+            :zoom="mapZoom"
+            @select="selectFromMap"
+            @center-changed="onCenterChanged"
+            @zoom-changed="mapZoom = $event"
+            @unavailable="onMapUnavailable"
+          />
+          <iframe
+            v-else
+            class="pr__frame"
+            :src="embedSrc"
+            :title="embedTitle"
+            loading="lazy"
+            referrerpolicy="no-referrer-when-downgrade"
+          ></iframe>
+        </div></section>
 
         <div class="pr__views" role="group" aria-label="Show">
           <button type="button" class="app-chip" :aria-pressed="view === 'all' ? 'true' : 'false'" @click="view = 'all'">All rooms</button>
@@ -307,6 +386,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
             :room="room"
             :selected="room.id === selectedId"
             :saved="savedIds.includes(room.id)"
+            :show-distance="!fallback || located"
             @select="selectFromList"
             @toggle-save="toggleSaved"
           />
@@ -332,7 +412,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           <button type="button" class="pr__x" aria-label="Close add a room" @click="closeForm"><Icon name="close" :size="18" /></button>
         </div>
         <p class="pr__muted">Community additions need verification before others rely on them.</p>
-        <form class="pr__form" novalidate aria-label="Add a room" @submit.prevent="saveRoom">
+        <div v-if="fallback" class="pr__off">
+          <p class="pr__muted">{{ ADD_OFF }}</p>
+          <div class="pr__actions">
+            <AppButton size="sm" disabled>Save room</AppButton>
+            <AppButton variant="outline" size="sm" @click="closeForm">Cancel</AppButton>
+          </div>
+        </div>
+        <form v-else class="pr__form" novalidate aria-label="Add a room" @submit.prevent="saveRoom">
           <div class="pr__f">
             <span class="pr__flabel">Building or main address</span>
             <GooglePlaceAutocomplete @selected="selectGooglePlace" />
@@ -378,28 +465,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       </section>
     </section>
 
-    <section class="pr__map" aria-label="Map">
-      <RoomMap
-        v-if="mapEnabled"
-        :rooms="visible"
-        :selected-id="selectedId"
-        :center="mapCenter"
-        :zoom="mapZoom"
-        @select="selectFromMap"
-        @center-changed="onCenterChanged"
-        @zoom-changed="mapZoom = $event"
-        @unavailable="onMapUnavailable"
-      />
-      <div v-else class="pr__mapoff"><p class="pr__muted">The map is not available. The list still works.</p></div>
-      <button type="button" class="pr__locate" aria-label="Use my location" @click="locate()">
-        <Icon name="locate" :size="20" />
-      </button>
-    </section>
   </div>
 </template>
 
 <style scoped>
-.pr { display: grid; grid-template-columns: 440px minmax(0, 1fr); height: 100vh; background: #fdfcfb; }
+.pr { display: grid; grid-template-columns: 440px minmax(0, 1fr); height: 100vh; background: var(--nt-bg-care); }
 .pr__side { position: relative; min-width: 0; border-right: 1px solid var(--nt-line); overflow: hidden; }
 .pr__scroll { height: 100%; overflow-y: auto; padding: 32px 0 24px; }
 .pr__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 0 24px; }
@@ -422,7 +492,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .pr__empty { display: flex; flex-direction: column; gap: 8px; padding: 32px 24px; border-top: 1px solid var(--nt-line); }
 .pr__foot { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px 24px 8px; }
 .pr__all { padding: 0; background: none; border: 0; font: inherit; font-size: 0.875rem; font-weight: 600; text-decoration: underline; cursor: pointer; }
-.pr__all:focus-visible, .pr__x:focus-visible, .pr__locate:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
+.pr__all:focus-visible, .pr__x:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 
 .pr__panel { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; gap: 12px; padding: 32px 24px; overflow-y: auto; background: var(--nt-white); }
 .pr__panel:focus { outline: none; }
@@ -438,12 +508,24 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .pr__chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .pr__actions { display: flex; gap: 8px; }
 
-.pr__map { position: relative; min-width: 0; background: var(--nt-gray); }
-.pr__mapoff { display: flex; align-items: center; justify-content: center; height: 100%; padding: 24px; text-align: center; }
-.pr__locate { position: absolute; top: 16px; right: 16px; z-index: 3; display: inline-flex; padding: 10px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 8px; color: var(--nt-ink); cursor: pointer; }
-.pr__locate:hover { background: var(--nt-gray); }
+.pr__mapslot { padding: 0 24px; margin: 0 0 16px; }
+.pr__mapbox { position: relative; width: 100%; height: 360px; overflow: hidden; border: 1px solid var(--nt-line); border-radius: 12px; background: var(--nt-gray); box-sizing: border-box; }
+.pr__mapbox :deep(.rm) { min-height: 0; }
+.pr__frame { display: block; width: 100%; height: 100%; border: 0; }
+.pr__field--plain { display: flex; flex-direction: column; gap: 6px; }
+.pr__plainwrap { position: relative; }
+.pr__input--plain { padding: 12px 44px 12px 16px; }
+.pr__off { display: flex; flex-direction: column; gap: 16px; }
+.pr--list { display: block; height: auto; min-height: 100vh; }
+.pr--list .pr__side { border-right: 0; overflow: visible; }
+.pr--list .pr__scroll { height: auto; overflow: visible; max-width: 1120px; margin: 0 auto; }
+.pr--list .pr__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 24px; border-top: 0; }
+.pr--list .pr__list :deep(.rc) { background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
+.pr--list .pr__list :deep(.rc--on) { border-left: 3px solid var(--nt-plum); }
+.pr--list .pr__panel { position: fixed; inset: auto; top: 10vh; left: 50%; transform: translateX(-50%); width: min(480px, calc(100vw - 32px)); max-height: 80vh; border: 1px solid var(--nt-line); border-radius: 12px; }
 
 @media (max-width: 991px) {
+  .pr--list .pr__list { grid-template-columns: minmax(0, 1fr); }
   .pr { display: flex; flex-direction: column; height: auto; }
   .pr__side { border-right: 0; border-bottom: 1px solid var(--nt-line); overflow: visible; }
   .pr__scroll { height: auto; overflow: visible; }

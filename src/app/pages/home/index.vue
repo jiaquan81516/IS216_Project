@@ -1,90 +1,283 @@
 <script setup>
 import "@/app/app.css";
-import { computed, inject, onBeforeUnmount, ref } from "vue";
-import AppBadge from "@/components/ui/AppBadge.vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import AppButton from "@/components/ui/AppButton.vue";
 import AppLink from "@/components/ui/AppLink.vue";
-import YoursAlone from "@/components/ui/YoursAlone.vue";
 import Icon from "@/app/components/Icon.vue";
-import { describeEntriesError, formatTime, lastFeedHeading, lastOfType, summariseEntry } from "@/app/api/entryHelpers";
-import { babySentence, displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
+import { acceptHandover } from "@/app/api/handovers";
+import { ownerUid } from "@/app/api/sharedHelpers";
+import { buildStream, groupByDay, firstNameOf } from "@/app/api/stream";
+import { addDays, formatHandover, toIso, weekNights } from "@/app/api/rotaHelpers";
+import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { useHandovers, HANDOVERS_KEY } from "@/app/composables/useHandovers";
-import { formatWindow, summaryLine } from "@/app/api/handoverHelpers";
+import { usePrefs } from "@/app/composables/usePrefs";
+import { useShared, SHARED_KEY } from "@/app/composables/useShared";
 import { ROUTES } from "@/app/routes";
 
 defineOptions({ name: "HomePage" });
 
-// The layout loads the household and the entries once and provides them. Fall back to
-// loading here so the page also works when rendered on its own.
+// The layout loads the household, the care log, the handovers and the shared stores once and
+// provides them. Fall back to loading here so the page also works when rendered on its own.
 const home = inject(HOME_KEY, null) ?? useHome();
-const { loading, error, reload, me, partner, baby, inviteCode, householdId } = home;
-const shared = inject(ENTRIES_KEY, null) ?? useEntries(householdId);
+const { loading, error, reload, me, partner, inviteCode, householdId } = home;
 const myUid = computed(() => me.value.uid);
+const partnerUid = computed(() => partner.value?.uid ?? "");
+const entriesShared = inject(ENTRIES_KEY, null) ?? useEntries(householdId);
 const handoversShared = inject(HANDOVERS_KEY, null) ?? useHandovers(householdId, myUid);
+const shared = inject(SHARED_KEY, null) ?? useShared(householdId, myUid, partnerUid);
+const posts = shared.posts;
+const rtw = shared.rtw;
 
-const now = new Date();
-const greeting = now.getHours() < 12 ? "Morning" : now.getHours() < 18 ? "Afternoon" : "Evening";
-const dateText = (() => {
-  const weekday = now.toLocaleDateString("en-GB", { weekday: "long" });
-  const month = now.toLocaleDateString("en-GB", { month: "long" });
-  return `${weekday}, ${now.getDate()} ${month}`;
-})();
+const router = useRouter();
+const { formatTime } = usePrefs();
 
-const subtitle = computed(() => {
-  const sentence = babySentence(baby.value);
-  return sentence ? `${dateText} · ${sentence}` : dateText;
+const now = ref(new Date());
+let clock = null;
+onMounted(() => {
+  clock = setInterval(() => {
+    now.value = new Date();
+  }, 60000);
+  document.addEventListener("click", onDocumentClick);
+});
+onBeforeUnmount(() => {
+  clearInterval(clock);
+  document.removeEventListener("click", onDocumentClick);
+});
+
+// Header
+const greeting = computed(() => {
+  const hour = now.value.getHours();
+  return hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+});
+const dateText = computed(() => {
+  const weekday = now.value.toLocaleDateString("en-GB", { weekday: "long" });
+  const month = now.value.toLocaleDateString("en-GB", { month: "long" });
+  return `${weekday}, ${now.value.getDate()} ${month}`;
 });
 const myName = computed(() => displayName(me.value.firstName));
 const partnerFirst = computed(() => (partner.value ? displayName(partner.value.firstName) : ""));
-const partnerLabel = computed(() => partnerFirst.value || "your partner");
 const showInvite = computed(() => !partner.value && Boolean(inviteCode.value));
 
-// Real entries only.
-const entries = computed(() => shared.entries.value);
-const entriesLoading = computed(() => !householdId.value || shared.loading.value);
-const entriesErrorInfo = computed(() => (shared.error.value ? describeEntriesError(shared.error.value.code) : null));
-const isMine = (entry) => entry.by === me.value.uid;
-const hasSeen = (entry) => Object.prototype.hasOwnProperty.call(entry.seenBy ?? {}, me.value.uid);
-function byLabel(entry) {
-  if (isMine(entry)) return "you";
-  return displayName(entry.byName) || partnerFirst.value || "your partner";
-}
-function lineOf(entry) {
-  const s = summariseEntry(entry);
-  return [s.detail, s.note].filter(Boolean).join(", ");
-}
-
-const lastFeed = computed(() => lastOfType(entries.value, "feed"));
-const feedTitle = computed(() => lastFeedHeading(lastFeed.value, now));
-const feedLine = computed(() => (lastFeed.value ? `${lineOf(lastFeed.value) || "Feed"} by ${byLabel(lastFeed.value)}.` : ""));
-const recent = computed(() =>
-  entries.value.slice(0, 5).map((entry) => {
-    const s = summariseEntry(entry);
-    return {
-      id: entry.id,
-      time: formatTime(entry.at),
-      title: s.title,
-      detail: `${lineOf(entry) || s.title} by ${byLabel(entry)}`,
-      isNew: !isMine(entry) && !hasSeen(entry),
-    };
+// The stream
+const members = computed(() => {
+  const list = [{ uid: me.value.uid, displayName: me.value.displayName || me.value.firstName }];
+  if (partner.value) list.push({ uid: partner.value.uid, displayName: partner.value.displayName || partner.value.firstName });
+  return list;
+});
+const items = computed(() =>
+  buildStream({
+    posts: posts.posts,
+    entries: entriesShared.entries.value,
+    handovers: handoversShared.handovers.value,
+    tasks: rtw.tasks,
+    uid: myUid.value,
+    members: members.value,
+    now: now.value,
   }),
 );
+const groups = computed(() => groupByDay(items.value, now.value));
+const streamLoading = computed(() => !householdId.value || posts.loading || entriesShared.loading.value);
+const streamError = computed(() => posts.errorInfo);
 
-// A handover waiting for me is one quiet line, not a second solid button.
-const waitingHandover = computed(() => handoversShared.waitingForMe.value);
-const waitingLine = computed(() => {
-  const handover = waitingHandover.value;
-  if (!handover) return "";
-  const who = handover.from === me.value.uid ? myName.value : partnerFirst.value || "Your partner";
-  const when = formatTime(handover.sentAt);
-  const covers = formatWindow(handover.periodStart, handover.sentAt);
-  return `${who} handed over at ${when}. ${covers}. ${summaryLine(handover.summary)}.`;
+function metaLine(item) {
+  const who = `${item.authorName}, ${formatTime(item.at)}`;
+  return item.kindLabel ? `${who} · ${item.kindLabel}` : who;
+}
+function seenLine(item) {
+  return item.ackedByNames.length ? `Seen by ${item.ackedByNames.join(" and ")}` : "";
+}
+
+// Tonight: who is on night duty, from the shared rota. Before the handover time the night
+// that matters is the one that started yesterday.
+const tonight = computed(() => {
+  const rota = shared.rota ?? null;
+  if (!rota || rota.loading || rota.error || !rota.settings) return "";
+  const view = rota.view;
+  const [h, m] = String(view.handoverTime || "07:00").split(":").map(Number);
+  const beforeHandover = now.value.getHours() * 60 + now.value.getMinutes() < h * 60 + m;
+  const today = toIso(now.value);
+  const night = weekNights(view, beforeHandover ? addDays(today, -1) : today)[0];
+  if (night.who !== "me" && night.who !== "partner") return "";
+  const person = night.who === "me" ? me.value : partner.value;
+  const full = String(person?.displayName || person?.firstName || "").trim();
+  if (!full) return "";
+  const name = full.split(/\s+/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+  return `Tonight: ${name} on duty, handover ${formatHandover(view.handoverTime)}`;
 });
 
-// "Since the last handover" once there is one, so the section says which window it shows.
-const hasHandover = computed(() => Boolean(handoversShared.latest.value));
-const recentHeading = computed(() => (hasHandover.value ? "Since the last handover" : "Recent activity"));
+// Composer
+const text = ref("");
+const announcement = ref("");
+const sending = ref(false);
+const input = ref(null);
+const plusButton = ref(null);
+const menuOpen = ref(false);
+const menuEl = ref(null);
+const composerEl = ref(null);
+const MENU = [
+  { key: "feed", label: "Log feed" },
+  { key: "sleep", label: "Log sleep" },
+  { key: "nappy", label: "Log nappy" },
+  { key: "medication", label: "Medicine" },
+  { key: "task", label: "Add a task" },
+  { key: "handover", label: "Send handover" },
+];
+
+function announce(message) {
+  announcement.value = "";
+  nextTick(() => {
+    announcement.value = message;
+  });
+}
+
+async function send() {
+  const body = text.value.trim();
+  if (!body || sending.value) return;
+  sending.value = true;
+  const ok = await posts.send(body);
+  sending.value = false;
+  if (ok) {
+    text.value = "";
+    announce("Message sent");
+    input.value?.focus();
+  }
+}
+
+function menuItems() {
+  return Array.from(menuEl.value?.querySelectorAll('[role="menuitem"]') ?? []);
+}
+async function openMenu(focusIndex = 0) {
+  menuOpen.value = true;
+  await nextTick();
+  const list = menuItems();
+  list[focusIndex === -1 ? list.length - 1 : focusIndex]?.focus();
+}
+function closeMenu({ restoreFocus = false } = {}) {
+  if (!menuOpen.value) return;
+  menuOpen.value = false;
+  if (restoreFocus) plusButton.value?.focus();
+}
+function toggleMenu() {
+  if (menuOpen.value) closeMenu();
+  else openMenu(0);
+}
+function onPlusKeydown(event) {
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    openMenu(0);
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    openMenu(-1);
+  } else if (event.key === "Escape") {
+    closeMenu({ restoreFocus: true });
+  }
+}
+function onMenuKeydown(event) {
+  const list = menuItems();
+  const at = list.indexOf(document.activeElement);
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    list[(at + 1) % list.length]?.focus();
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    list[(at - 1 + list.length) % list.length]?.focus();
+  } else if (event.key === "Home") {
+    event.preventDefault();
+    list[0]?.focus();
+  } else if (event.key === "End") {
+    event.preventDefault();
+    list[list.length - 1]?.focus();
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    closeMenu({ restoreFocus: true });
+  } else if (event.key === "Tab") {
+    closeMenu();
+  }
+}
+function onDocumentClick(event) {
+  if (menuOpen.value && composerEl.value && !composerEl.value.contains(event.target)) closeMenu();
+}
+function choose(key) {
+  closeMenu();
+  if (key === "task") {
+    openTask();
+  } else if (key === "handover") {
+    router.push(ROUTES.HANDOVER);
+  } else {
+    router.push({ path: ROUTES.CARE_LOG, query: { log: key } });
+  }
+}
+
+// Add a task
+const taskOpen = ref(false);
+const taskTitle = ref("");
+const taskWho = ref("both");
+const taskDue = ref("");
+const taskError = ref("");
+const taskSaving = ref(false);
+const taskInput = ref(null);
+
+async function openTask() {
+  taskOpen.value = true;
+  taskError.value = "";
+  await nextTick();
+  taskInput.value?.focus();
+}
+function closeTask() {
+  taskOpen.value = false;
+  taskTitle.value = "";
+  taskWho.value = "both";
+  taskDue.value = "";
+  taskError.value = "";
+  nextTick(() => plusButton.value?.focus());
+}
+async function saveTask() {
+  const title = taskTitle.value.trim();
+  if (!title) {
+    taskError.value = "Add a title for the task.";
+    return;
+  }
+  taskSaving.value = true;
+  const saved = await rtw.addTask({
+    title,
+    owner: ownerUid(taskWho.value, myUid.value, partnerUid.value) || "both",
+    due: taskDue.value || null,
+  });
+  taskSaving.value = false;
+  if (!saved) {
+    taskError.value = rtw.writeError || "We could not add the task. Try again.";
+    return;
+  }
+  closeTask();
+  announce("Task added");
+}
+
+// Item actions
+const actionError = ref("");
+async function gotIt(item) {
+  actionError.value = "";
+  if (item.kind === "handover") {
+    try {
+      await acceptHandover(householdId.value, item.rawId, myUid.value);
+    } catch (cause) {
+      console.error("[app handover]", cause?.code, cause);
+      actionError.value = "We could not save that. Check your connection and try again.";
+    }
+    return;
+  }
+  if (!(await posts.ack(item.rawId))) actionError.value = posts.writeError;
+}
+async function markDone(item) {
+  actionError.value = "";
+  if (!(await rtw.toggleTask(item.rawId))) actionError.value = rtw.writeError;
+}
+async function removePost(item) {
+  actionError.value = "";
+  if (await posts.remove(item.rawId)) announce("Message deleted");
+  else actionError.value = posts.writeError;
+}
 
 const copied = ref(false);
 let copiedTimer = null;
@@ -115,139 +308,210 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
     </div>
 
     <template v-if="!loading && !error">
+      <header class="hp__head">
+        <h1 class="nt-title hp__title">Home</h1>
+        <p class="hp__sub">Good {{ greeting }}, {{ myName }}. {{ dateText }}</p>
+      </header>
+
       <div v-if="showInvite" class="hp__invite" role="status">
         <p class="hp__invite-text">
           Invite your partner with code <strong>{{ inviteCode }}</strong>
         </p>
-        <AppButton variant="outline" size="sm" @click="copyCode">{{ copied ? "Copied" : "Copy code" }}</AppButton>
+        <button type="button" class="hp__text-btn" @click="copyCode">{{ copied ? "Copied" : "Copy code" }}</button>
       </div>
 
-      <section v-if="waitingLine" class="hp__handover" aria-labelledby="hp-handover">
-        <p id="hp-handover" class="hp__handover-text">{{ waitingLine }}</p>
-        <AppLink class="hp__link" :to="ROUTES.HANDOVER">
-          <span>Read the handover</span>
-          <Icon name="chevron" :size="16" />
-        </AppLink>
+      <div ref="composerEl" class="hp__composer">
+        <form class="hp__field" @submit.prevent="send">
+          <input
+            ref="input"
+            v-model="text"
+            class="hp__input"
+            type="text"
+            maxlength="500"
+            autocomplete="off"
+            aria-label="Message, log, or add a task"
+            placeholder="Message, log, or add a task..."
+          />
+          <button v-if="text.trim()" type="submit" class="hp__send" :disabled="sending">Send</button>
+          <button
+            ref="plusButton"
+            type="button"
+            class="hp__plus"
+            aria-label="More actions"
+            aria-haspopup="menu"
+            :aria-expanded="menuOpen ? 'true' : 'false'"
+            aria-controls="hp-menu"
+            @click="toggleMenu"
+            @keydown="onPlusKeydown"
+          >
+            <Icon name="plus" :size="20" />
+          </button>
+        </form>
+
+        <ul v-if="menuOpen" id="hp-menu" ref="menuEl" class="hp__menu" role="menu" aria-label="More actions" @keydown="onMenuKeydown">
+          <li v-for="entry in MENU" :key="entry.key" role="none">
+            <button type="button" class="hp__menu-item" role="menuitem" tabindex="-1" @click="choose(entry.key)">
+              {{ entry.label }}
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <p v-if="posts.writeError" class="hp__problem" role="alert">{{ posts.writeError }}</p>
+      <p v-if="actionError" class="hp__problem" role="alert">{{ actionError }}</p>
+      <p class="visually-hidden" aria-live="polite" role="status">{{ announcement }}</p>
+
+      <form v-if="taskOpen" class="hp__task" aria-label="Add a task" @submit.prevent="saveTask">
+        <label class="hp__task-label">
+          <span>Task</span>
+          <input ref="taskInput" v-model="taskTitle" class="hp__task-input" type="text" maxlength="120" autocomplete="off" />
+        </label>
+        <fieldset class="hp__who">
+          <legend>Who</legend>
+          <label><input v-model="taskWho" type="radio" name="hp-who" value="me" /> You</label>
+          <label v-if="partner"><input v-model="taskWho" type="radio" name="hp-who" value="partner" /> {{ partnerFirst }}</label>
+          <label><input v-model="taskWho" type="radio" name="hp-who" value="both" /> Both</label>
+        </fieldset>
+        <label class="hp__task-label">
+          <span>Due (optional)</span>
+          <input v-model="taskDue" class="hp__task-input hp__task-input--date" type="date" />
+        </label>
+        <p v-if="taskError" class="hp__problem" role="alert">{{ taskError }}</p>
+        <div class="hp__task-actions">
+          <button type="submit" class="hp__text-btn" :disabled="taskSaving">Add task</button>
+          <button type="button" class="hp__text-btn hp__text-btn--muted" @click="closeTask">Cancel</button>
+        </div>
+      </form>
+
+      <p v-if="tonight" class="hp__tonight">{{ tonight }}</p>
+
+      <section class="hp__stream" aria-label="Household stream">
+        <p v-if="streamLoading" class="hp__status">Loading...</p>
+        <div v-else-if="streamError" role="alert">
+          <p class="hp__muted">{{ streamError.text }}</p>
+          <p v-if="streamError.detail" class="hp__muted">{{ streamError.detail }}</p>
+        </div>
+        <p v-else-if="!groups.length" class="hp__muted">Nothing here yet. Post a message or log something.</p>
+
+        <template v-else>
+        <div v-for="group in groups" :key="group.key" class="hp__group">
+          <h2 class="hp__day">{{ group.label }}</h2>
+          <ul class="hp__list">
+            <li v-for="item in group.items" :key="item.id" class="hp__item">
+              <p class="hp__meta">{{ metaLine(item) }}</p>
+              <p class="hp__text">{{ item.text }}</p>
+              <template v-if="item.kind === 'handover'">
+                <p v-if="item.meta.counts" class="hp__meta">{{ item.meta.counts }}</p>
+                <p v-if="item.meta.needsAttention" class="hp__attention">
+                  Needs attention{{ item.meta.attentionNote ? `: ${item.meta.attentionNote}` : "" }}
+                </p>
+              </template>
+
+              <div class="hp__actions">
+                <template v-if="item.kind === 'message' || item.kind === 'handover'">
+                  <button v-if="item.needsAck && !item.acked" type="button" class="hp__text-btn" @click="gotIt(item)">Got it</button>
+                  <span v-else-if="seenLine(item)" class="hp__seen">{{ seenLine(item) }}</span>
+                </template>
+                <template v-else-if="item.kind === 'task'">
+                  <button v-if="!item.done" type="button" class="hp__text-btn" @click="markDone(item)">Done</button>
+                  <span v-else class="hp__seen">Completed</span>
+                </template>
+                <button
+                  v-if="item.kind === 'message' && item.isMine"
+                  type="button"
+                  class="hp__text-btn hp__text-btn--muted hp__delete"
+                  @click="removePost(item)"
+                >
+                  Delete
+                </button>
+              </div>
+            </li>
+          </ul>
+        </div>
+        </template>
       </section>
 
-      <header class="hp__head">
-        <h1 class="nt-title hp__title">Good {{ greeting.toLowerCase() }}, {{ myName }}</h1>
-        <p class="hp__sub">{{ subtitle }}</p>
-      </header>
-
-      <div class="hp__cols">
-        <div class="hp__main">
-          <section class="nt-card hp__next" aria-labelledby="hp-next">
-            <template v-if="entriesLoading">
-              <h2 id="hp-next" class="hp__next-title">Loading your log...</h2>
-            </template>
-            <template v-else-if="lastFeed">
-              <h2 id="hp-next" class="hp__next-title">{{ feedTitle }}</h2>
-              <p class="hp__lead">{{ feedLine }}</p>
-              <div class="hp__actions">
-                <AppButton size="md" :to="{ path: ROUTES.CARE_LOG, query: { log: 'feed' } }">Log a feed</AppButton>
-                <AppButton variant="outline" size="md" :to="ROUTES.CARE_LOG">Open care log</AppButton>
-              </div>
-            </template>
-            <template v-else>
-              <h2 id="hp-next" class="hp__next-title">Log your first care entry</h2>
-              <p class="hp__lead">Feeds, naps and nappies you log show up here for both of you.</p>
-              <div class="hp__actions">
-                <AppButton size="md" :to="ROUTES.CARE_LOG">Log care</AppButton>
-              </div>
-            </template>
-          </section>
-
-          <section aria-labelledby="hp-recent" class="hp__since">
-            <div class="hp__title-row">
-              <h2 id="hp-recent" class="nt-heading">{{ recentHeading }}</h2>
-              <AppLink class="hp__link" :to="ROUTES.CARE_LOG">
-                <span>View full log</span>
-                <Icon name="chevron" :size="16" />
-              </AppLink>
-            </div>
-            <p class="hp__muted">Latest from you and {{ partnerLabel }}</p>
-            <p v-if="entriesLoading" class="hp__muted">Loading...</p>
-            <div v-else-if="entriesErrorInfo" role="alert">
-              <p class="hp__muted">{{ entriesErrorInfo.text }}</p>
-              <p v-if="entriesErrorInfo.detail" class="hp__muted">{{ entriesErrorInfo.detail }}</p>
-            </div>
-            <p v-else-if="!recent.length" class="hp__muted">Nothing logged yet.</p>
-            <ul v-else class="hp__rows">
-              <li v-for="row in recent" :key="row.id" class="hp__row">
-                <span class="hp__time">{{ row.time }}</span>
-                <div class="hp__row-body">
-                  <div class="hp__row-head">
-                    <p class="hp__row-title">{{ row.title }}</p>
-                    <AppBadge v-if="row.isNew" color="blue">New</AppBadge>
-                  </div>
-                  <p class="hp__row-detail">{{ row.detail }}</p>
-                </div>
-              </li>
-            </ul>
-          </section>
-        </div>
-
-        <aside class="hp__aside" aria-label="Check-in">
-          <YoursAlone aria-labelledby="hp-checkin">
-            <h2 id="hp-checkin" class="nt-heading nt-heading--sm">How are you holding up?</h2>
-            <p class="hp__checkin-text">A one minute check-in. Only you can see it.</p>
-            <AppButton variant="outline" size="md" block :to="ROUTES.WELLNESS">Check in privately</AppButton>
-          </YoursAlone>
-        </aside>
-      </div>
+      <p class="hp__checkin">
+        <span>How are you holding up?</span>
+        <AppLink class="hp__link" :to="ROUTES.WELLNESS">Check in privately</AppLink>
+      </p>
     </template>
   </div>
 </template>
 
 <style scoped>
-.hp { display: flex; flex-direction: column; gap: 24px; max-width: 1120px; margin: 0 auto; font-size: 1rem; }
+.hp { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 820px; font-size: 1rem; }
 .hp__status { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
 .hp__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 0; font-size: 0.875rem; border-radius: 8px; }
 
-.hp__invite { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 16px; background: var(--nt-gray); border: 1px solid var(--nt-line); border-radius: 8px; }
+.hp__head { display: flex; flex-direction: column; gap: 8px; }
+.hp__title { font-size: 2.5rem; line-height: 1.2; }
+.hp__sub { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
+
+.hp__invite { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 16px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 8px; }
 .hp__invite-text { margin: 0; font-size: 0.875rem; color: var(--nt-ink); }
 .hp__invite-text strong { font-weight: 600; }
 
-.hp__handover { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 12px 16px; background: var(--nt-gray); border: 1px solid var(--nt-line); border-radius: 8px; }
-.hp__handover-text { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); }
+.hp__composer { position: relative; }
+.hp__field { display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 8px 0 16px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
+.hp__field:focus-within { border-color: var(--nt-plum); outline: 2px solid var(--nt-plum); outline-offset: 2px; }
+.hp__input { flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; font-family: inherit; font-size: 1rem; color: var(--nt-ink); }
+.hp__input:focus { outline: none; }
+.hp__input::placeholder { color: var(--nt-muted); }
+.hp__send { flex: none; height: 36px; padding: 0 14px; background: var(--nt-plum); border: 1px solid var(--nt-plum); border-radius: 8px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: #fff; cursor: pointer; }
+.hp__send:hover { background: var(--nt-plum-hover); }
+.hp__send:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
+.hp__send:disabled { opacity: 0.6; cursor: default; }
+.hp__plus { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; background: transparent; border: 0; border-radius: 8px; color: var(--nt-plum); cursor: pointer; }
+.hp__plus:hover { background: var(--nt-gray); }
+.hp__plus:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 
-.hp__head { display: flex; flex-direction: column; gap: 8px; }
-.hp__title { font-size: 2.5rem; line-height: 1.2; }
-.hp__sub { margin: 0; font-size: 1rem; color: var(--nt-muted); }
+.hp__menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: 10; min-width: 200px; margin: 0; padding: 4px; list-style: none; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
+.hp__menu-item { display: block; width: 100%; padding: 10px 12px; background: transparent; border: 0; border-radius: 8px; font-family: inherit; font-size: 0.875rem; text-align: left; color: var(--nt-ink); cursor: pointer; }
+.hp__menu-item:hover, .hp__menu-item:focus { background: var(--nt-gray); }
+.hp__menu-item:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: -2px; }
 
-.hp__cols { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 32px; align-items: start; }
-.hp__main { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
-.hp__aside { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.hp__problem { margin: 0; font-size: 0.875rem; color: var(--nt-coral); }
 
-.hp__next { gap: 8px; padding: 24px; }
-.hp__next-title { margin: 0; font-family: var(--nt-serif); font-size: 1.5rem; font-weight: 400; line-height: 1.3; letter-spacing: -0.01em; color: var(--nt-ink); }
-.hp__lead { margin: 0; font-size: 1rem; line-height: 1.5; color: var(--nt-muted); }
-.hp__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.hp__task { display: flex; flex-direction: column; gap: 12px; padding: 16px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
+.hp__task-label { display: flex; flex-direction: column; gap: 4px; font-size: 0.875rem; color: var(--nt-muted); }
+.hp__task-input { height: 40px; padding: 0 12px; border: 1px solid var(--nt-line); border-radius: 8px; font-family: inherit; font-size: 1rem; color: var(--nt-ink); background: var(--nt-white); }
+.hp__task-input--date { max-width: 200px; }
+.hp__task-input:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
+.hp__who { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin: 0; padding: 0; border: 0; font-size: 0.875rem; color: var(--nt-ink); }
+.hp__who legend { float: none; width: auto; margin: 0 0 4px; padding: 0; font-size: 0.875rem; color: var(--nt-muted); }
+.hp__who label { display: inline-flex; align-items: center; gap: 6px; }
+.hp__task-actions { display: flex; gap: 16px; }
 
-.hp__since { display: flex; flex-direction: column; gap: 8px; }
-.hp__title-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
-.hp__muted { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
+.hp__tonight { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
 
-.hp__link, .hp__link:visited { display: inline-flex; align-items: center; gap: 4px; font-size: 0.875rem; font-weight: 500; color: var(--nt-plum); text-decoration: none; }
-.hp__link:hover { color: var(--nt-plum-hover); text-decoration: underline; text-underline-offset: 3px; }
+.hp__text-btn { padding: 0; background: none; border: 0; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-plum); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.hp__text-btn:hover { color: var(--nt-plum-hover); }
+.hp__text-btn:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
+.hp__text-btn:disabled { opacity: 0.6; cursor: default; }
+.hp__text-btn--muted { color: var(--nt-muted); }
+
+.hp__stream { display: flex; flex-direction: column; gap: 24px; margin-top: 8px; }
+.hp__muted { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
+.hp__group { display: flex; flex-direction: column; gap: 4px; }
+.hp__day { margin: 0; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-muted); }
+.hp__list { margin: 0; padding: 0; list-style: none; }
+.hp__item { padding: 14px 0; border-top: 1px solid var(--nt-line); }
+.hp__meta { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
+.hp__text { margin: 2px 0 0; font-size: 1rem; line-height: 1.5; color: var(--nt-ink); overflow-wrap: anywhere; }
+.hp__attention { margin: 2px 0 0; font-size: 0.875rem; color: var(--nt-coral); }
+.hp__actions { display: flex; align-items: center; gap: 16px; margin-top: 6px; }
+.hp__actions:empty { display: none; }
+.hp__seen { font-size: 0.875rem; color: var(--nt-muted); }
+.hp__delete { opacity: 0; }
+.hp__item:hover .hp__delete, .hp__item:focus-within .hp__delete { opacity: 1; }
+@media (hover: none) { .hp__delete { opacity: 1; } }
+
+.hp__checkin { margin: 16px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 0.875rem; color: var(--nt-muted); }
+.hp__link, .hp__link:visited { font-size: 0.875rem; font-weight: 500; color: var(--nt-plum); text-decoration: underline; text-underline-offset: 3px; }
 .hp__link:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
 
-.hp__rows { margin: 8px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
-.hp__row { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 16px; align-items: start; padding: 16px 0; border-bottom: 1px solid var(--nt-line); }
-.hp__time { font-size: 0.875rem; line-height: 1.5rem; color: var(--nt-muted); }
-.hp__row-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.hp__row-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.hp__row-title { margin: 0; font-size: 1rem; font-weight: 600; color: var(--nt-ink); }
-.hp__row-detail { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
-
-.hp__checkin-text { margin: 0 0 8px; font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); }
-
 @media (max-width: 991px) {
-  .hp__cols { grid-template-columns: minmax(0, 1fr); }
   .hp__title { font-size: 2rem; }
-}
-@media (max-width: 575px) {
-  .hp__row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
 </style>

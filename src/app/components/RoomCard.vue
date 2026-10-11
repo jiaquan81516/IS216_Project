@@ -1,17 +1,18 @@
 <script setup>
 import { computed } from "vue";
 import { formatDistance, verificationText, isVerified } from "@/app/api/mapHelpers";
-import { mapOpenUrl } from "@/app/api/roomHelpers";
+import { mapsDirectionsLink, mapsSearchLink } from "@/app/api/roomHelpers";
 
 defineOptions({ name: "RoomCard" });
 const props = defineProps({
   room: { type: Object, required: true },
   selected: { type: Boolean, default: false },
   saved: { type: Boolean, default: false },
+  showDistance: { type: Boolean, default: true },
 });
 const emit = defineEmits(["select", "toggle-save"]);
 
-const distance = computed(() => formatDistance(props.room.distance));
+const distance = computed(() => (props.showDistance ? formatDistance(props.room.distance) : ""));
 const verification = computed(() => verificationText(props.room));
 const verified = computed(() => isVerified(props.room));
 </script>
@@ -44,15 +45,14 @@ const verified = computed(() => isVerified(props.room));
       >
         {{ saved ? "Saved" : "Save" }}
       </button>
-      <a
-        class="app-link"
-        :href="mapOpenUrl(room)"
-        target="_blank"
-        rel="noopener noreferrer"
-        :aria-label="`Get directions to ${room.name}`"
-        @click.stop
-      >
-        Get directions
+      <button type="button" class="app-textbtn" @click.stop="emit('select', room)">
+        Show on map<span class="visually-hidden"> for {{ room.name }}</span>
+      </button>
+      <a class="app-link" :href="mapsSearchLink(room)" target="_blank" rel="noopener noreferrer" @click.stop>
+        Open in Google Maps<span class="visually-hidden"> for {{ room.name }}, opens in a new tab</span>
+      </a>
+      <a class="app-link" :href="mapsDirectionsLink(room)" target="_blank" rel="noopener noreferrer" @click.stop>
+        Directions<span class="visually-hidden"> to {{ room.name }}, opens in a new tab</span>
       </a>
     </div>
   </li>

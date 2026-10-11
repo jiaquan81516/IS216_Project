@@ -37,6 +37,7 @@ const router = createRouter({
         { path: "wellness", name: "wellness", component: appPage("wellness") },
         { path: "support", name: "support", component: appPage("support") },
         { path: "support/rooms", name: "pumping-rooms", component: appPage("pumping-rooms") },
+        { path: "support/kids-care", name: "kids-care", component: appPage("kids-care") },
         { path: "return-to-work", name: "return-to-work", component: appPage("return-to-work") },
         { path: "calendar", name: "calendar", component: appPage("calendar") },
         { path: "settings", name: "settings", component: appPage("settings") },

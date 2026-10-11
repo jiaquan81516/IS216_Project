@@ -54,6 +54,9 @@ function choose(value) {
 
 <style scoped>
 .options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; width: 100%; }
+.options :deep(.option) { min-height: 168px; padding: 28px; }
+.options :deep(.option__title) { font-size: 1.125rem; }
+.options :deep(.option__desc) { font-size: 0.9375rem; }
 @media (max-width: 767px) {
   .options { grid-template-columns: minmax(0, 1fr); gap: 16px; }
 }

@@ -12,6 +12,7 @@ export const ROUTES = Object.freeze({
   WELLNESS: "/wellness",
   SUPPORT: "/support",
   ROOMS: "/support/rooms",
+  KIDS_CARE: "/support/kids-care",
   RETURN_TO_WORK: "/return-to-work",
   CALENDAR: "/calendar",
   SETTINGS: "/settings",

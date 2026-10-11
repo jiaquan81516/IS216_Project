@@ -27,9 +27,10 @@ const rooms = computed(() => roomsStore.rooms);
   <div class="rtp">
     <p class="rtp__intro">Get set up before the first day back.</p>
 
+    <div class="rtp__main">
     <section class="rtp__section" aria-labelledby="rtp-checklist">
       <div class="rtp__head">
-        <h2 id="rtp-checklist" class="nt-heading nt-heading--sm">Checklist</h2>
+        <h2 id="rtp-checklist" class="rtp__h2">Checklist</h2>
         <p class="rtp__progress">{{ progress.text }}</p>
       </div>
       <ul class="rtp__list">
@@ -49,7 +50,7 @@ const rooms = computed(() => roomsStore.rooms);
     </section>
 
     <section class="rtp__section" aria-labelledby="rtp-breaks">
-      <h2 id="rtp-breaks" class="nt-heading nt-heading--sm">Pumping breaks at work</h2>
+      <h2 id="rtp-breaks" class="rtp__h2">Pumping breaks at work</h2>
       <p class="rtp__label-text" id="rtp-sessions-label">Sessions per workday</p>
       <ChipGroup
         :model-value="store.pumping.sessions"
@@ -73,9 +74,11 @@ const rooms = computed(() => roomsStore.rooms);
       <p v-if="summary" class="rtp__summary" role="status">{{ summary }}</p>
       <p v-else class="rtp__muted" role="status">Choose how many breaks and when, and your plan shows here.</p>
     </section>
+    </div>
 
+    <aside class="rtp__rail">
     <section class="rtp__section" aria-labelledby="rtp-rooms">
-      <h2 id="rtp-rooms" class="nt-heading nt-heading--sm">Rooms near work</h2>
+      <h2 id="rtp-rooms" class="rtp__h2">Rooms near work</h2>
       <AppButton variant="outline" size="sm" :to="ROUTES.ROOMS">Open the map</AppButton>
       <p class="rtp__muted">Sample rooms for now, plus any you added in Support. Check details before you go.</p>
       <ul class="rtp__rooms" aria-label="Pumping rooms">
@@ -91,18 +94,24 @@ const rooms = computed(() => roomsStore.rooms);
         </li>
       </ul>
     </section>
+    </aside>
   </div>
 </template>
 
 <style scoped>
-.rtp { display: flex; flex-direction: column; gap: 32px; max-width: 720px; }
-.rtp__intro { margin: 0; font-size: 1rem; color: var(--nt-muted); }
-.rtp__section { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
-.rtp__section h2 { margin: 0; }
+.rtp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; width: 100%; }
+.rtp__intro { grid-column: 1 / -1; margin: 0; font-size: 1rem; color: var(--nt-muted); }
+.rtp__main, .rtp__rail { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+@media (min-width: 1100px) {
+  .rtp { grid-template-columns: minmax(0, 1fr) 380px; }
+}
+.rtp__section { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.rtp__h2 { margin: 0; font-family: inherit; font-size: 1.0625rem; font-weight: 600; color: var(--nt-ink); }
 .rtp__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; width: 100%; }
 .rtp__progress { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
 .rtp__list { width: 100%; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
 .rtp__item { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--nt-line); }
+.rtp__item:last-child { border-bottom: 0; padding-bottom: 0; }
 .rtp__check { flex: none; width: 20px; height: 20px; margin: 0; cursor: pointer; }
 .rtp__check:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 .rtp__label { font-size: 1rem; color: var(--nt-ink); cursor: pointer; }
@@ -113,5 +122,7 @@ const rooms = computed(() => roomsStore.rooms);
 .rtp__muted { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
 .rtp__rooms { width: 100%; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
 .rtp__room { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 14px 0; border-bottom: 1px solid var(--nt-line); }
+.rtp__room:last-child { border-bottom: 0; padding-bottom: 0; }
 .rtp__room-name { margin: 0; font-size: 1rem; font-weight: 600; color: var(--nt-ink); }
+@media (max-width: 767px) { .rtp__section { padding: 20px; } }
 </style>
