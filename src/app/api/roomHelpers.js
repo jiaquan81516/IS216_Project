@@ -8,6 +8,14 @@ export function mapEmbedUrl(room) {
   return "https://www.google.com/maps?q=" + query(room) + "&output=embed";
 }
 
+// Keyless embed (no API key or billing). Whole island by default, one room when given.
+export const DEFAULT_EMBED_URL = "https://www.google.com/maps?q=Singapore&z=11&output=embed";
+export function embedUrlFor(point, label = "") {
+  if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return DEFAULT_EMBED_URL;
+  const text = label ? `${point.lat},${point.lng} (${label})` : `${point.lat},${point.lng}`;
+  return "https://www.google.com/maps?q=" + encodeURIComponent(text) + "&z=15&output=embed";
+}
+
 export function mapOpenUrl(room) {
   return "https://www.google.com/maps/search/?api=1&query=" + query(room);
 }
@@ -82,4 +90,21 @@ export function roomView(id, data = {}, now = new Date()) {
     createdBy: data.createdBy ?? null,
     seed: false,
   };
+}
+
+// Key free Google Maps links. Name and address make the query; with only coordinates, use lat,lng.
+function linkQuery(room) {
+  const text = [room.name, room.address].filter((v) => v && String(v).trim()).join(", ");
+  if (text) return encodeURIComponent(text);
+  if (Number.isFinite(room.lat) && Number.isFinite(room.lng)) return encodeURIComponent(`${room.lat},${room.lng}`);
+  return "";
+}
+
+export function mapsSearchLink(room) {
+  const placeId = room.placeId ? `&query_place_id=${encodeURIComponent(room.placeId)}` : "";
+  return `https://www.google.com/maps/search/?api=1&query=${linkQuery(room)}${placeId}`;
+}
+
+export function mapsDirectionsLink(room) {
+  return `https://www.google.com/maps/dir/?api=1&destination=${linkQuery(room)}`;
 }

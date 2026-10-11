@@ -119,10 +119,10 @@ beforeEach(() => {
 });
 
 describe("the App handover page", () => {
-  it("has the title and the subtitle", async () => {
+  it("has the title and no subtitle", async () => {
     const { wrapper } = await mountPage();
     expect(wrapper.get("h1").text()).toBe("Handover");
-    expect(wrapper.text()).toContain("Hand the shift over with everything that matters.");
+    expect(wrapper.text()).not.toContain("Hand the shift over");
   });
 
   describe("when one is waiting for me", () => {
@@ -222,12 +222,11 @@ describe("the App handover page", () => {
       ];
       const { wrapper } = await mountPage({ entries });
       expect(wrapper.get("#ho-send").text()).toBe("Since 12:00 AM");
-      expect(wrapper.text()).toContain("Everything logged since midnight.");
       expect(statsOf(wrapper)).toEqual(["1 feed", "0 min sleep", "1 nappy"]);
       expect(wrapper.text()).toContain("No handovers yet.");
       const solid = wrapper.findAll("button.btn-primary");
       expect(solid).toHaveLength(1);
-      expect(solid[0].text()).toBe("Send handover to Mei");
+      expect(solid[0].text()).toBe("Send handover");
     });
 
     it("offers suggestions built from the care log and the rota, and sends what I picked", async () => {
@@ -300,7 +299,7 @@ describe("the App handover page", () => {
       const { wrapper } = await mountPage({ partner: false });
       const button = wrapper.get("button.btn-primary");
       expect(button.attributes("disabled")).toBeDefined();
-      expect(wrapper.get(".ho__no-partner").text()).toContain("There is nobody to hand over to yet.");
+      expect(wrapper.get(".ho__no-partner").text()).toContain("Invite your partner");
       await button.trigger("click");
       expect(api.send).not.toHaveBeenCalled();
     });

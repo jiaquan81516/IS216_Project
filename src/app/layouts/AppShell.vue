@@ -10,6 +10,7 @@ import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { useHandovers, HANDOVERS_KEY } from "@/app/composables/useHandovers";
 import { useShared, SHARED_KEY } from "@/app/composables/useShared";
+import { buildStream, unreadCount } from "@/app/api/stream";
 import { resetLimits } from "@/app/api/limits";
 import { NAV } from "@/app/data/nav";
 import { ROUTES } from "@/app/routes";
@@ -19,7 +20,11 @@ defineOptions({ name: "AppShell" });
 const route = useRoute();
 const router = useRouter();
 const { logout } = useAuth();
-const sageBackdrop = computed(() => [ROUTES.WELLNESS, ROUTES.SUPPORT].includes(route.path));
+const tone = computed(() => {
+  if (route.path === ROUTES.WELLNESS) return "personal";
+  if (route.path === ROUTES.SUPPORT || route.path.startsWith(ROUTES.SUPPORT + "/")) return "care";
+  return "";
+});
 
 // Load the household once here; the sidebar and the page share it.
 const home = useHome();
@@ -30,7 +35,8 @@ provide(ENTRIES_KEY, useEntries(home.householdId));
 // wait for the household id too, and are unbound when it changes or the shell unmounts.
 const meUid = computed(() => home.me.value.uid);
 const partnerUid = computed(() => home.partner.value?.uid ?? "");
-provide(SHARED_KEY, useShared(home.householdId, meUid, partnerUid));
+const shared = useShared(home.householdId, meUid, partnerUid);
+provide(SHARED_KEY, shared);
 // One live handovers listener. The page, the Home line and the care log dividers share it.
 const handovers = useHandovers(home.householdId, meUid);
 provide(HANDOVERS_KEY, handovers);
@@ -47,11 +53,20 @@ const babyName = computed(() => (home.baby.value.name ? `Baby ${home.baby.value.
 const babyAge = computed(() => home.baby.value.line || "");
 const userName = computed(() => displayName(home.me.value.displayName || home.me.value.firstName));
 const waiting = computed(() => handovers.waitingCount.value);
+// A small dot on Home while there are posts or handovers from your partner you have not
+// acknowledged. The stream on Home is where you clear them.
+const unread = computed(() =>
+  unreadCount(
+    buildStream({ posts: shared.posts.posts, handovers: handovers.handovers.value, uid: meUid.value }),
+    meUid.value,
+  ),
+);
 const items = computed(() =>
   NAV.map((item) => ({
     ...item,
-    active: item.to === route.path,
+    active: item.to === route.path || route.path.startsWith(item.to + "/"),
     count: item.key === "handover" ? waiting.value : 0,
+    dot: item.key === "today" && unread.value > 0,
   })),
 );
 
@@ -120,6 +135,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
                 <Icon :name="item.icon" />
                 <span>{{ item.label }}</span>
                 <span v-if="item.count" class="side__count" aria-hidden="true">{{ item.count }}</span>
+                <span v-if="item.dot" class="side__dot" aria-hidden="true"></span>
+                <span v-if="item.dot" class="visually-hidden">unread</span>
                 <span v-if="item.count" class="visually-hidden">
                   {{ item.count === 1 ? "1 handover waiting for you" : `${item.count} handovers waiting for you` }}
                 </span>
@@ -137,7 +154,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       </div>
     </aside>
 
-    <main id="app-main" class="appshell__main" :class="{ 'appshell__main--sage': sageBackdrop }" tabindex="-1">
+    <main id="app-main" class="appshell__main" :class="tone && `appshell__main--${tone}`" tabindex="-1">
       <div class="appshell__content">
         <RouterView />
       </div>
@@ -171,17 +188,20 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 }
 .appshell__main {
   min-width: 0;
-  padding: 32px;
+  padding: 40px clamp(24px, 4vw, 64px);
 }
-.appshell__main--sage {
-  background: #e3e8e4;
+.appshell__main--care {
+  background: var(--nt-bg-care);
+}
+.appshell__main--personal {
+  background: var(--nt-bg-personal);
 }
 .appshell__main:focus {
   outline: none;
 }
 .appshell__content {
   width: 100%;
-  max-width: 1120px;
+  max-width: 1360px;
   margin: 0 auto;
 }
 
@@ -265,6 +285,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   font-weight: 600;
   line-height: 20px;
   color: var(--nt-plum);
+}
+.side__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--nt-coral);
+  flex: none;
 }
 .side__link:hover {
   background: var(--nt-gray);

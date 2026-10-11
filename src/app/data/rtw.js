@@ -10,12 +10,9 @@ export const TASK_GROUPS = Object.freeze([
 ]);
 
 export const SUGGESTED_TASKS = Object.freeze([
-  { title: "Talk to your manager about flexible work", group: "work" },
-  { title: "Choose childcare and book a trial", group: "childcare" },
-  { title: "Plan the morning handover", group: "home" },
-  { title: "Find a pumping room near work", group: "pumping" },
-  { title: "Pack pump, parts and storage bags", group: "pumping" },
-  { title: "Agree who does night duty in the first week back", group: "wellbeing" },
+  { title: "Plan the morning routine", group: "home" },
+  { title: "Arrange a childcare trial", group: "childcare" },
+  { title: "Talk to your manager", group: "work" },
 ]);
 
 // Areas for the Responsibilities tab. `task` is the title used by "Make a task".

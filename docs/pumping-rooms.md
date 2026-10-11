@@ -1,6 +1,6 @@
 # Pumping rooms map
 
-Page: `/support/rooms` (`src/app/pages/pumping-rooms/index.vue`), inside the app shell, guarded like the other app pages. Linked from the Support pumping rooms tab ("Open the map") and from the Return to work pumping section.
+Page: `/support/rooms` (`src/app/pages/pumping-rooms/index.vue`), inside the app shell, guarded like the other app pages. Linked from a "Find a pumping room" card in Support Guides (the old Support pumping rooms tab and its directory UI were removed) and from the Return to work pumping section.
 
 ## Data sources
 
@@ -21,16 +21,22 @@ There are no opening hours anywhere on purpose.
 
 ## How the page works
 
-- Left pane: search (Google Places autocomplete, Singapore only), count, Filter panel (Chair, Power outlet, Lockable, Sink, Verified only), room cards sorted by distance from the search or map centre, "View all rooms", and an Add a room panel (same flow and store action as Support).
-- Right pane: Google map with classic markers drawn from SVG (plum circle, white pin), grid clustering (`clusterRooms`), a small info card (flat, no shadow), a "use my location" button and the default zoom controls.
+- Header and controls: search (Google Places autocomplete, Singapore only), count, Filter panel (Chair, Power outlet, Lockable, Sink, Verified only), room cards sorted by distance from the search or map centre, "View all rooms", and an Add a room panel (same flow and store action as Support).
+- Layout: the page scrolls normally. Order: header, search, count and controls, view switch, map (full grid width, 360px, 12px radius, 1px border), then a two column grid of cards (Save, Show on map, Open in Google Maps, Directions). Old split layout removed.
+- Map slot: with a working key, the interactive Google map below; otherwise a keyless embed iframe (`https://www.google.com/maps?q=Singapore&z=11&output=embed`) that moves to a room (`lat,lng (name)`, z=15) on "Show on map" or card click. The "map is off" notice is gone; only geolocation errors show a status notice.
+- Interactive map (key present): Google map with classic markers drawn from SVG (plum circle, white pin), grid clustering (`clusterRooms`), a small info card (flat, no shadow), a "use my location" button and the default zoom controls.
 - Typing in Location also filters the list by name and address. Choosing a Google suggestion moves the search centre instead.
 - Saved places use the same localStorage key as Support (`nurturetrack:saved-pumping-rooms`).
 - Default centre: the user's location if they allow it, otherwise Singapore (1.3521, 103.8198, zoom 12).
 - Without `VITE_GOOGLE_MAPS_API_KEY` (or if the script fails) the list still works, a status notice is shown, and Location is a plain text filter.
 
+## Running without a Maps key
+
+`hasMapsKey()` and `mapsState` ("ready", "no-key", "failed", "loading") live in `src/app/api/mapsState.js`. An empty, blank, `PASTE...` or `your-google-maps...` value counts as no key. `window.gm_authFailure`, a script error and a 10 second load timeout set "failed". In "no-key" or "failed" the page hides the map, shows a calm status line, uses a plain "Search rooms" text filter, gives each card "Open in Google Maps" and "Directions" links (no key needed), skips distance until "Use my location" is tapped, and shows an explanation instead of the add form (the Firestore rules need a Google `placeId`, `lat` and `lng`, so they are not loosened). The Support page add form shows the same explanation. With a working key nothing changes.
+
 ## Environment
 
-`VITE_GOOGLE_MAPS_API_KEY` (browser key, Maps JavaScript API plus Places API). The page uses the legacy `places.Autocomplete` for the search box, so the key needs the Places API (not only Places API New).
+`VITE_GOOGLE_MAPS_API_KEY` (optional; browser key, Maps JavaScript API plus Places API). The page uses the legacy `places.Autocomplete` for the search box, so the key needs the Places API (not only Places API New).
 
 ## Tests
 

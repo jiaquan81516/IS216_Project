@@ -4,7 +4,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import { createPinia, setActivePinia } from "pinia";
 import { ROUTES } from "@/app/routes";
 
-const state = vi.hoisted(() => ({ members: [], household: null, handovers: [] }));
+const state = vi.hoisted(() => ({ members: [], household: null, handovers: [], posts: [] }));
 
 vi.mock("@/api/firebase", () => ({ default: {}, auth: {} }));
 vi.mock("@/app/api/db", () => ({ db: {} }));
@@ -35,6 +35,14 @@ vi.mock("@/app/api/handovers", () => ({
   },
 }));
 
+vi.mock("@/app/api/posts", () => ({
+  POST_TEXT_MAX: 500,
+  subscribePosts: (_id, onData) => {
+    queueMicrotask(() => onData(state.posts));
+    return () => {};
+  },
+}));
+
 import AppShell from "@/app/layouts/AppShell.vue";
 
 async function mountShell() {
@@ -61,14 +69,15 @@ beforeEach(() => {
     { uid: "u2", displayName: "Mei Lin", role: "partner" },
   ];
   state.handovers = [];
+  state.posts = [];
 });
 
 describe("App app shell", () => {
-  it("renders the main nav with eight items and Today as the current page", async () => {
+  it("renders the main nav with eight items and Home as the current page", async () => {
     const { wrapper } = await mountShell();
     const links = wrapper.findAll('nav[aria-label="Main"] a');
     expect(links.map((a) => a.text())).toEqual([
-      "Today",
+      "Home",
       "Care log",
       "Handover",
       "Sleep rota",
@@ -105,6 +114,26 @@ describe("App app shell", () => {
     expect(badge.attributes("aria-hidden")).toBe("true");
     const link = second.wrapper.findAll('nav[aria-label="Main"] a')[2];
     expect(link.text()).toContain("1 handover waiting for you");
+  });
+
+  it("shows a small unread dot on Home only while a partner post is unacknowledged", async () => {
+    const { wrapper } = await mountShell();
+    expect(wrapper.find(".side__dot").exists()).toBe(false);
+
+    state.posts = [{ id: "p1", text: "Hi", authorUid: "u2", createdAt: new Date(), ackedBy: [] }];
+    const second = await mountShell();
+    const home = second.wrapper.findAll('nav[aria-label="Main"] a')[0];
+    expect(home.find(".side__dot").exists()).toBe(true);
+    expect(home.find(".side__dot").attributes("aria-hidden")).toBe("true");
+    expect(home.find(".visually-hidden").text()).toBe("unread");
+
+    state.posts = [{ id: "p1", text: "Hi", authorUid: "u2", createdAt: new Date(), ackedBy: ["u1"] }];
+    const third = await mountShell();
+    expect(third.wrapper.find(".side__dot").exists()).toBe(false);
+
+    state.posts = [{ id: "p2", text: "Mine", authorUid: "u1", createdAt: new Date(), ackedBy: [] }];
+    const fourth = await mountShell();
+    expect(fourth.wrapper.find(".side__dot").exists()).toBe(false);
   });
 
   it("drops the badge once it has been accepted", async () => {

@@ -3,7 +3,7 @@ import { ROUTES } from "@/app/routes";
 // Sidebar items. All eight point to App pages. Handover sits between the care log and the
 // sleep rota, because it is the boundary between two shifts.
 export const NAV = Object.freeze([
-  { key: "today", label: "Today", icon: "home", to: ROUTES.HOME },
+  { key: "today", label: "Home", icon: "home", to: ROUTES.HOME },
   { key: "care-log", label: "Care log", icon: "clock", to: ROUTES.CARE_LOG },
   { key: "handover", label: "Handover", icon: "handover", to: ROUTES.HANDOVER },
   { key: "rota", label: "Sleep rota", icon: "moon", to: ROUTES.ROTA },
