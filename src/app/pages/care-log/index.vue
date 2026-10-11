@@ -56,14 +56,6 @@ const allEntries = computed(() => {
 });
 const hasMore = computed(() => !exhausted.value && live.value.length >= PAGE_SIZE);
 
-// Filters
-const FILTERS = [
-  { value: "all", label: "All" },
-  { value: "mine", label: "Mine" },
-  { value: "new", label: "New" },
-];
-const filter = ref("all");
-
 const newIds = ref(new Set());
 const requested = new Set();
 
@@ -71,24 +63,17 @@ const myUid = computed(() => me.value.uid);
 const isMine = (entry) => entry.by === myUid.value;
 const hasSeen = (entry) => Object.prototype.hasOwnProperty.call(entry.seenBy ?? {}, myUid.value);
 
-const visibleEntries = computed(() => {
-  if (filter.value === "mine") return allEntries.value.filter(isMine);
-  if (filter.value === "new") return allEntries.value.filter((e) => newIds.value.has(e.id));
-  return allEntries.value;
-});
 // Handover boundaries are drawn from the handovers the shell already listens to, so the
 // timeline reads as shifts without a second query.
 const handoversShared = inject(HANDOVERS_KEY, null) ?? useHandovers(householdId, myUid);
 const groups = computed(() =>
-  groupByDay(visibleEntries.value, now.value).map((group) => ({
+  groupByDay(allEntries.value, now.value).map((group) => ({
     ...group,
     rows: handoverRows(group.entries, handoversShared.handovers.value),
   })),
 );
 
 const partnerFirst = computed(() => (partner.value ? displayName(partner.value.firstName) : ""));
-const babyName = computed(() => baby.value.name || "Baby");
-const subtitle = computed(() => (baby.value.line ? `${babyName.value}, ${baby.value.line.toLowerCase()}` : babyName.value));
 
 function byLabel(entry) {
   if (isMine(entry)) return "you";
@@ -120,9 +105,9 @@ const lastFeedLine = computed(() => {
 const stats = computed(() => {
   const s = todayStats(allEntries.value, now.value);
   return [
-    { key: "feeds", text: `${s.feeds} ${s.feeds === 1 ? "feed" : "feeds"}` },
-    { key: "sleep", text: `${formatMinutes(s.sleepMinutes)} sleep` },
-    { key: "nappies", text: `${s.nappies} ${s.nappies === 1 ? "nappy" : "nappies"}` },
+    { key: "feeds", value: String(s.feeds), label: s.feeds === 1 ? "Feed" : "Feeds" },
+    { key: "sleep", value: formatMinutes(s.sleepMinutes), label: "Sleep" },
+    { key: "nappies", value: String(s.nappies), label: s.nappies === 1 ? "Nappy" : "Nappies" },
   ];
 });
 
@@ -300,7 +285,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
       <header class="cl__head">
         <div class="cl__head-text">
           <h1 class="nt-title cl__title">Care log</h1>
-          <p class="cl__sub">{{ subtitle }}</p>
+          <p class="cl__sub">Everything you and your partner have logged, newest first.</p>
         </div>
         <button
           type="button"
@@ -313,56 +298,30 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
         </button>
       </header>
 
-      <section class="cl__strip" aria-label="Last feed and today so far">
-        <div class="cl__last">
-          <template v-if="lastFeed">
-            <p class="cl__last-title">{{ lastFeedTitle }}</p>
-            <p class="cl__muted">{{ lastFeedLine }}</p>
-          </template>
-          <p v-else class="cl__last-title">No feeds logged yet</p>
-        </div>
-        <div class="cl__today">
-          <p class="cl__muted">Today so far</p>
-          <ul class="cl__stats">
-            <li v-for="stat in stats" :key="stat.key">{{ stat.text }}</li>
-          </ul>
-        </div>
+      <section class="cl__card cl__strip" aria-labelledby="cl-today">
+        <h2 id="cl-today" class="cl__card-title">Today</h2>
+        <dl class="cl__stats">
+          <div v-for="stat in stats" :key="stat.key" class="cl__stat">
+            <dd class="cl__big">{{ stat.value }}</dd>
+            <dt class="cl__stat-label">{{ stat.label }}</dt>
+          </div>
+          <div class="cl__stat cl__stat--last">
+            <template v-if="lastFeed">
+              <dd class="cl__big">{{ lastFeedTitle.replace("Last feed ", "") }}</dd>
+              <dt class="cl__stat-label">Last feed. {{ lastFeedLine }}</dt>
+            </template>
+            <template v-else>
+              <dd class="cl__big cl__big--empty">None yet</dd>
+              <dt class="cl__stat-label">No feeds logged yet</dt>
+            </template>
+          </div>
+        </dl>
       </section>
 
       <div class="cl__cols">
-        <aside class="cl__quick" aria-labelledby="cl-quick">
-          <h2 id="cl-quick" class="nt-heading nt-heading--sm">Quick log</h2>
-          <p class="cl__muted">Tap one to start</p>
-          <div class="cl__tiles">
-            <button
-              v-for="t in quickTypes"
-              :key="t.key"
-              type="button"
-              class="cl__tile"
-              @click="openPanel(t.key, $event)"
-            >
-              <Icon :name="t.icon" :size="22" />
-              <span class="cl__tile-label">{{ t.label }}</span>
-              <span class="cl__tile-hint">{{ t.hint }}</span>
-            </button>
-          </div>
-        </aside>
-
-        <section class="cl__timeline" aria-labelledby="cl-timeline">
+        <section class="cl__card cl__timeline" aria-labelledby="cl-timeline">
           <div class="cl__tl-head">
-            <h2 id="cl-timeline" class="nt-heading">Timeline</h2>
-            <div class="cl__filters" role="group" aria-label="Filter the timeline">
-              <button
-                v-for="f in FILTERS"
-                :key="f.value"
-                type="button"
-                class="app-chip"
-                :aria-pressed="filter === f.value ? 'true' : 'false'"
-                @click="filter = f.value"
-              >
-                {{ f.label }}
-              </button>
-            </div>
+            <h2 id="cl-timeline" class="cl__card-title cl__card-title--lg">Timeline</h2>
           </div>
 
           <div aria-live="polite">
@@ -382,9 +341,6 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
               <h3 class="cl__empty-title">No care logged yet</h3>
               <p class="cl__muted">Log the first feed or nap and your partner will see it here.</p>
             </div>
-            <p v-else-if="!visibleEntries.length" class="cl__muted cl__none">
-              {{ filter === "new" ? "Nothing new to catch up on." : "You have not logged anything in this list yet." }}
-            </p>
 
             <section v-for="group in groups" :key="group.key" class="cl__day" :aria-label="group.label">
               <h3 class="cl__day-title">{{ group.label }}</h3>
@@ -393,7 +349,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
                 <li v-if="row.kind === 'divider'" class="cl__handover">{{ row.label }}</li>
                 <li v-else class="cl__row">
                   <span class="cl__time">{{ prefTime(row.entry.at) }}</span>
-                  <span class="cl__icon" :class="isMine(row.entry) ? 'cl__icon--me' : 'cl__icon--partner'">
+                  <span class="cl__icon">
                     <Icon :name="iconOf(row.entry)" :size="18" />
                   </span>
                   <div class="cl__body">
@@ -454,6 +410,22 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
             </div>
           </template>
         </section>
+
+        <aside class="cl__card cl__quick" aria-labelledby="cl-quick">
+          <h2 id="cl-quick" class="cl__card-title cl__card-title--lg">Quick log</h2>
+          <ul class="cl__links">
+            <li v-for="t in quickTypes" :key="t.key">
+              <button type="button" class="cl__link" @click="openPanel(t.key, $event)">
+                <Icon :name="t.icon" :size="20" class="cl__link-icon" />
+                <span class="cl__link-text">
+                  <span class="cl__link-label">{{ t.label }}</span>
+                  <span class="cl__link-hint">{{ t.hint }}</span>
+                </span>
+                <Icon name="chevron" :size="16" class="cl__link-icon" />
+              </button>
+            </li>
+          </ul>
+        </aside>
       </div>
 
       <CareLogPanel
@@ -470,7 +442,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 </template>
 
 <style scoped>
-.cl { display: flex; flex-direction: column; gap: 24px; max-width: 1120px; margin: 0 auto; font-size: 1rem; }
+.cl { display: flex; flex-direction: column; gap: 24px; width: 100%; font-size: 1rem; }
 .cl__status { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
 .cl__muted { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
 .cl__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 0; font-size: 0.875rem; border-radius: 8px; }
@@ -481,40 +453,42 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 .cl__sub { margin: 0; font-size: 1rem; color: var(--nt-muted); }
 .cl__log { display: inline-flex; align-items: center; gap: 8px; }
 
-.cl__strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 32px; padding: 20px 0; border-top: 1px solid var(--nt-line); border-bottom: 1px solid var(--nt-line); }
-.cl__last { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.cl__last-title { margin: 0; font-family: var(--nt-serif); font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.01em; color: var(--nt-ink); }
-.cl__today { display: flex; flex-direction: column; gap: 4px; }
-.cl__stats { display: flex; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; }
-.cl__stats li { padding: 0 16px; border-left: 1px solid var(--nt-line); font-size: 0.875rem; font-weight: 600; color: var(--nt-ink); }
-.cl__stats li:first-child { padding-left: 0; border-left: 0; }
-.cl__stats li:last-child { padding-right: 0; }
+.cl__card { background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; padding: 24px; min-width: 0; }
+.cl__card-title { margin: 0 0 12px; font-size: 0.9375rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
+.cl__card-title--lg { font-size: 1.125rem; margin-bottom: 8px; }
 
-.cl__cols { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 32px; align-items: start; }
-.cl__quick { order: 2; display: flex; flex-direction: column; gap: 4px; padding: 20px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
-.cl__timeline { order: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.cl__tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
-.cl__tile { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px; background: #fff; border: 1px solid var(--nt-line); border-radius: 8px; font-family: inherit; text-align: left; color: var(--nt-ink); cursor: pointer; transition: background-color 0.15s, border-color 0.15s; }
-.cl__tile:hover { background: var(--nt-gray); }
-.cl__tile:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
-.cl__tile-label { font-size: 0.875rem; font-weight: 600; }
-.cl__tile-hint { font-size: 0.875rem; line-height: 1.35; color: var(--nt-muted); }
+.cl__stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 24px; margin: 0; }
+.cl__stat { display: flex; flex-direction: column-reverse; justify-content: flex-end; gap: 4px; min-width: 0; padding-left: 24px; border-left: 1px solid var(--nt-line); }
+.cl__stat:first-child { padding-left: 0; border-left: 0; }
+.cl__big { margin: 0; font-size: 1.75rem; font-weight: 600; line-height: 1.2; color: var(--nt-ink); }
+.cl__big--empty { font-size: 1.25rem; font-weight: 500; color: var(--nt-muted); }
+.cl__stat-label { font-size: 0.875rem; font-weight: 400; line-height: 1.45; color: var(--nt-muted); }
 
-.cl__tl-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
-.cl__filters { display: flex; gap: 4px; }
+.cl__cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.cl__quick { order: 1; }
+.cl__timeline { order: 2; display: flex; flex-direction: column; gap: 8px; }
 
-.cl__empty { padding: 24px 0; border-top: 1px solid var(--nt-line); }
-.cl__empty-title { margin: 0 0 4px; font-family: var(--nt-serif); font-size: 1.125rem; font-weight: 400; color: var(--nt-ink); }
-.cl__none { padding: 16px 0; border-top: 1px solid var(--nt-line); }
+.cl__links { margin: 0; padding: 0; list-style: none; }
+.cl__links li + li { border-top: 1px solid var(--nt-line); }
+.cl__link { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 0; background: none; border: 0; font-family: inherit; text-align: left; color: var(--nt-ink); cursor: pointer; }
+.cl__link-icon { flex: none; color: var(--nt-muted); }
+.cl__link-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.cl__link-label { font-size: 1rem; font-weight: 600; }
+.cl__link-hint { font-size: 0.875rem; color: var(--nt-muted); }
+.cl__link:hover .cl__link-label { color: var(--nt-plum); text-decoration: underline; text-underline-offset: 3px; }
+.cl__link:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
 
-.cl__day-title { margin: 0 0 8px; font-family: var(--nt-serif); font-size: 1.125rem; font-weight: 400; line-height: 1.3; color: var(--nt-ink); }
+.cl__empty { padding: 16px 0; border-top: 1px solid var(--nt-line); }
+.cl__empty-title { margin: 0 0 4px; font-size: 1rem; font-weight: 600; color: var(--nt-ink); }
+
+.cl__day { margin-top: 8px; }
+.cl__day-title { margin: 0 0 4px; font-size: 0.875rem; font-weight: 600; line-height: 1.3; color: var(--nt-muted); }
 .cl__rows { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
 .cl__handover { padding: 8px 0; border-bottom: 1px solid var(--nt-line); font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
-.cl__row { display: grid; grid-template-columns: 72px 36px minmax(0, 1fr) auto; gap: 16px; align-items: start; padding: 16px 0; border-bottom: 1px solid var(--nt-line); }
+.cl__row { display: grid; grid-template-columns: 72px 18px minmax(0, 1fr) auto; gap: 16px; align-items: start; padding: 16px 0; border-bottom: 1px solid var(--nt-line); }
+.cl__rows > .cl__row:last-child { border-bottom: 0; }
 .cl__time { font-size: 0.875rem; line-height: 36px; color: var(--nt-muted); }
-.cl__icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; color: var(--nt-ink); }
-.cl__icon--me { background: var(--nt-apricot); }
-.cl__icon--partner { background: var(--nt-powder); }
+.cl__icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 36px; color: var(--nt-muted); }
 .cl__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .cl__row-title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.5; color: var(--nt-ink); }
 .cl__row-detail { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); overflow-wrap: anywhere; }
@@ -532,14 +506,22 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 .cl__btn-danger { --bs-btn-color: var(--nt-coral); --bs-btn-hover-color: var(--nt-coral); --bs-btn-active-color: var(--nt-coral); --bs-btn-border-color: var(--nt-coral); --bs-btn-hover-border-color: var(--nt-coral); --bs-btn-active-border-color: var(--nt-coral); }
 .cl__more { display: flex; justify-content: center; padding-top: 8px; }
 
+@media (min-width: 1100px) {
+  .cl__cols { grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; }
+  .cl__quick { order: 2; }
+  .cl__timeline { order: 1; }
+}
 @media (max-width: 991px) {
-  .cl__cols { grid-template-columns: minmax(0, 1fr); }
-  .cl__quick { order: 1; }
-  .cl__timeline { order: 2; }
   .cl__title { font-size: 2rem; }
+  .cl__stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cl__stat--last { grid-column: 1 / -1; padding-left: 0; border-left: 0; padding-top: 16px; border-top: 1px solid var(--nt-line); }
 }
 @media (max-width: 575px) {
-  .cl__row { grid-template-columns: 36px minmax(0, 1fr); }
+  .cl__card { padding: 20px; }
+  .cl__stats { gap: 16px 12px; }
+  .cl__stat { padding-left: 12px; }
+  .cl__big { font-size: 1.375rem; }
+  .cl__row { grid-template-columns: 18px minmax(0, 1fr); }
   .cl__time { grid-column: 2; grid-row: 1; line-height: 1.45; }
   .cl__icon { grid-column: 1; grid-row: 1 / span 2; }
   .cl__body { grid-column: 2; }

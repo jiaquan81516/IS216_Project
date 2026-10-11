@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  dayBlocks,
+  layoutWeekEvents,
+  monthTitle,
+  weekDays,
+  weekStartOf,
+  weekTitle,
   agendaGroups,
   agendaHeading,
   dateRangeLabel,
@@ -155,5 +161,49 @@ describe("nightOwner", () => {
   it("applies accepted swaps", () => {
     const swapped = { ...rota, swaps: [{ id: "s", date: "2026-10-12", withDate: null, from: "me", status: "accepted" }] };
     expect(nightOwner(swapped, "2026-10-12").who).toBe("partner");
+  });
+});
+
+describe("week and month titles", () => {
+  it("formats TimeTree style titles", () => {
+    expect(monthTitle(2026, 9)).toBe("October, 2026");
+    expect(weekStartOf("2026-10-14", 1)).toBe("2026-10-12");
+    expect(weekStartOf("2026-10-14", 0)).toBe("2026-10-11");
+    expect(weekTitle(weekDays("2026-10-12"))).toBe("October, 2026");
+    expect(weekTitle(weekDays("2026-10-26"))).toBe("October to November, 2026");
+    expect(weekTitle(weekDays("2026-12-28"))).toBe("December, 2026 to January, 2027");
+  });
+});
+
+describe("layoutWeekEvents", () => {
+  const week = weekDays("2026-10-12");
+  const ev = (id, date, over = {}) => ({ id, title: id, date, endDate: over.endDate ?? date, allDay: true, start: null, end: null, ...over });
+
+  it("puts bars first, spans multi-day events and flags continuation", () => {
+    const out = layoutWeekEvents([ev("t", "2026-10-13", { allDay: false, start: "09:00" }), ev("trip", "2026-10-10", { endDate: "2026-10-14" })], week);
+    expect(out.items.map((i) => i.event.id)).toEqual(["trip", "t"]);
+    expect(out.items[0]).toMatchObject({ start: 0, end: 2, span: 3, contLeft: true, contRight: false, bar: true, lane: 0 });
+    expect(out.items[1].lane).toBe(1);
+  });
+
+  it("counts what does not fit in three lanes per day", () => {
+    const events = ["a", "b", "c", "d", "e"].map((id) => ev(id, "2026-10-14"));
+    const out = layoutWeekEvents(events, week, 3);
+    expect(out.items).toHaveLength(3);
+    expect(out.hidden).toEqual([0, 0, 2, 0, 0, 0, 0]);
+  });
+});
+
+describe("dayBlocks", () => {
+  it("places overlapping timed events side by side", () => {
+    const events = [
+      { id: "a", title: "A", date: "2026-10-14", endDate: "2026-10-14", allDay: false, start: "09:00", end: "10:00" },
+      { id: "b", title: "B", date: "2026-10-14", endDate: "2026-10-14", allDay: false, start: "09:30", end: "11:00" },
+      { id: "c", title: "C", date: "2026-10-14", endDate: "2026-10-14", allDay: false, start: "12:00", end: null },
+      { id: "d", title: "D", date: "2026-10-14", endDate: "2026-10-14", allDay: true },
+    ];
+    const blocks = dayBlocks(events, "2026-10-14");
+    expect(blocks.map((b) => [b.event.id, b.col, b.cols])).toEqual([["a", 0, 2], ["b", 1, 2], ["c", 0, 1]]);
+    expect(blocks[2].endMin - blocks[2].startMin).toBe(60);
   });
 });

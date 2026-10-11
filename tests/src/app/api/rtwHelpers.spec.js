@@ -96,23 +96,20 @@ describe("ownerCounts", () => {
 });
 
 describe("suggestedTasks", () => {
-  it("returns the six fixed suggestions", () => {
+  it("returns the three fixed suggestions", () => {
     const all = suggestedTasks([]);
     expect(all.map((s) => s.title)).toEqual([
-      "Talk to your manager about flexible work",
-      "Choose childcare and book a trial",
-      "Plan the morning handover",
-      "Find a pumping room near work",
-      "Pack pump, parts and storage bags",
-      "Agree who does night duty in the first week back",
+      "Plan the morning routine",
+      "Arrange a childcare trial",
+      "Talk to your manager",
     ]);
-    expect(all.map((s) => s.group)).toEqual(["work", "childcare", "home", "pumping", "pumping", "wellbeing"]);
+    expect(all.map((s) => s.group)).toEqual(["home", "childcare", "work"]);
   });
 
   it("drops suggestions already added, ignoring case and spaces", () => {
-    const left = suggestedTasks(["  find a pumping room NEAR work ", "Something else"]);
-    expect(left).toHaveLength(5);
-    expect(left.some((s) => s.title === "Find a pumping room near work")).toBe(false);
+    const left = suggestedTasks(["  arrange A childcare TRIAL ", "Something else"]);
+    expect(left).toHaveLength(2);
+    expect(left.some((s) => s.title === "Arrange a childcare trial")).toBe(false);
   });
 });
 

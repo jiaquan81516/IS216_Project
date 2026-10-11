@@ -52,10 +52,10 @@ console.
    picker at the top says the Firebase project.
 2. **Enable the Calendar API.** APIs and services, Library, search "Google Calendar API",
    Enable.
-3. **Enable place suggestions.** In the same Library, enable **Maps JavaScript API** and
+3. **Enable place suggestions (optional).** In the same Library, enable **Maps JavaScript API** and
    **Places API (New)**. Create a separate API key for the browser, restrict it to the app's
    local and production web origins, restrict its API access to those two APIs, and save it as
-   `VITE_GOOGLE_MAPS_API_KEY`. This key powers building/address suggestions when adding a
+   `VITE_GOOGLE_MAPS_API_KEY`. Skip this step to run without a Maps key (see "Running without a Maps key" below). This key powers building/address suggestions when adding a
    pumping place; it is intentionally separate from the Calendar OAuth credentials.
 4. **OAuth consent screen.** APIs and services, OAuth consent screen.
    - User type: External. Publishing status can stay "Testing" for the module.
@@ -112,7 +112,11 @@ console.
    | `OAUTH_STATE_SECRET` | any long random string: `openssl rand -base64 48` |
    | `APP_URL` | `https://your-app.vercel.app`, with no trailing slash |
    | `VITE_FIREBASE_*` | the web config, only if you have moved it out of `src/api/firebase.js` |
-   | `VITE_GOOGLE_MAPS_API_KEY` | browser-restricted key with Maps JavaScript API and Places API (New) |
+   | `VITE_GOOGLE_MAPS_API_KEY` | optional: browser-restricted key with Maps JavaScript API and Places API (New) |
+
+   Running without a Maps key: leave `VITE_GOOGLE_MAPS_API_KEY` unset, empty, or as the placeholder from
+   `.env.example`. The pumping rooms page then lists rooms with "Open in Google Maps" and "Directions"
+   links, and adding a room is turned off (it needs Google place search). No billing is needed.
 
    Everything without a `VITE_` prefix stays on the server: Vite only puts `VITE_` variables
    into the browser bundle, which is why the names are what they are. Never put a service

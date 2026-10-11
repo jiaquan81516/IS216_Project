@@ -1,0 +1,32 @@
+// SEED DATA for the pumping room directory. The real directory is the Firestore collection
+// `pumpingRooms` (see src/v3/api/rooms.js). These two rooms are shown only while that
+// collection is empty, so a new deployment is not a blank page. They are placeholders from
+// the team design: the addresses and the verification status are NOT confirmed, and they
+// cannot be confirmed or flagged because they are not database rows.
+export const SEED_ROOMS = Object.freeze([
+  {
+    id: "seed-smu-library",
+    name: "SMU Library Nursing Room",
+    address: "70 Stamford Road, Singapore 178901",
+    features: ["Chair", "Power outlet", "Lockable"],
+    status: "verified",
+    verifiedDaysAgo: 4,
+    seed: true,
+  },
+  {
+    id: "seed-raffles-city",
+    name: "Raffles City Family Room",
+    address: "252 North Bridge Road, Singapore 179103",
+    features: ["Chair", "Sink"],
+    status: "needs verification",
+    verifiedDaysAgo: null,
+    seed: true,
+  },
+]);
+
+// Kept under the old name so nothing that imported it has to change.
+export const SAMPLE_ROOMS = SEED_ROOMS;
+
+// Feature chips used to filter the list, and the longer set offered in the add form.
+export const FILTER_FEATURES = Object.freeze(["Chair", "Power outlet", "Lockable", "Sink"]);
+export const FORM_FEATURES = Object.freeze(["Chair", "Power outlet", "Lockable", "Sink", "Stroller access"]);

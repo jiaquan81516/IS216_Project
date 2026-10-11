@@ -162,6 +162,7 @@ async function copyCode() {
       <div class="app-stack app-stack--24 hh__main">
         <StepHeader :step="4" :title="title" :lead="lead" />
 
+        <div class="hh__card app-stack app-stack--24">
         <template v-if="!ready">
           <form class="app-stack app-stack--24 w-100" novalidate :aria-busy="busy" @submit.prevent="submit">
             <div class="hh__options" role="radiogroup" aria-label="Household setup" @keydown="onKeydown">
@@ -259,6 +260,7 @@ async function copyCode() {
             </button>
           </div>
         </template>
+        </div>
       </div>
 
       <aside class="hh__aside" aria-labelledby="shared-title">
@@ -277,7 +279,8 @@ async function copyCode() {
 </template>
 
 <style scoped>
-.hh { display: grid; grid-template-columns: 640px 384px; gap: 96px; align-items: start; }
+.hh { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 32px; align-items: start; }
+.hh__card { width: 100%; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
 .hh__main { min-width: 0; }
 .hh__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: 100%; }
 .hh__status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
@@ -285,13 +288,13 @@ async function copyCode() {
 .hh__seg:hover { border-color: var(--nt-muted); }
 .hh__seg--on, .hh__seg--on:hover { border-color: var(--nt-plum); box-shadow: 0 0 0 1px var(--nt-plum); }
 .hh__seg:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
-.hh__code { display: flex; align-items: center; justify-content: center; width: 100%; padding: 28px 48px; background: var(--nt-gray); border-radius: 12px; }
+.hh__code { display: flex; align-items: center; justify-content: center; width: 100%; padding: 32px 48px; background: var(--nt-gray); border-radius: 12px; }
 .hh__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .hh__code-text { margin: 0; font-family: var(--nt-serif); font-size: 40px; line-height: normal; letter-spacing: 0.8px; color: var(--nt-plum); }
 
-.hh__aside { display: flex; flex-direction: column; gap: 20px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
-.hh__aside-title { margin: 0; font-family: var(--nt-serif); font-weight: 400; font-size: 22px; line-height: normal; color: var(--nt-ink); }
-.hh__shared { display: flex; flex-direction: column; gap: 4px; }
+.hh__aside { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 20px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.hh__aside-title { margin: 0; font-size: 1.125rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
+.hh__shared { display: flex; flex-direction: column; gap: 4px; padding-bottom: 20px; border-bottom: 1px solid var(--nt-line); }
 .hh__shared-label { margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--nt-ink); }
 .hh__shared-text { margin: 0; font-size: 0.875rem; line-height: 21px; color: var(--nt-muted); }
 .hh__private { display: flex; flex-direction: column; gap: 6px; padding: 16px 16px 18px; background: var(--nt-butter); border: 1.5px dashed var(--nt-butter-d); border-radius: 8px; font-size: 0.875rem; }
@@ -300,6 +303,7 @@ async function copyCode() {
 
 @media (max-width: 1099px) {
   .hh { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .hh__aside { position: static; }
 }
 @media (max-width: 575px) {
   .hh__options { grid-template-columns: minmax(0, 1fr); }
