@@ -7,15 +7,10 @@ import AppButton from "@/components/ui/AppButton.vue";
 import Icon from "@/app/components/Icon.vue";
 import RoomCard from "@/app/components/RoomCard.vue";
 import RoomFilterPanel from "@/app/components/RoomFilterPanel.vue";
-import RoomMap from "@/app/components/RoomMap.vue";
-import GooglePlaceAutocomplete from "@/app/components/GooglePlaceAutocomplete.vue";
-import { embedUrlFor, DEFAULT_EMBED_URL } from "@/app/api/roomHelpers";
-import { loadGoogleMaps } from "@/app/api/googleMaps";
-import { mapsState, setMapsState, syncMapsState } from "@/app/api/mapsState";
+import OneMapEmbed from "@/app/components/OneMapEmbed.vue";
 import { loadBmsgRooms } from "@/app/api/bmsgRooms";
 import {
   DEFAULT_CENTER,
-  DEFAULT_ZOOM,
   activeFilterCount,
   applyFilters,
   mergeRooms,
@@ -23,37 +18,20 @@ import {
   sortByDistance,
 } from "@/app/api/mapHelpers";
 import { describeSharedError } from "@/app/api/sharedHelpers";
-import { FORM_FEATURES, SEED_COORDS } from "@/app/data/pumpingRooms";
+import { SEED_COORDS } from "@/app/data/pumpingRooms";
 import { useRoomsStore } from "@/app/stores/rooms";
 
 defineOptions({ name: "PumpingRoomsPage" });
 
-const ADD_OFF = "Adding a room needs Google place search, which is turned off for now. You can still use Open in Google Maps to check a place.";
+const ADD_OFF = "Adding a room needs OneMap address search, which comes with the deployed version. For now rooms are added by the team.";
 const SAVED_ROOMS_KEY = "nurturetrack:saved-pumping-rooms";
-syncMapsState();
-// Fallback mode: no key, or Google rejected it or did not load. The list works on its own.
-const fallback = computed(() => mapsState.value === "no-key" || mapsState.value === "failed");
 const located = ref(false);
 
 const roomsStore = useRoomsStore();
 const listed = ref([]);
-const mapEnabled = computed(() => !fallback.value);
-// Keyless embed shown when there is no working Maps key: whole island, or the chosen room / location.
-const embedPoint = computed(() => {
-  const room = visible.value.find((r) => r.id === selectedId.value);
-  if (room && Number.isFinite(room.lat) && Number.isFinite(room.lng)) return { point: room, label: room.name };
-  if (located.value) return { point: origin.value, label: "" };
-  return { point: null, label: "" };
-});
-const embedSrc = computed(() => embedUrlFor(embedPoint.value.point, embedPoint.value.label) || DEFAULT_EMBED_URL);
-const embedTitle = computed(() => {
-  const room = visible.value.find((r) => r.id === selectedId.value);
-  return `Map of ${room ? room.name : located.value ? "your area" : "Singapore"}`;
-});
 
 // Search, filters and view
 const query = ref("");
-const placeChosen = ref(false);
 const filters = ref({ features: [], verifiedOnly: false });
 const filterOpen = ref(false);
 const view = ref("all");
@@ -61,11 +39,9 @@ const selectedId = ref("");
 const message = ref("");
 const locationMessage = ref("");
 
-// Where distances are measured from, and what the map shows.
+// Where distances are measured from.
 const origin = ref({ ...DEFAULT_CENTER });
 const originLabel = ref("in Singapore");
-const mapCenter = ref({ ...DEFAULT_CENTER });
-const mapZoom = ref(DEFAULT_ZOOM);
 
 function readSaved() {
   try {
@@ -89,13 +65,11 @@ function toggleSaved(room) {
 
 // Rooms: database rooms first, then the BMSG directory rooms, de-duplicated.
 const allRooms = computed(() => mergeRooms(prepareCommunityRooms(roomsStore.rooms, SEED_COORDS), listed.value));
-const textFilter = computed(() => (placeChosen.value ? "" : query.value));
 const visible = computed(() => {
   const base = view.value === "saved" ? allRooms.value.filter((r) => savedIds.value.includes(r.id)) : allRooms.value;
-  const filtered = applyFilters(base, { text: textFilter.value, ...filters.value });
-  // In fallback mode distance only matters once the person has shared their location.
-  if (fallback.value && !located.value) return filtered;
-  return sortByDistance(filtered, origin.value);
+  const filtered = applyFilters(base, { text: query.value, ...filters.value });
+  // Distance only matters once the person has shared their location.
+  return located.value ? sortByDistance(filtered, origin.value) : filtered;
 });
 const savedCount = computed(() => allRooms.value.filter((r) => savedIds.value.includes(r.id)).length);
 const countText = computed(() => {
@@ -105,117 +79,59 @@ const countText = computed(() => {
 const roomsError = computed(() => (roomsStore.error ? describeSharedError(roomsStore.error.code, "pumping rooms").text : ""));
 const filterCount = computed(() => activeFilterCount(filters.value));
 
-// Selecting
-function scrollToCard(id) {
-  nextTick(() => document.getElementById(`room-card-${id}`)?.scrollIntoView?.({ block: "nearest" }));
-}
-function selectFromMap(id) {
-  selectedId.value = id;
-  if (id) scrollToCard(id);
-}
+// The OneMap embed: the chosen room, else the person's location, else the whole island.
+const embed = computed(() => {
+  const room = visible.value.find((r) => r.id === selectedId.value);
+  if (room && Number.isFinite(room.lat) && Number.isFinite(room.lng)) return { lat: room.lat, lng: room.lng, label: room.name };
+  if (located.value) return { lat: origin.value.lat, lng: origin.value.lng, label: "your area" };
+  return { lat: null, lng: null, label: "" };
+});
+
 function selectFromList(room) {
   selectedId.value = room.id;
-  if (Number.isFinite(room.lat) && Number.isFinite(room.lng)) {
-    mapCenter.value = { lat: room.lat, lng: room.lng };
-    mapZoom.value = Math.max(mapZoom.value, 15);
-  }
 }
 
-// Search
 function onInput(event) {
   query.value = event.target.value;
-  placeChosen.value = false;
 }
-const searchInput = ref(null);
-let autocomplete = null;
-let placeListener = null;
 onMounted(async () => {
   roomsStore.bind();
   listed.value = await loadBmsgRooms();
-  // Start at the user's location when they allow it; stay quiet when they do not.
-  if (fallback.value) return;
-  locate({ silent: true });
-  try {
-    const maps = await loadGoogleMaps();
-    const { Autocomplete } = await maps.importLibrary("places");
-    if (!Autocomplete || !searchInput.value) return;
-    autocomplete = new Autocomplete(searchInput.value, {
-      componentRestrictions: { country: "sg" },
-      fields: ["geometry", "name", "formatted_address"],
-    });
-    placeListener = autocomplete.addListener("place_changed", () => {
-      const place = autocomplete.getPlace();
-      const loc = place?.geometry?.location;
-      if (!loc) return;
-      const point = { lat: typeof loc.lat === "function" ? loc.lat() : loc.lat, lng: typeof loc.lng === "function" ? loc.lng() : loc.lng };
-      placeChosen.value = true;
-      query.value = place.name || query.value;
-      origin.value = point;
-      originLabel.value = `near ${place.name || "your search"}`;
-      mapCenter.value = { ...point };
-      mapZoom.value = 14;
-      locationMessage.value = "";
-    });
-  } catch (cause) {
-    setMapsState("failed");
-  }
 });
-onBeforeUnmount(() => {
-  placeListener?.remove?.();
-  placeListener = null;
-  autocomplete = null;
-  roomsStore.unbind();
-});
+onBeforeUnmount(() => roomsStore.unbind());
 
 // Geolocation
-function locate({ silent = false } = {}) {
-  if (!silent) locationMessage.value = "";
+function locate() {
+  locationMessage.value = "";
   if (!globalThis.navigator?.geolocation) {
-    if (!silent) locationMessage.value = "Location is not available in this browser. Search for a place instead.";
+    locationMessage.value = "Location is not available in this browser. Search for a place instead.";
     return;
   }
   navigator.geolocation.getCurrentPosition(
     ({ coords }) => {
-      const point = { lat: coords.latitude, lng: coords.longitude };
       located.value = true;
-      placeChosen.value = false;
       query.value = "";
-      origin.value = point;
+      origin.value = { lat: coords.latitude, lng: coords.longitude };
       originLabel.value = "near you";
-      mapCenter.value = { ...point };
-      mapZoom.value = 14;
     },
     () => {
-      if (!silent) locationMessage.value = "We could not access your location. Search for a place instead.";
+      locationMessage.value = "We could not access your location. Search for a place instead.";
     },
   );
 }
 
-function onCenterChanged(point) {
-  origin.value = point;
-  originLabel.value = "near the map centre";
-}
-function onMapUnavailable() {
-  setMapsState("failed");
-}
 function viewAll() {
   filters.value = { features: [], verifiedOnly: false };
   query.value = "";
-  placeChosen.value = false;
   view.value = "all";
   selectedId.value = "";
   origin.value = { ...DEFAULT_CENTER };
   originLabel.value = "in Singapore";
   located.value = false;
-  mapCenter.value = { ...DEFAULT_CENTER };
-  mapZoom.value = DEFAULT_ZOOM;
 }
 
-// Add a room: the same flow as the Support page, in a panel over the list.
+// Add a room: explained, not offered, until OneMap address search is available.
 const formOpen = ref(false);
-const emptyForm = () => ({ name: "", address: "", details: "", placeId: "", lat: null, lng: null, features: [] });
-const form = ref(emptyForm());
-const errors = ref({ place: "", details: "" });
 const addButton = ref(null);
 const panel = ref(null);
 function openForm() {
@@ -225,37 +141,7 @@ function openForm() {
 }
 function closeForm() {
   formOpen.value = false;
-  form.value = emptyForm();
-  errors.value = { place: "", details: "" };
   nextTick(() => addButton.value?.$el?.focus?.());
-}
-function selectGooglePlace(place) {
-  form.value = { ...form.value, ...place };
-  errors.value.place = "";
-}
-function toggleIn(list, value) {
-  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
-}
-async function saveRoom() {
-  errors.value = {
-    place: form.value.placeId && form.value.name && form.value.address ? "" : "Choose a building or address from Google suggestions.",
-    details: form.value.details.trim() ? "" : "Add the floor and exact room location.",
-  };
-  if (errors.value.place || errors.value.details) return;
-  const point = Number.isFinite(form.value.lat) ? { lat: form.value.lat, lng: form.value.lng } : null;
-  const room = await roomsStore.addRoom(form.value);
-  if (!room) return;
-  filters.value = { features: [], verifiedOnly: false };
-  query.value = "";
-  placeChosen.value = false;
-  view.value = "all";
-  selectedId.value = room.id;
-  if (point) {
-    mapCenter.value = point;
-    mapZoom.value = Math.max(mapZoom.value, 15);
-  }
-  message.value = `${room.name} added. It needs verification.`;
-  closeForm();
 }
 function onKeydown(event) {
   if (event.key === "Escape" && formOpen.value) closeForm();
@@ -294,21 +180,7 @@ watch(supportTab, (id) => {
           <AppButton ref="addButton" variant="outline" size="sm" @click="openForm">Add a room</AppButton>
         </header>
 
-        <div v-if="!fallback" class="pr__field">
-          <input
-            id="pr-location"
-            ref="searchInput"
-            class="pr__input"
-            type="text"
-            placeholder=" "
-            autocomplete="off"
-            :value="query"
-            @input="onInput"
-          />
-          <label class="pr__label" for="pr-location">Location</label>
-          <span class="pr__icon"><Icon name="search" :size="18" /></span>
-        </div>
-        <div v-else class="pr__field pr__field--plain">
+        <div class="pr__field pr__field--plain">
           <label class="pr__flabel" for="pr-location">Search rooms</label>
           <div class="pr__plainwrap">
             <input
@@ -344,27 +216,9 @@ watch(supportTab, (id) => {
         </div>
         <RoomFilterPanel v-if="filterOpen" id="pr-filters" v-model="filters" />
 
-        <section class="pr__mapslot" aria-label="Map"><div class="pr__mapbox">
-          <RoomMap
-            v-if="mapEnabled"
-            :rooms="visible"
-            :selected-id="selectedId"
-            :center="mapCenter"
-            :zoom="mapZoom"
-            @select="selectFromMap"
-            @center-changed="onCenterChanged"
-            @zoom-changed="mapZoom = $event"
-            @unavailable="onMapUnavailable"
-          />
-          <iframe
-            v-else
-            class="pr__frame"
-            :src="embedSrc"
-            :title="embedTitle"
-            loading="lazy"
-            referrerpolicy="no-referrer-when-downgrade"
-          ></iframe>
-        </div></section>
+        <section class="pr__mapslot" aria-label="Map">
+          <OneMapEmbed :lat="embed.lat" :lng="embed.lng" :label="embed.label" />
+        </section>
 
         <div class="pr__views" role="group" aria-label="Show">
           <button type="button" class="app-chip" :aria-pressed="view === 'all' ? 'true' : 'false'" @click="view = 'all'">All rooms</button>
@@ -386,7 +240,7 @@ watch(supportTab, (id) => {
             :room="room"
             :selected="room.id === selectedId"
             :saved="savedIds.includes(room.id)"
-            :show-distance="!fallback || located"
+            :show-distance="located"
             @select="selectFromList"
             @toggle-save="toggleSaved"
           />
@@ -413,56 +267,13 @@ watch(supportTab, (id) => {
           <button type="button" class="pr__x" aria-label="Close add a room" @click="closeForm"><Icon name="close" :size="18" /></button>
         </div>
         <p class="pr__muted">Community additions need verification before others rely on them.</p>
-        <div v-if="fallback" class="pr__off">
+        <div class="pr__off">
           <p class="pr__muted">{{ ADD_OFF }}</p>
           <div class="pr__actions">
             <AppButton size="sm" disabled>Save room</AppButton>
             <AppButton variant="outline" size="sm" @click="closeForm">Cancel</AppButton>
           </div>
         </div>
-        <form v-else class="pr__form" novalidate aria-label="Add a room" @submit.prevent="saveRoom">
-          <div class="pr__f">
-            <span class="pr__flabel">Building or main address</span>
-            <GooglePlaceAutocomplete @selected="selectGooglePlace" />
-            <div v-if="form.placeId" class="pr__picked">
-              <strong>{{ form.name }}</strong><span>{{ form.address }}</span>
-            </div>
-            <span v-if="errors.place" class="app-error-text">{{ errors.place }}</span>
-          </div>
-          <label class="pr__f">
-            <span class="pr__flabel">Exact room location</span>
-            <input
-              v-model="form.details"
-              class="app-control"
-              :class="{ 'app-control--invalid': errors.details }"
-              type="text"
-              maxlength="200"
-              required
-              placeholder="e.g. Level 3, beside the accessible toilet"
-              :aria-invalid="errors.details ? 'true' : 'false'"
-            />
-            <span v-if="errors.details" class="app-error-text">{{ errors.details }}</span>
-          </label>
-          <div class="pr__f" role="group" aria-label="Features">
-            <span class="pr__flabel">Features</span>
-            <div class="pr__chips">
-              <button
-                v-for="f in FORM_FEATURES"
-                :key="f"
-                type="button"
-                class="app-chip"
-                :aria-pressed="form.features.includes(f) ? 'true' : 'false'"
-                @click="form.features = toggleIn(form.features, f)"
-              >
-                {{ f }}
-              </button>
-            </div>
-          </div>
-          <div class="pr__actions">
-            <AppButton size="sm" @click="saveRoom">Save room</AppButton>
-            <AppButton variant="outline" size="sm" @click="closeForm">Cancel</AppButton>
-          </div>
-        </form>
       </section>
     </section>
 
@@ -512,9 +323,6 @@ watch(supportTab, (id) => {
 .pr__actions { display: flex; gap: 8px; }
 
 .pr__mapslot { padding: 0 24px; margin: 0 0 16px; }
-.pr__mapbox { position: relative; width: 100%; height: 360px; overflow: hidden; border: 1px solid var(--nt-line); border-radius: 12px; background: var(--nt-gray); box-sizing: border-box; }
-.pr__mapbox :deep(.rm) { min-height: 0; }
-.pr__frame { display: block; width: 100%; height: 100%; border: 0; }
 .pr__field--plain { display: flex; flex-direction: column; gap: 6px; }
 .pr__plainwrap { position: relative; }
 .pr__input--plain { padding: 12px 44px 12px 16px; }
@@ -532,7 +340,6 @@ watch(supportTab, (id) => {
   .pr { display: flex; flex-direction: column; height: auto; }
   .pr__side { border-right: 0; border-bottom: 1px solid var(--nt-line); overflow: visible; }
   .pr__scroll { height: auto; overflow: visible; }
-  .pr__map { height: 420px; }
 }
 </style>
 
@@ -543,7 +350,4 @@ watch(supportTab, (id) => {
 @media (max-width: 991px) {
   .appshell__main:has(.pr) { padding: 0 0 48px; }
 }
-/* Google's suggestion list, kept flat to match the rest of the app. */
-.pac-container { border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: none; font-family: Inter, sans-serif; }
-.pac-container::after { display: none; }
 </style>

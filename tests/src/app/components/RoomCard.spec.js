@@ -12,6 +12,8 @@ const base = {
   verifiedDaysAgo: 2,
   kind: "community",
   distance: 850,
+  lat: 1.3,
+  lng: 103.8,
 };
 const mountCard = (room = {}, props = {}) =>
   mount({ components: { RoomCard }, props: ["room", "p"], template: '<ul><RoomCard :room="room" v-bind="p" /></ul>' }, { props: { room: { ...base, ...room }, p: props } });
@@ -58,11 +60,11 @@ describe("RoomCard", () => {
     expect(w.text()).not.toContain("Source:");
     expect(w.text()).not.toContain("Parent feedback");
   });
-  it("offers Show on map, Open in Google Maps and Directions links", async () => {
+  it("offers Show on map and one Open in OneMap link", async () => {
     const w = mount(RoomCard, { props: { room: { ...base } } });
     const links = w.findAll("a").filter((a) => !a.text().startsWith("Source:")).map((a) => a.text());
-    expect(links[0]).toContain("Open in Google Maps");
-    expect(links[1]).toContain("Directions");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toContain("Open in OneMap");
     await w.findAll("button").find((b) => b.text().startsWith("Show on map")).trigger("click");
     expect(w.emitted("select")).toHaveLength(1);
   });

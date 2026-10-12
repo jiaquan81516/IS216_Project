@@ -5,8 +5,6 @@ import {
   featureLabels,
   featureMap,
   filterRooms,
-  mapEmbedUrl,
-  mapOpenUrl,
   roomView,
   statusText,
 } from "@/app/api/roomHelpers";
@@ -54,13 +52,8 @@ async function mountPage() {
   await flushPromises();
   return wrapper;
 }
-import { resetMapsState } from "@/app/api/mapsState";
-
-afterEach(() => vi.unstubAllEnvs());
 
 beforeEach(() => {
-  vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "AIzaTestKey1234567890");
-  resetMapsState();
   localStorage.clear();
   api.rooms = [];
   api.push = null;
@@ -79,11 +72,6 @@ describe("room helpers", () => {
     expect(SAMPLE_ROOMS.map((r) => r.name)).toEqual(["SMU Library Nursing Room", "Raffles City Family Room"]);
     expect(smu.features).toEqual(["Chair", "Power outlet", "Lockable"]);
     expect(smu.verifiedDaysAgo).toBe(4);
-  });
-  it("builds map urls for room locations", () => {
-    const q = encodeURIComponent("SMU Library Nursing Room, 70 Stamford Road, Singapore 178901");
-    expect(mapEmbedUrl(smu)).toBe(`https://www.google.com/maps?q=${q}&output=embed`);
-    expect(mapOpenUrl(smu)).toBe(`https://www.google.com/maps/search/?api=1&query=${q}`);
   });
   it("describes status", () => {
     expect(statusText(smu)).toBe("Verified 4 days ago");

@@ -1,11 +1,13 @@
 <script setup>
 import "@/app/app.css";
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AppButton from "@/components/ui/AppButton.vue";
 import ChipGroup from "@/app/components/ChipGroup.vue";
 import ConfirmDanger from "@/app/components/ConfirmDanger.vue";
+import GoogleCalendarClientCard from "@/app/components/GoogleCalendarClientCard.vue";
 import Toggle from "@/app/components/Toggle.vue";
+import { isClientModeAvailable } from "@/app/api/googleCalendarClient";
 import {
   deleteAccountFallback,
   leaveHousehold,
@@ -14,7 +16,7 @@ import {
 } from "@/app/api/account";
 import { expiresInText, inviteState } from "@/app/api/inviteHelpers";
 import { takeLimit } from "@/app/api/limits";
-import { getInvite, regenerateInviteCode } from "@/app/api/profile";
+import { checkInviteCode, getInvite, joinHousehold, regenerateInviteCode } from "@/app/api/profile";
 import {
   debounce,
   normaliseSettings,
@@ -65,6 +67,77 @@ watch(
   { immediate: true },
 );
 
+const rootEl = ref(null);
+const activeId = ref("");
+let observer = null;
+let lockUntil = 0;
+
+function prefersReducedMotion() {
+  if (form.value.display?.reduceMotion) return true;
+  try {
+    return Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+  } catch {
+    return false;
+  }
+}
+
+// The section card for a heading id. The page scrolls inside the app shell, so the plain
+// #hash jump is not reliable; scrollIntoView works whichever element scrolls.
+function sectionFor(id) {
+  const scope = rootEl.value ?? document;
+  const heading = scope.querySelector(`#${id}`);
+  if (!heading) return { heading: null, target: null };
+  const target = scope.querySelector(`[aria-labelledby="${id}"]`) || heading.closest(".st__card") || heading;
+  return { heading, target };
+}
+
+function goTo(id) {
+  const { heading, target } = sectionFor(id);
+  if (!target) return;
+  activeId.value = id;
+  lockUntil = Date.now() + 800;
+  target.scrollIntoView?.({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+  if (heading) {
+    heading.setAttribute("tabindex", "-1");
+    heading.focus?.({ preventScroll: true });
+  }
+}
+
+function watchSections() {
+  if (observer) observer.disconnect();
+  observer = null;
+  if (typeof IntersectionObserver === "undefined") return;
+  const visible = new Map();
+  observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        const id = entry.target.getAttribute("aria-labelledby");
+        if (entry.isIntersecting) visible.set(id, entry.boundingClientRect.top);
+        else visible.delete(id);
+      }
+      if (Date.now() < lockUntil || !visible.size) return;
+      const [first] = [...visible.entries()].sort((a, b) => a[1] - b[1])[0];
+      activeId.value = first;
+    },
+    { rootMargin: "-10% 0px -60% 0px" },
+  );
+  for (const item of NAV) {
+    const { target } = sectionFor(item.id);
+    if (target) observer.observe(target);
+  }
+}
+
+watch(
+  () => [loading.value, error.value],
+  async ([isLoading, hasError]) => {
+    if (isLoading || hasError) return;
+    await nextTick();
+    watchSections();
+  },
+  { immediate: true, flush: "post" },
+);
+onBeforeUnmount(() => observer?.disconnect());
+
 function nested(path) {
   const parts = path.split(".");
   let node = form.value;
@@ -108,7 +181,9 @@ onBeforeUnmount(() => flush.flush());
 const timeFormatOptions = TIME_FORMATS.map((value) => ({ value, label: value === "12h" ? "12 hour" : "24 hour" }));
 const weekStartOptions = WEEK_STARTS.map((value) => ({ value, label: value === "mon" ? "Monday" : "Sunday" }));
 
-// Calendar connection
+// Calendar connection. With a browser OAuth client id the card talks to Google directly and
+// the server only controls below are hidden.
+const clientMode = isClientModeAvailable();
 const calendarNote = ref("");
 const calendarAlert = ref(false); // an alert when something went wrong, a status otherwise
 const calendarBusy = ref(false);
@@ -238,6 +313,78 @@ async function newCode() {
   }
 }
 
+// Joining the partner's household from a solo household
+const joinOpen = ref(false);
+const joinCode = ref("");
+const joinBusy = ref(false);
+const joinError = ref("");
+
+function openJoin() {
+  joinOpen.value = true;
+  joinError.value = "";
+}
+function cancelJoin() {
+  joinOpen.value = false;
+  joinCode.value = "";
+  joinError.value = "";
+}
+
+async function submitJoin() {
+  if (joinBusy.value) return;
+  joinError.value = "";
+  const code = joinCode.value.trim();
+  if (!code) {
+    joinError.value = "Enter the invitation code from your partner.";
+    return;
+  }
+  joinBusy.value = true;
+  try {
+    // Check first, so a bad code never takes anyone out of their household.
+    let checked;
+    try {
+      checked = await checkInviteCode(code);
+    } catch (cause) {
+      console.error("[app settings join check]", cause?.code, cause);
+      joinError.value = "We could not check that code. Check your connection and try again.";
+      return;
+    }
+    if (!checked.ok) {
+      joinError.value = checked.message;
+      return;
+    }
+    if (checked.householdId && checked.householdId === householdId.value) {
+      joinError.value = "That is your own household code. Give it to your partner instead.";
+      return;
+    }
+    const user = { uid: me.value.uid, displayName: me.value.displayName };
+    try {
+      await leaveHousehold(me.value.uid, householdId.value);
+    } catch (cause) {
+      console.error("[app settings join leave]", cause?.code, cause);
+      joinError.value = "We could not switch households. Nothing has changed. Check your connection and try again.";
+      return;
+    }
+    try {
+      await joinHousehold(user, code);
+    } catch (cause) {
+      console.error("[app settings join]", cause?.code, cause);
+      joinError.value = "We could not join that household. You are not in a household right now. Enter the code again.";
+      router.push({ path: ROUTES.HOUSEHOLD, query: { code } });
+      return;
+    }
+    // The household id changed. Reloading the profile updates the id that the care log and
+    // the shared stores in the app shell watch, so they stop listening to the old household.
+    try {
+      await reload();
+    } catch {
+      // Home loads it again.
+    }
+    router.push(ROUTES.HOME);
+  } finally {
+    joinBusy.value = false;
+  }
+}
+
 // Household baby details
 const baby = ref({ babyName: "", babyStatus: "born", babyDate: "" });
 const babySaved = ref("");
@@ -344,7 +491,7 @@ async function confirmDelete() {
 </script>
 
 <template>
-  <div class="st">
+  <div ref="rootEl" class="st">
     <header class="st__head">
       <h1 class="nt-title st__title">Settings</h1>
       <p class="st__sub">Changes save as you make them.</p>
@@ -359,7 +506,14 @@ async function confirmDelete() {
 
     <div v-else class="st__layout">
       <nav class="st__nav" aria-label="Settings sections">
-        <a v-for="item in NAV" :key="item.id" class="st__nav-link" :href="`#${item.id}`">{{ item.label }}</a>
+        <a
+          v-for="item in NAV"
+          :key="item.id"
+          class="st__nav-link"
+          :href="`#${item.id}`"
+          :aria-current="activeId === item.id ? 'true' : undefined"
+          @click.prevent="goTo(item.id)"
+        >{{ item.label }}</a>
       </nav>
       <div class="st__cards">
       <p class="st__save" role="status" aria-live="polite">{{ savedAt }}</p>
@@ -463,6 +617,8 @@ async function confirmDelete() {
       <!-- Calendar -->
       <section class="st__card" aria-labelledby="st-cal">
         <h2 id="st-cal" class="st__h">Google Calendar</h2>
+        <GoogleCalendarClientCard v-if="clientMode" :household-id="householdId || ''" :uid="me?.uid || ''" />
+        <template v-else>
         <p v-if="form.calendar.connected" class="st__text">Connected.</p>
         <p v-else class="st__muted">Not connected. Appointments stay inside NurtureTrack.</p>
         <div class="st__actions">
@@ -507,6 +663,7 @@ async function confirmDelete() {
             @update:model-value="set('calendar.syncOn.myReminders', $event)"
           />
         </div>
+        </template>
       </section>
 
       <!-- Display -->
@@ -574,6 +731,37 @@ async function confirmDelete() {
             </AppButton>
           </div>
           <p v-if="inviteNote" class="st__muted" role="status">{{ inviteNote }}</p>
+
+          <button v-if="!joinOpen" type="button" class="st__link" @click="openJoin">
+            Have a code from your partner? Join their household
+          </button>
+          <form v-else class="st__join" novalidate :aria-busy="joinBusy" @submit.prevent="submitJoin">
+            <div class="st__field">
+              <label class="st__label" for="st-join-code">Invitation code</label>
+              <input
+                id="st-join-code"
+                v-model="joinCode"
+                class="app-control st__input"
+                type="text"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+                placeholder="NT-XXXX"
+                :disabled="joinBusy"
+                :aria-invalid="joinError ? 'true' : undefined"
+              />
+            </div>
+            <p class="st__muted">
+              You will leave your current household. Anything you logged here stays with it, and you will see your partner's household instead.
+            </p>
+            <p v-if="joinError" class="app-error-text" role="alert">{{ joinError }}</p>
+            <div class="st__actions st__actions--center">
+              <button type="button" class="st__link" :disabled="joinBusy" @click="cancelJoin">Cancel</button>
+              <AppButton variant="outline" size="sm" :disabled="joinBusy" @click="submitJoin">
+                {{ joinBusy ? "Joining..." : "Join household" }}
+              </AppButton>
+            </div>
+          </form>
         </template>
       </section>
 
@@ -682,6 +870,7 @@ async function confirmDelete() {
 .st__layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 40px; align-items: start; }
 .st__nav { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 2px; }
 .st__nav-link { padding: 8px 12px; border-radius: 8px; font-size: 0.9375rem; color: var(--nt-muted); text-decoration: none; }
+.st__nav-link[aria-current="true"] { background: var(--nt-gray); color: var(--nt-ink); font-weight: 600; }
 .st__nav-link:hover { background: var(--nt-gray); color: var(--nt-ink); }
 .st__nav-link:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 .st__cards { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
@@ -699,6 +888,11 @@ async function confirmDelete() {
 .st__time { max-width: 160px; }
 .st__input { max-width: 320px; }
 .st__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.st__link { align-self: flex-start; padding: 4px 0; background: none; border: 0; font: inherit; font-size: 0.875rem; color: var(--nt-plum); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.st__link:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
+.st__link:disabled { opacity: 0.6; cursor: default; }
+.st__join { display: flex; flex-direction: column; gap: 12px; }
+.st__actions--center { align-items: center; gap: 16px; }
 .st__points { margin: 0; padding-left: 20px; font-size: 0.875rem; line-height: 1.5; color: var(--nt-ink); }
 .st__kept { display: flex; flex-direction: column; gap: 8px; }
 .st__retry { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }

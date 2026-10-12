@@ -147,7 +147,7 @@ page by design.
 Support: Guides reuse the V2 help content (`src/data/help.js`, imported). Trusted resources
 reuse the V2 Help side panel contacts (`src/app/data/support.js`); they are unverified and the
 page says so. Pumping rooms use the two sample rooms in `src/app/data/pumpingRooms.js` (SAMPLE
-DATA, not confirmed) plus rooms stored in `nt.app.rooms`. The map is a Google Maps embed
+DATA, not confirmed) plus rooms stored in `nt.app.rooms`. The map is a OneMap embed
 iframe for the selected room; "Add to Google Calendar" opens a prefilled Google Calendar
 event in a new tab (helpers in `src/app/api/roomHelpers.js`).
 
