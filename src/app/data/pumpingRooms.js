@@ -1,5 +1,5 @@
 // SEED DATA for the pumping room directory. The real directory is the Firestore collection
-// `pumpingRooms` (see src/app/api/rooms.js). These two rooms are shown only while that
+// `pumpingRooms` (see src/api/rooms.js). These two rooms are shown only while that
 // collection is empty, so a new deployment is not a blank page. They are placeholders from
 // the team design: the addresses and the verification status are NOT confirmed, and they
 // cannot be confirmed or flagged because they are not database rows.

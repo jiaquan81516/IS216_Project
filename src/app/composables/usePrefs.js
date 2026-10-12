@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
-import { DEFAULT_SETTINGS, weekStartIndex } from "@/app/api/settingsHelpers";
-import { pad2, toDate } from "@/app/api/entryHelpers";
+import { DEFAULT_SETTINGS, weekStartIndex } from "@/app/utils/settingsHelpers";
+import { pad2, toDate } from "@/app/utils/entryHelpers";
 
 // The display preferences from users/{uid}.settings.display, in one small module level
 // store so any App page can read them without loading the profile again. AppShell fills it

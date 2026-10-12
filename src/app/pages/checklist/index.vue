@@ -2,9 +2,9 @@
 import "@/app/app.css";
 import { computed, inject, onBeforeUnmount, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { checklistView, dueLabel, myOpenTasks, ownerChip, queuedTasks, taskOwner, TITLE_MAX } from "@/app/api/checklistHelpers";
-import { dayLabel } from "@/app/api/entryHelpers";
-import { describeSharedError } from "@/app/api/sharedHelpers";
+import { checklistView, dueLabel, myOpenTasks, ownerChip, queuedTasks, taskOwner, TITLE_MAX } from "@/app/utils/checklistHelpers";
+import { dayLabel } from "@/app/utils/entryHelpers";
+import { describeSharedError } from "@/app/utils/sharedHelpers";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { useShared, SHARED_KEY } from "@/app/composables/useShared";
 import { ROUTES } from "@/app/routes";

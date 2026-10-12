@@ -17,7 +17,7 @@ const api = vi.hoisted(() => ({
   migrateLegacyRtw: vi.fn(async () => false),
 }));
 
-vi.mock("@/app/api/rtw", () => ({
+vi.mock("@/api/rtw", () => ({
   subscribeRtwPlan: (hid, onData, onError) => {
     api.onPlan = onData;
     api.onError = onError;

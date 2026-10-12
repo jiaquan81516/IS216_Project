@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import { ackPost, addPost, deletePost, POST_TEXT_MAX, subscribePosts } from "@/app/api/posts";
-import { describeSharedError } from "@/app/api/sharedHelpers";
+import { ackPost, addPost, deletePost, POST_TEXT_MAX, subscribePosts } from "@/api/posts";
+import { describeSharedError } from "@/app/utils/sharedHelpers";
 
 // One post a second at most. A courtesy guard against a double tap, like api/limits.js.
 export const SEND_GAP_MS = 1000;

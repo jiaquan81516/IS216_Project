@@ -3,7 +3,7 @@
 // of millisecond timestamps per action, trimmed every time it is written. The rules deny all
 // client access to the collection: only Admin touches it.
 //
-// src/app/api/limits.js keeps the same windows in the browser as a courtesy guard. This one is
+// src/app/utils/limits.js keeps the same windows in the browser as a courtesy guard. This one is
 // the real limit.
 import { db } from "./admin.js";
 import { decide, LIMIT_MESSAGE, LIMITS, retryAfterSeconds, WINDOW_MS } from "./limitWindow.js";

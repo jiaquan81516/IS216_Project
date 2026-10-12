@@ -6,7 +6,7 @@ import { HOME_KEY } from "@/app/composables/useHome";
 import { SHARED_KEY } from "@/app/composables/useShared";
 
 vi.mock("@/api/firebase", () => ({ default: {}, auth: {} }));
-vi.mock("@/app/api/db", () => ({ db: {} }));
+vi.mock("@/api/db", () => ({ db: {} }));
 vi.mock("firebase/firestore", () => ({}));
 vi.mock("@/composables/useAuth", async () => {
   const { ref: vueRef } = await import("vue");

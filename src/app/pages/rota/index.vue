@@ -17,12 +17,12 @@ import {
   weekdayShort,
   weekLabel,
   weekNights,
-} from "@/app/api/rotaHelpers";
+} from "@/app/utils/rotaHelpers";
 import {
   describeSharedError,
   ownerKey,
   updatedLine,
-} from "@/app/api/sharedHelpers";
+} from "@/app/utils/sharedHelpers";
 import { displayName, HOME_KEY } from "@/app/composables/useHome";
 import { SHARED_KEY } from "@/app/composables/useShared";
 import { useRotaStore } from "@/app/stores/rota";

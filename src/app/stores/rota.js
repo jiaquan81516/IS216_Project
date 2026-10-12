@@ -11,9 +11,9 @@ import {
   subscribeNights,
   subscribeRotaSettings,
   subscribeSwaps,
-} from "@/app/api/rota";
-import { addDays, isIsoDate, mondayOf, toIso } from "@/app/api/rotaHelpers";
-import { ownerKey } from "@/app/api/sharedHelpers";
+} from "@/api/rota";
+import { addDays, isIsoDate, mondayOf, toIso } from "@/app/utils/rotaHelpers";
+import { ownerKey } from "@/app/utils/sharedHelpers";
 
 const PATTERNS = ["alternate", "split", "manual"];
 // Overrides are loaded for a year either side of today, which covers the rota week view and

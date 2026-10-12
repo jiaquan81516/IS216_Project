@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from "vue";
-import { formatDistance, verificationText, isVerified } from "@/app/api/mapHelpers";
-import { oneMapPlaceUrl } from "@/app/api/oneMapHelpers";
+import { formatDistance, verificationText, isVerified } from "@/app/utils/mapHelpers";
+import { oneMapPlaceUrl } from "@/app/utils/oneMapHelpers";
 
 defineOptions({ name: "RoomCard" });
 const props = defineProps({

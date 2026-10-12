@@ -1,6 +1,6 @@
 import { useAuth, waitForAuthInitialization } from "@/composables/useAuth";
-import { getUserProfile } from "@/app/api/profile";
-import { withTimeout } from "@/app/api/timeout";
+import { getUserProfile } from "@/api/profile";
+import { withTimeout } from "@/app/utils/timeout";
 import { ROUTES } from "@/app/routes";
 
 // App pages that need sign in and a household (same rules as Home).

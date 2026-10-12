@@ -13,13 +13,13 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("@/api/firebase", () => ({ default: {}, auth: {} }));
-vi.mock("@/app/api/db", () => ({ db: {} }));
+vi.mock("@/api/db", () => ({ db: {} }));
 vi.mock("firebase/firestore", () => ({}));
 vi.mock("@/composables/useAuth", async () => {
   const { ref: vueRef } = await import("vue");
   return { useAuth: () => ({ currentUser: vueRef({ uid: "u1" }), logout: vi.fn() }) };
 });
-vi.mock("@/app/api/handovers", () => ({
+vi.mock("@/api/handovers", () => ({
   acceptHandover: api.accept,
   sendHandover: api.send,
   subscribeHandovers: () => () => {},

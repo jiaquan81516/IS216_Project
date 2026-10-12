@@ -3,7 +3,7 @@ import "@/app/app.css";
 import { computed, inject, ref, watch } from "vue";
 import AppButton from "@/components/ui/AppButton.vue";
 import { auth } from "@/api/firebase";
-import { cleanDisplayName, DISPLAY_NAME_MAX, PROFILE_ROLES, saveProfile } from "@/app/api/account";
+import { cleanDisplayName, DISPLAY_NAME_MAX, PROFILE_ROLES, saveProfile } from "@/api/account";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 
 defineOptions({ name: "ProfilePage" });

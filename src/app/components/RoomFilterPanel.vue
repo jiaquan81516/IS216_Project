@@ -1,6 +1,6 @@
 <script setup>
 import { FILTER_FEATURES } from "@/app/data/pumpingRooms";
-import { activeFilterCount } from "@/app/api/mapHelpers";
+import { activeFilterCount } from "@/app/utils/mapHelpers";
 
 defineOptions({ name: "RoomFilterPanel" });
 const props = defineProps({

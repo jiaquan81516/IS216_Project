@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from "vue";
-import { ONEMAP_HOME_URL, oneMapEmbedUrl } from "@/app/api/oneMapHelpers";
+import { ONEMAP_HOME_URL, oneMapEmbedUrl } from "@/app/utils/oneMapHelpers";
 
 defineOptions({ name: "OneMapEmbed" });
 const props = defineProps({

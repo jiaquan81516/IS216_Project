@@ -1,4 +1,4 @@
-import { DOCTOR_CALL, guides } from "@/data/help";
+import { DOCTOR_CALL, guides } from "@/constants/help";
 
 // Guides reuse the V2 help content as is (src/data/help.js). Nothing is added here.
 export const SUPPORT_GUIDES = Object.freeze(

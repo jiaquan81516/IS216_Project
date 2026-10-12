@@ -6,9 +6,9 @@ import {
   migrateLegacyCalendar,
   subscribeEvents,
   updateEvent as apiUpdateEvent,
-} from "@/app/api/calendar";
-import { EVENT_TYPES, NOTES_MAX } from "@/app/api/calendarHelpers";
-import { isIsoDate } from "@/app/api/rotaHelpers";
+} from "@/api/calendar";
+import { EVENT_TYPES, NOTES_MAX } from "@/app/utils/calendarHelpers";
+import { isIsoDate } from "@/app/utils/rotaHelpers";
 
 const TYPES = EVENT_TYPES.map((t) => t.value);
 const TIME = /^\d{2}:\d{2}$/;

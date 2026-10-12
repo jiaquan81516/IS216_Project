@@ -8,12 +8,12 @@ const mocks = vi.hoisted(() => ({
   fetchUpcoming: vi.fn(async () => []),
 }));
 
-vi.mock("@/app/api/googleCalendarClient", () => ({
+vi.mock("@/api/googleCalendarClient", () => ({
   isClientModeAvailable: () => true,
   connect: (...a) => mocks.connect(...a),
   disconnect: (...a) => mocks.disconnect(...a),
 }));
-vi.mock("@/app/api/googleCalendarSync", () => ({
+vi.mock("@/api/googleCalendarSync", () => ({
   runSync: (...a) => mocks.runSync(...a),
   fetchUpcoming: (...a) => mocks.fetchUpcoming(...a),
 }));
