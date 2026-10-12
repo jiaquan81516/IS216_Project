@@ -23,13 +23,13 @@ App is built page by page. Each iteration adds one screen at a time under `src/a
 | Settings | `/settings` | same guard and layout; reached from the sidebar account menu, not the nav |
 | Profile | `/profile` | same guard and layout; reached from the sidebar account menu, not the nav |
 
-In create mode Step 4 also asks, all optional, for the baby's name, whether the baby is here or on the way, and the birth or due date. `babySummary()` in `src/app/api/profile.js` turns these into a name and a line such as "6 weeks old" for the Home page.
+In create mode Step 4 also asks, all optional, for the baby's name, whether the baby is here or on the way, and the birth or due date. `babySummary()` in `src/api/profile.js` turns these into a name and a line such as "6 weeks old" for the Home page.
 
 After creating or joining, Step 4 shows an inline success state with a "Go to home" button to `/home`. Signing in or creating an account with an existing household also goes to `/home`. The app guard sends `/home` visitors who are signed out to `/signin` and those without a household to `/household`.
 
 ## App shell and Home
 
-`src/app/layouts/AppShell.vue` is a router layout: a 264px sticky sidebar (logo, household chip, 7 nav items, privacy note, user row) and a main column with a 1120px content area. Under 992px the sidebar becomes a top bar with a menu button. The shell calls `useHome()` once and provides it to pages (`HOME_KEY`), so the sidebar and page do not load twice. `useHome` reads the profile, household and members (`getHousehold`, `getHouseholdMembers` in `src/app/api/profile.js`), each with a timeout.
+`src/app/layouts/AppShell.vue` is a router layout: a 264px sticky sidebar (logo, household chip, 7 nav items, privacy note, user row) and a main column with a 1120px content area. Under 992px the sidebar becomes a top bar with a menu button. The shell calls `useHome()` once and provides it to pages (`HOME_KEY`), so the sidebar and page do not load twice. `useHome` reads the profile, household and members (`getHousehold`, `getHouseholdMembers` in `src/api/profile.js`), each with a timeout.
 
 The shell also calls `useEntries(householdId)` once and provides it (`ENTRIES_KEY`), so Home and the care log share one live listener on `households/{id}/entries`. It calls `useHandovers(householdId, meUid)` the same way (`HANDOVERS_KEY`), so one listener on the newest 30 handovers feeds the handover page, the Home line and the care log dividers, and the sidebar can badge the Handover item when one is waiting for you. In the same way it calls `useShared(householdId, meUid, partnerUid)` once and provides it (`SHARED_KEY`), which binds the sleep rota, calendar and return to work stores to the household and unbinds them when the household changes or the shell unmounts. Pages inject it for the "Try again" button; the data itself comes from the Pinia stores. The listener waits for the household id (loading, never an error, until it exists), treats an empty collection as a normal empty snapshot, and reports `{ code }` on failure, with a 15 second watchdog that reports `timeout`.
 
@@ -66,8 +66,8 @@ The App landing follows a Z pattern: top bar, then a hero row (copy and the only
 `src/app/pages/care-log/index.vue` reads and writes real Firestore data in `households/{id}/entries` (fields in `docs/data-model.md`). Home links here with "Log a feed" (`?log=feed`), "Open care log" and "View full log".
 
 Files:
-- `src/app/api/entries.js`: `addEntry`, `updateEntry`, `deleteEntry`, `markSeen`, `subscribeEntries` (live, newest 50), `loadOlder`.
-- `src/app/api/entryHelpers.js`: pure helpers (`ENTRY_TYPES`, `summariseEntry`, `groupByDay`, `todayStats`, `lastOfType`, time formatting). No Firebase imports.
+- `src/api/entries.js`: `addEntry`, `updateEntry`, `deleteEntry`, `markSeen`, `subscribeEntries` (live, newest 50), `loadOlder`.
+- `src/app/utils/entryHelpers.js`: pure helpers (`ENTRY_TYPES`, `summariseEntry`, `groupByDay`, `todayStats`, `lastOfType`, time formatting). No Firebase imports.
 - `src/app/components/CareLogPanel.vue`: the right-side log and edit panel (a dialog; chips only, time never in the future). `ChipGroup.vue` is its radio-style chip row.
 - Icons added to `Icon`: feed, diaper, note, medication, edit, trash, plus, check, x.
 
@@ -88,9 +88,9 @@ were never real requests.
 
 | Area | Firestore module | Store | Collections |
 | --- | --- | --- | --- |
-| Sleep rota | `src/app/api/rota.js` | `src/app/stores/rota.js` | `rota/settings`, `nights/{yyyy-mm-dd}`, `swaps/{swapId}` |
-| Calendar | `src/app/api/calendar.js` | `src/app/stores/calendar.js` | `events/{eventId}` |
-| Return to work | `src/app/api/rtw.js` | `src/app/stores/returnToWork.js` | `tasks/{taskId}`, `rtw/plan` |
+| Sleep rota | `src/api/rota.js` | `src/app/stores/rota.js` | `rota/settings`, `nights/{yyyy-mm-dd}`, `swaps/{swapId}` |
+| Calendar | `src/api/calendar.js` | `src/app/stores/calendar.js` | `events/{eventId}` |
+| Return to work | `src/api/rtw.js` | `src/app/stores/returnToWork.js` | `tasks/{taskId}`, `rtw/plan` |
 
 Each api module follows `entries.js`: `onSnapshot` listeners that report `{ code }` on
 failure and log `console.error("[app rota]", code, error)`, one shot reads wrapped in
@@ -104,14 +104,14 @@ inline when a write fails), `bind(householdId, meUid, partnerUid)` and `unbind()
 shows "Loading..." in an `aria-live` region until the household id exists, so it never shows
 an error before it could possibly have data, and shows `role="alert"` with an outline "Try
 again" that re-binds. The messages come from `describeSharedError` in
-`src/app/api/sharedHelpers.js`, the same cause by cause style as the care log, so
+`src/app/utils/sharedHelpers.js`, the same cause by cause style as the care log, so
 `permission-denied` tells you to publish the latest `firestore.rules`.
 
 Owners are uids now. The local stores used "me" and "partner", which mean nothing when two
 people share the data, so an event owner, a task owner, a responsibility and the rota's
 `firstOnDuty` all store a uid (or the string "both", or "open" for a night). The pages turn
 that back into a name with `ownerLabel(owner, meUid, meName, partnerName)` and into a colour
-with `ownerKey`, both in `src/app/api/sharedHelpers.js`, which also holds `ownerUid` (a chip
+with `ownerKey`, both in `src/app/utils/sharedHelpers.js`, which also holds `ownerUid` (a chip
 choice back to a uid), `relativeTime` ("just now", "5 minutes ago", "yesterday") and
 `updatedLine` ("Updated by Mei 5 minutes ago", shown on the rota settings and the return to
 work plan).
@@ -128,7 +128,7 @@ Still local, by design: Wellness check-ins are private to one parent and stay in
 | `nt.app.checkins` | `src/app/stores/checkins.js` | one `{date, mood 1-5, stress 1-5, savedAt}` per day, replaced when saved again the same day |
 | `nt.app.rooms` | `src/app/stores/rooms.js` | pumping rooms added by the user (status "needs verification") |
 
-Sleep rota: the plan is still generated by the pure helpers in `src/app/api/rotaHelpers.js`
+Sleep rota: the plan is still generated by the pure helpers in `src/app/utils/rotaHelpers.js`
 (`weekNights`, `restSummary`, `suggest`), which work in "me" and "partner" terms; the store
 exposes `view`, the same plan with uids mapped onto those two words, and `plan`, the raw
 settings. Swaps really work now: you ask in your own name, the other parent sees a pending
@@ -149,7 +149,7 @@ reuse the V2 Help side panel contacts (`src/app/data/support.js`); they are unve
 page says so. Pumping rooms use the two sample rooms in `src/app/data/pumpingRooms.js` (SAMPLE
 DATA, not confirmed) plus rooms stored in `nt.app.rooms`. The map is a OneMap embed
 iframe for the selected room; "Add to Google Calendar" opens a prefilled Google Calendar
-event in a new tab (helpers in `src/app/api/roomHelpers.js`).
+event in a new tab (helpers in `src/app/utils/roomHelpers.js`).
 
 Shared pieces: `src/app/components/Tabs.vue` (underlined tab bar with arrow keys; the page
 renders the tabpanels).
@@ -161,14 +161,14 @@ renders the tabpanels).
 - Plan: with no date, "When do you go back?" and the page's one solid button, "Save date" (it becomes outline while the add task form is open). With a date, one sentence ("Back at work on 4 November. 21 days to go.") and a "Change date" text button. Tasks are grouped Overdue, This week (today and the next six days), Later, No date and Done, with empty groups left out, sorted by due date then title. Each task has a checkbox, owner badge, group, due text, edit and delete (inline "Delete this task?" confirm). "Add a task" opens an inline form. "Suggestions" lists six fixed prompts (`src/app/data/rtw.js`) that the user adds with one tap (owner both, no date); an added suggestion disappears. There is no sample data; the empty state says "No tasks yet. Add one or start from the suggestions below."
 - Responsibilities (draft): eight areas, each with an owner chip row (Me, partner, Both, Not decided), a summary line, a hint when one person has 2 or more extra areas, and "Make a task" which adds a task with the chosen owner (both when undecided).
 - Pumping preparation (draft): five checklist items with "n of 5 done", breaks per workday (2 to 4) and time of day chips with a summary, and a rooms list that reuses `SAMPLE_ROOMS` plus rooms saved in `nt.app.rooms`. "Open in Support" goes to `/support`; the Support page has no query for its pumping tab yet, so the link opens its first tab.
-- Pure helpers (`src/app/api/rtwHelpers.js`): `daysUntil`, `returnSentence`, `dueText`, `groupTasks`, `ownerCounts(tasks, meUid)` (open tasks only), `suggestedTasks`, `responsibilityCounts(responsibilities, meUid)`, `balanceHint`, `pumpingSummary`. The two counting helpers take the signed in uid, because an owner is a uid now. Components: `RtwResponsibilities.vue`, `RtwPumping.vue` (the checklist comes from the store's `pumpingItems`).
+- Pure helpers (`src/app/utils/rtwHelpers.js`): `daysUntil`, `returnSentence`, `dueText`, `groupTasks`, `ownerCounts(tasks, meUid)` (open tasks only), `suggestedTasks`, `responsibilityCounts(responsibilities, meUid)`, `balanceHint`, `pumpingSummary`. The two counting helpers take the signed in uid, because an owner is a uid now. Components: `RtwResponsibilities.vue`, `RtwPumping.vue` (the checklist comes from the store's `pumpingItems`).
 - Shared now: the date, the tasks and the plan are the same for both parents, a done task says who finished it ("Done by Mei 5 minutes ago"), and the plan shows "Updated by {name} {when}".
 
 ## Calendar
 
 `src/app/pages/calendar/index.vue` is a shared month calendar in the TimeTree style, with a Month and Agenda switch (chips, no tabs). Both parents see the same events, live.
 
-- Month view: Monday first, 6 weeks. Each cell shows the date (today is a plum circle), up to two single-line chips coloured by owner (me apricot, partner powder, both gray with a plum left border; the owner name is also in visually hidden text), "+n more", and a small moon with the initial of whoever is on night duty (`aria-label="Night duty: {name}"`). Night duty is read from the shared sleep rota through `nightOwner(rota.view, iso)` in `src/app/api/calendarHelpers.js`. Multi-day events show as a chip on each day. Under 768px the chips become owner coloured dots and the day panel is a bottom sheet.
+- Month view: Monday first, 6 weeks. Each cell shows the date (today is a plum circle), up to two single-line chips coloured by owner (me apricot, partner powder, both gray with a plum left border; the owner name is also in visually hidden text), "+n more", and a small moon with the initial of whoever is on night duty (`aria-label="Night duty: {name}"`). Night duty is read from the shared sleep rota through `nightOwner(rota.view, iso)` in `src/app/utils/calendarHelpers.js`. Multi-day events show as a chip on each day. Under 768px the chips become owner coloured dots and the day panel is a bottom sheet.
 - Day panel: `src/app/components/CalendarDayPanel.vue`, a dialog like `CareLogPanel` (Escape closes, focus returns, focus is trapped). It lists the day's events with edit and delete (inline confirm) and holds the add and edit form: title, All day switch, start and end date (added so multi-day events can be made), start and end time, owner chips, type chips (Appointment, Family, Work) and notes (280 characters). "Add event" in the toolbar opens it in add mode for the selected day if that day is in the month shown, otherwise today, otherwise the first of the month shown.
 - Agenda: events from today, grouped by day. Empty state "No events yet. Add the first one.".
 - Owner chips still read Me, the partner's name and Both; the stored value is a uid or "both" (`CalendarDayPanel` takes a `me-uid` prop and maps both ways).
@@ -183,11 +183,11 @@ window Home and the care log already talk about, so it is now a real line in the
 than a figure of speech.
 
 Files:
-- `src/app/api/handovers.js`: `subscribeHandovers` (live, newest 30, ordered by `sentAt`),
+- `src/api/handovers.js`: `subscribeHandovers` (live, newest 30, ordered by `sentAt`),
   `subscribeLatestHandover`, `sendHandover`, `acceptHandover`, `updateHandover`. Same shape as
   `entries.js`: listeners report `{ code }` and log `console.error("[app handover]", code,
   error)`.
-- `src/app/api/handoverHelpers.js`: pure, fully tested. `periodStartFrom`, `summariseWindow`,
+- `src/app/utils/handoverHelpers.js`: pure, fully tested. `periodStartFrom`, `summariseWindow`,
   `summaryBlocks`, `summaryLine`, `suggestedNextUp`, `handoverStatus`, `formatWindow`,
   `handoverRows`.
 - `src/app/composables/useHandovers.js`: one live listener, bound in `AppShell` and shared
@@ -246,14 +246,14 @@ on Escape with focus back on the button, closes on a click outside and on a rout
 and shows the email read only with the sign in method underneath, read from
 `auth.currentUser.providerData` rather than stored by us. Saving writes `users/{uid}` and
 mirrors `displayName` and `role` into `households/{hid}/members/{uid}` in one batch
-(`saveProfile` in `src/app/api/account.js`), so the partner sees the new name without reading
+(`saveProfile` in `src/api/account.js`), so the partner sees the new name without reading
 the private user document. One solid plum button, "Save changes", with an inline `role="status"`
 confirmation. The role values are `mum`, `dad` and `carer` from `docs/data-model.md`. The old
 onboarding stored `parent`, `partner` or `caregiver`, so a profile carrying one of those shows
 no chip selected rather than a wrong one.
 
 `/settings` has no solid button at all: every control saves itself. A change updates the
-screen at once, the write waits about 600 ms (`debounce` in `src/app/api/settingsHelpers.js`),
+screen at once, the write waits about 600 ms (`debounce` in `src/app/utils/settingsHelpers.js`),
 and several fields changed close together go in one write, each under its own dotted path
 (`settings.display.timeFormat` and so on), so two sections can never overwrite each other. A
 quiet "Saved" sits in an `aria-live="polite"` region. The sections, each a plain section
@@ -265,7 +265,7 @@ separated by a 1px line:
   saved now and used once it is connected." Only the preferences are built. There is no FCM,
   no service worker, no token registration and no Firebase Messaging import anywhere.
 - Google Calendar: an outline "Connect Google Calendar" that calls `startGoogleConnect()` in
-  `src/app/api/server.js`, the connected state from `settings.calendar.connected`, an outline
+  `src/api/server.js`, the connected state from `settings.calendar.connected`, an outline
   "Disconnect", and the three sync switches. With no server the page says "The calendar server
   is not set up yet." rather than failing.
 - Display: time format chips, week start chips and a reduce motion switch. These are real:
@@ -292,7 +292,7 @@ a V2 file and App does not change it.
 
 An invite is `invites/{code}` with `householdId`, `createdBy`, `createdAt`, `expiresAt` (seven
 days), `usedAt`, `usedBy` and `revokedAt`. The pure helpers are in
-`src/app/api/inviteHelpers.js`: `inviteState` reads "valid", "expired", "used", "revoked" or
+`src/app/utils/inviteHelpers.js`: `inviteState` reads "valid", "expired", "used", "revoked" or
 "missing", `describeInviteState` turns that into the sentence the user reads, and
 `expiresInText` gives "Expires in 6 days". An invite with no `expiresAt` is treated as valid
 for ever, so the codes that already exist keep working.
@@ -308,10 +308,10 @@ it, so an old code gets "That code was replaced" instead of "not found".
 ## Pumping rooms
 
 The directory is the top level collection `pumpingRooms`, shared by every household, because a
-nursing room at a mall is the same room for everyone. `src/app/api/rooms.js` has
+nursing room at a mall is the same room for everyone. `src/api/rooms.js` has
 `subscribeRooms`, `addRoom` and `reportRoom`; the Pinia store `src/app/stores/rooms.js` binds
 the listener, maps each document to the list shape with `roomView` in
-`src/app/api/roomHelpers.js` and falls back to the two seed rooms in
+`src/app/utils/roomHelpers.js` and falls back to the two seed rooms in
 `src/app/data/pumpingRooms.js` while the collection is empty. The seed rooms are marked
 `seed: true` and the page says so; they cannot be confirmed or flagged, because they are not
 database rows. The old `nt.app.rooms` key is gone and nothing migrates it: two placeholder rooms
@@ -327,7 +327,7 @@ two values and the report is where the reason lives.
 
 ## Rate limiting on the client
 
-`src/app/api/limits.js` keeps a sliding window per action in `localStorage` under
+`src/app/utils/limits.js` keeps a sliding window per action in `localStorage` under
 `nt.app.limits`: at most 5 room reports, 10 entries, 3 invite regenerations and 3 account
 deletion attempts in ten minutes. Over the limit the action is refused with "You have done that
 a few times just now. Try again in a few minutes." The deciding part (`pruneStamps`, `decide`)
@@ -338,9 +338,9 @@ attributable and bounded.
 
 ## Account deletion
 
-"Delete my account" calls `deleteAccount()` in `src/app/api/server.js`, which posts to
+"Delete my account" calls `deleteAccount()` in `src/api/server.js`, which posts to
 `/api/account/delete`. When that function does not exist yet the page falls back to
-`deleteAccountFallback` in `src/app/api/account.js`, which removes what the browser is allowed
+`deleteAccountFallback` in `src/api/account.js`, which removes what the browser is allowed
 to remove and then lists in plain words what it could not, rather than claiming a clean
 deletion. `auth/requires-recent-login` becomes "sign out, sign in again, and then delete your
 account". The full server procedure is written out in `docs/account-deletion.md`.
@@ -359,7 +359,7 @@ an underscore:
 | --- | --- |
 | `admin.js` | Firebase Admin, started on first use, not on import, from `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` and `FIREBASE_PRIVATE_KEY` (literal `\n` turned back into newlines). Exports lazy `db` and `auth`, so a missing variable answers `server/not-configured` from the endpoint instead of crashing before the handler runs. |
 | `auth.js` | `requireUser(req)` verifies `Authorization: Bearer <idToken>` with `auth.verifyIdToken` and returns the decoded token, or throws a 401. It also accepts a `token` query parameter, for the one request that is a top level navigation. |
-| `respond.js` | `ok`, `fail`, `sendJson`, `allowMethod`, `readBody`, `logLine`. Every error carries `{ error: { code, message }, code, message }`: the nested shape is the house style, the flat one is what `src/app/api/server.js` already reads, so both are sent. |
+| `respond.js` | `ok`, `fail`, `sendJson`, `allowMethod`, `readBody`, `logLine`. Every error carries `{ error: { code, message }, code, message }`: the nested shape is the house style, the flat one is what `src/api/server.js` already reads, so both are sent. |
 | `rateLimit.js` | a per uid sliding window in `serverLimits/{uid}`, one array of millisecond timestamps per action, trimmed on write. 3 account deletions, 10 calendar connects and 20 syncs per ten minutes, answered 429 with a `Retry-After` header. A Firestore failure in the limiter never blocks the user. |
 | `limitWindow.js` | the pure deciding half of that limiter (`pruneStamps`, `decide`), unit tested |
 | `google.js` | the OAuth2 client from `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_REDIRECT_URI`; loading a stored refresh token, getting an authorised calendar client, persisting a rotated token, finding or creating the secondary calendar called "NurtureTrack", and revoking a grant |
@@ -417,7 +417,7 @@ and read back as the 26th.
 
 ### What changed in the client
 
-- `src/app/api/server.js` adds `Authorization: Bearer <ID token>` to every call from
+- `src/api/server.js` adds `Authorization: Bearer <ID token>` to every call from
   `auth.currentUser.getIdToken()`, and keeps every existing graceful behaviour: a 404, 405,
   501, an HTML answer or a network failure is still one `server/unreachable` error. It gained
   `syncGoogleCalendar(householdId)` and `describeSyncResult(result)`. `startGoogleConnect`

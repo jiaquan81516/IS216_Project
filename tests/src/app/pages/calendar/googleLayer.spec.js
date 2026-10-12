@@ -8,7 +8,7 @@ import { useCalendarStore } from "@/app/stores/calendar";
 import { useRotaStore } from "@/app/stores/rota";
 
 vi.mock("@/composables/useAuth", () => ({ useAuth: () => ({}) }));
-vi.mock("@/app/api/calendar", () => ({
+vi.mock("@/api/calendar", () => ({
   subscribeEvents: (hid, onData) => {
     queueMicrotask(() => onData([]));
     return () => {};
@@ -18,7 +18,7 @@ vi.mock("@/app/api/calendar", () => ({
   deleteEvent: vi.fn(),
   migrateLegacyCalendar: vi.fn(async () => false),
 }));
-vi.mock("@/app/api/rota", () => ({
+vi.mock("@/api/rota", () => ({
   subscribeRotaSettings: (hid, onData) => (queueMicrotask(() => onData(null)), () => {}),
   subscribeNights: (a, b, c, onData) => (queueMicrotask(() => onData([])), () => {}),
   subscribeSwaps: (hid, onData) => (queueMicrotask(() => onData([])), () => {}),

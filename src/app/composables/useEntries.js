@@ -1,5 +1,5 @@
 import { getCurrentScope, onScopeDispose, ref, watch } from "vue";
-import { subscribeEntries } from "@/app/api/entries";
+import { subscribeEntries } from "@/api/entries";
 
 // Key used by the layout to share one entries listener with its child pages.
 export const ENTRIES_KEY = Symbol("app-entries");

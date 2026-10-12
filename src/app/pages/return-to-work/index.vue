@@ -5,8 +5,8 @@ import { RouterLink } from "vue-router";
 import Icon from "@/app/components/Icon.vue";
 import Tabs from "@/app/components/Tabs.vue";
 import RtwPumping from "@/app/components/RtwPumping.vue";
-import { dueText, daysUntil, groupTasks, ownerCounts, returnSentence, suggestedTasks } from "@/app/api/rtwHelpers";
-import { isIsoDate, toIso } from "@/app/api/rotaHelpers";
+import { dueText, daysUntil, groupTasks, ownerCounts, returnSentence, suggestedTasks } from "@/app/utils/rtwHelpers";
+import { isIsoDate, toIso } from "@/app/utils/rotaHelpers";
 import {
   describeSharedError,
   ownerKey as ownerKeyFor,
@@ -14,7 +14,7 @@ import {
   ownerUid,
   relativeTime,
   updatedLine,
-} from "@/app/api/sharedHelpers";
+} from "@/app/utils/sharedHelpers";
 import { TASK_GROUPS } from "@/app/data/rtw";
 import { displayName, HOME_KEY } from "@/app/composables/useHome";
 import { SHARED_KEY } from "@/app/composables/useShared";

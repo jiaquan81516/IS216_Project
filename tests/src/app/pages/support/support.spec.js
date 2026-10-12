@@ -7,7 +7,7 @@ import {
   filterRooms,
   roomView,
   statusText,
-} from "@/app/api/roomHelpers";
+} from "@/app/utils/roomHelpers";
 import { SAMPLE_ROOMS, SEED_ROOMS } from "@/app/data/pumpingRooms";
 const pushMock = vi.fn();
 vi.mock("vue-router", () => ({
@@ -26,10 +26,10 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("@/api/firebase", () => ({ default: {}, auth: {} }));
-vi.mock("@/app/api/db", () => ({ db: {} }));
+vi.mock("@/api/db", () => ({ db: {} }));
 vi.mock("firebase/firestore", () => ({}));
 vi.mock("@/composables/useAuth", () => ({ useAuth: () => ({ currentUser: { value: { uid: "u1" } } }) }));
-vi.mock("@/app/api/rooms", () => ({
+vi.mock("@/api/rooms", () => ({
   ROOMS_MAX: 200,
   subscribeRooms: (onData) => {
     api.push = onData;

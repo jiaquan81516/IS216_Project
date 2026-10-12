@@ -10,7 +10,7 @@ const api = vi.hoisted(() => ({
   deletePost: vi.fn(async () => {}),
 }));
 
-vi.mock("@/app/api/posts", () => ({
+vi.mock("@/api/posts", () => ({
   POST_TEXT_MAX: 500,
   subscribePosts: (hid, onData, onError) => {
     api.onData = onData;

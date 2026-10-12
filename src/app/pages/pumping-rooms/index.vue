@@ -8,7 +8,7 @@ import Icon from "@/app/components/Icon.vue";
 import RoomCard from "@/app/components/RoomCard.vue";
 import RoomFilterPanel from "@/app/components/RoomFilterPanel.vue";
 import OneMapEmbed from "@/app/components/OneMapEmbed.vue";
-import { loadBmsgRooms } from "@/app/api/bmsgRooms";
+import { loadBmsgRooms } from "@/api/bmsgRooms";
 import {
   DEFAULT_CENTER,
   activeFilterCount,
@@ -16,8 +16,8 @@ import {
   mergeRooms,
   prepareCommunityRooms,
   sortByDistance,
-} from "@/app/api/mapHelpers";
-import { describeSharedError } from "@/app/api/sharedHelpers";
+} from "@/app/utils/mapHelpers";
+import { describeSharedError } from "@/app/utils/sharedHelpers";
 import { SEED_COORDS } from "@/app/data/pumpingRooms";
 import { useRoomsStore } from "@/app/stores/rooms";
 

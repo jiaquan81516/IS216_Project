@@ -20,9 +20,9 @@ import {
   weekStartOf,
   weekTitle,
   isBarEvent,
-} from "@/app/api/calendarHelpers";
-import { addDays, parseIso, toIso } from "@/app/api/rotaHelpers";
-import { describeSharedError, ownerKey, ownerLabel, ownerUid } from "@/app/api/sharedHelpers";
+} from "@/app/utils/calendarHelpers";
+import { addDays, parseIso, toIso } from "@/app/utils/rotaHelpers";
+import { describeSharedError, ownerKey, ownerLabel, ownerUid } from "@/app/utils/sharedHelpers";
 import { displayName, HOME_KEY } from "@/app/composables/useHome";
 import { usePrefs } from "@/app/composables/usePrefs";
 import { setGoogleToggle, useGoogleCalendarClient } from "@/app/composables/useGoogleCalendarClient";

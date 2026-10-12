@@ -3,7 +3,7 @@ import "@/app/app.css";
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
 import ChipGroup from "@/app/components/ChipGroup.vue";
 import Icon from "@/app/components/Icon.vue";
-import { dayLabel, ENTRY_TYPES, startOfDay, toDate, toTimeInput } from "@/app/api/entryHelpers";
+import { dayLabel, ENTRY_TYPES, startOfDay, toDate, toTimeInput } from "@/app/utils/entryHelpers";
 
 defineOptions({ name: "CareLogPanel" });
 

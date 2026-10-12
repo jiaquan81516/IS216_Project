@@ -11,8 +11,8 @@ import {
   subscribeTasks,
   toggleTask as apiToggleTask,
   updateTask as apiUpdateTask,
-} from "@/app/api/rtw";
-import { isIsoDate } from "@/app/api/rotaHelpers";
+} from "@/api/rtw";
+import { isIsoDate } from "@/app/utils/rotaHelpers";
 import { PUMPING_ITEMS, PUMPING_SESSIONS, PUMPING_TIMES, RESPONSIBILITY_AREAS, TASK_GROUPS } from "@/app/data/rtw";
 
 const GROUP_VALUES = TASK_GROUPS.map((g) => g.value);
@@ -28,6 +28,7 @@ export function cleanTask(data, fallbackOwner = "both") {
     due: isIsoDate(data.due) ? data.due : null,
     owner: data.owner || fallbackOwner,
     notes: typeof data.notes === "string" ? data.notes : "",
+    queued: Boolean(data.queued),
   };
 }
 

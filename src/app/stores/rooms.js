@@ -1,10 +1,10 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { useAuth } from "@/composables/useAuth";
-import { addRoom as addRoomDoc, reportRoom as reportRoomDoc, subscribeRooms } from "@/app/api/rooms";
-import { roomView } from "@/app/api/roomHelpers";
+import { addRoom as addRoomDoc, reportRoom as reportRoomDoc, subscribeRooms } from "@/api/rooms";
+import { roomView } from "@/app/utils/roomHelpers";
 import { SEED_ROOMS } from "@/app/data/pumpingRooms";
-import { takeLimit } from "@/app/api/limits";
+import { takeLimit } from "@/app/utils/limits";
 
 // The pumping room directory lives in Firestore (pumpingRooms), shared by every household.
 // Until somebody adds the first real room the list falls back to the seed rooms in
@@ -63,7 +63,7 @@ export const useRoomsStore = defineStore("app-rooms", () => {
     }
   }
 
-  // kind is "confirm" or "gone". Rate limited on this device, see src/app/api/limits.js.
+  // kind is "confirm" or "gone". Rate limited on this device, see src/app/utils/limits.js.
   async function reportRoom(roomId, kind) {
     writeError.value = "";
     const gate = takeLimit("roomReport");

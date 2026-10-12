@@ -1,9 +1,9 @@
 import { ref } from "vue";
 import { signInWithGoogle } from "@/api/authApi";
 import { useAuth as useFirebaseAuth } from "@/composables/useAuth";
-import { describeAuthError, signInWithEmail, signUpWithEmail } from "@/app/api/emailAuth";
-import { ensureUserProfile } from "@/app/api/profile";
-import { withTimeout } from "@/app/api/timeout";
+import { describeAuthError, signInWithEmail, signUpWithEmail } from "@/api/emailAuth";
+import { ensureUserProfile } from "@/api/profile";
+import { withTimeout } from "@/app/utils/timeout";
 import { ROUTES } from "@/app/routes";
 import { useOnboarding } from "@/app/stores/onboarding";
 
@@ -64,7 +64,7 @@ export function useAuth() {
   async function loadProfile() {
     const user = currentUser.value;
     if (!user) return null;
-    const { getUserProfile } = await import("@/app/api/profile");
+    const { getUserProfile } = await import("@/api/profile");
     authProfile.value = await withTimeout(getUserProfile(user.uid));
     return authProfile.value;
   }
