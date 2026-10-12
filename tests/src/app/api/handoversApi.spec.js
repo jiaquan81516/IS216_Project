@@ -136,4 +136,24 @@ describe("handovers api", () => {
       updatedAt: "STAMP",
     });
   });
+
+  it("stores the tasks that were passed on, with the checklist id of each", async () => {
+    await sendHandover({ uid: ME }, HID, {
+      to: PARTNER,
+      tasks: [
+        { text: " Buy formula ", ref: "c1" },
+        { text: "Buy formula", ref: "c1" },
+        { text: "Clinic", ref: "c2" },
+      ],
+    });
+    expect(fs.addDoc.mock.calls[0][1].tasks).toEqual([
+      { id: "t1", text: "Buy formula", ref: "c1" },
+      { id: "t2", text: "Clinic", ref: "c2" },
+    ]);
+  });
+
+  it("stores an empty list when no task was handed over", async () => {
+    await sendHandover({ uid: ME }, HID, { to: PARTNER });
+    expect(fs.addDoc.mock.calls[0][1].tasks).toEqual([]);
+  });
 });

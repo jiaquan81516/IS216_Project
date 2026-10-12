@@ -2,14 +2,20 @@
 import "@/app/app.css";
 import { computed, inject, onBeforeUnmount, onMounted, ref } from "vue";
 import Icon from "@/app/components/Icon.vue";
-import { acceptHandover, ATTENTION_MAX, NEXT_UP_MAX, NOTE_MAX, sendHandover } from "@/app/api/handovers";
-import { formatTime } from "@/app/api/entryHelpers";
+import { RouterLink } from "vue-router";
+import HandoverTasks from "@/app/components/HandoverTasks.vue";
+import { acceptHandover, NOTE_MAX, sendHandover } from "@/app/api/handovers";
+import { dueLabel, myOpenTasks } from "@/app/api/checklistHelpers";
+import { dayLabel, formatTime, startOfDay } from "@/app/api/entryHelpers";
 import { describeSharedError } from "@/app/api/sharedHelpers";
 import {
   formatWindow,
   handoverStatus,
+  cleanTasks,
   periodStartFrom,
-  suggestedNextUp,
+  TASKS_MAX,
+  taskProgress,
+  tasksWithState,
   summariseWindow,
   summaryBlocks,
   summaryLine,
@@ -18,10 +24,15 @@ import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { useHandovers, HANDOVERS_KEY } from "@/app/composables/useHandovers";
 import { SHARED_KEY } from "@/app/composables/useShared";
+import { ROUTES } from "@/app/routes";
 
 defineOptions({ name: "HandoverPage" });
 
-const HISTORY_MAX = 10;
+// Quick notes a parent can tap instead of typing. The picks and the optional line are joined
+// into the one plain note the handover already stores.
+const PICKS = ["Fussy after feeds", "Nappy rash", "Spit-up", "Slept well", "Needed rocking", "Long nap"];
+const LINE_MAX = 200;
+const SIX_HOURS = 6 * 3600000;
 
 const home = inject(HOME_KEY, null) ?? useHome();
 const { loading, error, reload, me, partner, householdId } = home;
@@ -29,6 +40,8 @@ const entriesShared = inject(ENTRIES_KEY, null) ?? useEntries(householdId);
 const myUid = computed(() => me.value.uid);
 const shared = inject(HANDOVERS_KEY, null) ?? useHandovers(householdId, myUid);
 const sharedStores = inject(SHARED_KEY, null);
+const rtw = sharedStores?.rtw ?? null;
+const checklistTasks = computed(() => rtw?.tasks ?? []);
 
 const now = ref(new Date());
 
@@ -54,19 +67,32 @@ const entries = computed(() => entriesShared.entries.value);
 const incoming = computed(() => shared.waitingForMe.value);
 const latest = computed(() => shared.latest.value);
 
-// The window the send form covers: from the last handover, or the start of today.
-const periodStart = computed(() => periodStartFrom(latest.value, now.value));
-const sinceLine = computed(() => `Since ${formatTime(periodStart.value)}`);
+// The window the send form covers. By default it runs from the last handover, or from the start
+// of today when there is none yet; "Change" lets the parent pick a different start.
+const windowChoice = ref("auto");
+const changing = ref(false);
+const windowChoices = computed(() => {
+  const list = [{ key: "auto", label: latest.value ? "Last handover" : "Start of today" }];
+  if (latest.value) list.push({ key: "today", label: "Start of today" });
+  list.push({ key: "six", label: "Last 6 hours" });
+  return list;
+});
+const periodStart = computed(() => {
+  if (windowChoice.value === "today") return startOfDay(now.value);
+  if (windowChoice.value === "six") return new Date(now.value.getTime() - SIX_HOURS);
+  return periodStartFrom(latest.value, now.value);
+});
+const sinceLine = computed(() =>
+  windowChoice.value === "auto" && latest.value
+    ? `Since your last handover at ${formatTime(periodStart.value)}`
+    : `Since ${formatTime(periodStart.value)}`,
+);
 const liveSummary = computed(() => summariseWindow(entries.value, periodStart.value, now.value));
 const liveBlocks = computed(() => summaryBlocks(liveSummary.value));
-
-const rotaView = computed(() => sharedStores?.rota?.view ?? null);
-const suggestions = computed(() =>
-  suggestedNextUp(entries.value, rotaView.value, now.value, {
-    me: myName.value,
-    partner: partnerFirst.value,
-  }).filter((text) => !nextUp.value.includes(text)),
-);
+function chooseWindow(key) {
+  windowChoice.value = key;
+  changing.value = false;
+}
 
 // The received handover
 const received = computed(() => {
@@ -81,26 +107,41 @@ const received = computed(() => {
     needsAttention: Boolean(handover.needsAttention),
     attentionNote: handover.attentionNote ?? "",
     nextUp: handover.nextUp ?? [],
+    tasks: tasksWithState(handover.tasks, checklistTasks.value),
   };
 });
 
-const history = computed(() =>
-  handovers.value
-    .filter((handover) => handover.id !== incoming.value?.id)
-    .slice(0, HISTORY_MAX)
-    .map((handover) => ({
-      id: handover.id,
-      time: formatTime(handover.sentAt),
-      who: `${nameOf(handover.from)} to ${nameOf(handover.to)}`,
-      status: handoverStatus(handover, myUid.value, nameOf(handover.to)),
-      summary: summaryLine(handover.summary),
-      note: handover.note ?? "",
-    })),
-);
+// The side panel shows only the newest handover that is not the one waiting for me.
+const last = computed(() => {
+  const handover = handovers.value.find((item) => item.id !== incoming.value?.id);
+  if (!handover) return null;
+  return {
+    id: handover.id,
+    when: `${dayLabel(handover.sentAt, now.value)}, ${formatTime(handover.sentAt)}`,
+    who: `${nameOf(handover.from)} to ${nameOf(handover.to)}`,
+    status: handoverStatus(handover, myUid.value, nameOf(handover.to)),
+    accepted: /accepted/i.test(handoverStatus(handover, myUid.value, nameOf(handover.to))),
+    summary: summaryLine(handover.summary),
+    note: handover.note ?? "",
+    tasks: tasksWithState(handover.tasks, checklistTasks.value),
+    progress: taskProgress(tasksWithState(handover.tasks, checklistTasks.value)),
+    mine: handover.to === myUid.value,
+  };
+});
 
-const openRow = ref("");
-function toggleRow(id) {
-  openRow.value = openRow.value === id ? "" : id;
+// Ticking a task off. The tick lives on the checklist, so this is the same tick as there.
+const ticking = ref("");
+const tickError = ref("");
+async function toggleChecklist(task) {
+  if (!rtw || !task?.ref || ticking.value) return;
+  ticking.value = task.id;
+  tickError.value = "";
+  try {
+    const ok = await rtw.toggleTask(task.ref);
+    if (ok === false) tickError.value = "We could not update that task. Check your connection and try again.";
+  } finally {
+    ticking.value = "";
+  }
 }
 
 // Accepting
@@ -124,52 +165,66 @@ async function accept() {
 }
 
 // The send form
-const note = ref("");
-const needsAttention = ref(false);
-const attentionNote = ref("");
-const nextUp = ref([]);
-const draft = ref("");
+const picks = ref([]);
+const line = ref("");
+const choice = ref({});
 const sending = ref(false);
 const sendError = ref("");
 const sentText = ref("");
 
-const noteLeft = computed(() => NOTE_MAX - note.value.length);
-const nextUpFull = computed(() => nextUp.value.length >= NEXT_UP_MAX);
+// Tasks I can hand over: my own open tasks on the checklist. The ones I queued there start
+// ticked, and I can tick or untick any of them here. Nothing moves until I send.
+const openMine = computed(() => myOpenTasks(checklistTasks.value, myUid.value));
+const passed = (task) => choice.value[task.id] ?? Boolean(task.queued);
+const chosen = computed(() => openMine.value.filter(passed));
+const chosenTasks = computed(() => cleanTasks(chosen.value.map((task) => ({ text: task.title, ref: task.id }))));
+const tasksFull = computed(() => chosenTasks.value.length >= TASKS_MAX);
+function togglePass(task) {
+  const on = passed(task);
+  if (!on && tasksFull.value) return;
+  choice.value = { ...choice.value, [task.id]: !on };
+}
 
-function addNextUp(text) {
-  const value = String(text ?? "").trim();
-  if (!value || nextUpFull.value || nextUp.value.includes(value)) return;
-  nextUp.value = [...nextUp.value, value.slice(0, 80)];
+function togglePick(text) {
+  picks.value = picks.value.includes(text) ? picks.value.filter((item) => item !== text) : [...picks.value, text];
 }
-function addDraft() {
-  addNextUp(draft.value);
-  draft.value = "";
-}
-function removeNextUp(text) {
-  nextUp.value = nextUp.value.filter((item) => item !== text);
-}
+
+// "Fussy after feeds, Nappy rash. Cream used at 2 PM."
+const composedNote = computed(() => {
+  const chosen = PICKS.filter((text) => picks.value.includes(text));
+  const parts = [];
+  if (chosen.length) parts.push(`${chosen.join(", ")}.`);
+  const extra = line.value.trim();
+  if (extra) parts.push(extra);
+  return parts.join(" ").slice(0, NOTE_MAX);
+});
 
 async function send() {
   if (sending.value || !hasPartner.value || !householdId.value) return;
   sending.value = true;
   sendError.value = "";
+  const handingOver = chosenTasks.value;
   try {
     await sendHandover({ uid: myUid.value }, householdId.value, {
       to: partnerUid.value,
-      note: note.value.trim(),
-      needsAttention: needsAttention.value,
-      attentionNote: attentionNote.value.trim(),
-      nextUp: nextUp.value,
+      note: composedNote.value,
+      tasks: handingOver,
       periodStart: periodStart.value,
       summary: liveSummary.value,
     });
-    note.value = "";
-    needsAttention.value = false;
-    attentionNote.value = "";
-    nextUp.value = [];
-    draft.value = "";
+    picks.value = [];
+    line.value = "";
+    choice.value = {};
+    windowChoice.value = "auto";
+    changing.value = false;
     sentText.value = `Handover sent to ${partnerLabel.value}.`;
     now.value = new Date();
+    // The tasks now belong to my partner on the checklist too.
+    if (rtw) {
+      await Promise.all(
+        handingOver.map((task) => rtw.updateTask(task.ref, { owner: partnerUid.value, queued: false })),
+      );
+    }
   } catch (cause) {
     console.error("[app handover]", cause?.code, cause);
     sendError.value = "We could not send the handover. Check your connection and try again.";
@@ -252,6 +307,17 @@ onBeforeUnmount(() => clearInterval(clockTimer));
             </ul>
           </template>
 
+          <template v-if="received.tasks.length">
+            <h3 class="ho__sub-title">Tasks for you</h3>
+            <HandoverTasks
+              :tasks="received.tasks"
+              editable
+              :busy="ticking"
+              label="Tasks for you"
+              @toggle="toggleChecklist($event)"
+            />
+          </template>
+
           <p v-if="acceptError" class="ho__row-error" role="alert">{{ acceptError }}</p>
           <div class="ho__actions">
             <button type="button" class="btn btn-primary" :disabled="accepting" @click="accept">
@@ -268,6 +334,28 @@ onBeforeUnmount(() => clearInterval(clockTimer));
               <p class="ho__card-kicker">Write a handover</p>
               <h2 id="ho-send" class="ho__panel-title">{{ sinceLine }}</h2>
             </div>
+            <button
+              type="button"
+              class="app-textbtn ho__change"
+              :aria-expanded="changing ? 'true' : 'false'"
+              aria-controls="ho-window"
+              @click="changing = !changing"
+            >
+              Change
+            </button>
+          </div>
+
+          <div v-if="changing" id="ho-window" class="ho__window" role="group" aria-label="Start of the summary">
+            <button
+              v-for="choice in windowChoices"
+              :key="choice.key"
+              type="button"
+              class="ho__pick"
+              :aria-pressed="windowChoice === choice.key ? 'true' : 'false'"
+              @click="chooseWindow(choice.key)"
+            >
+              {{ choice.label }}
+            </button>
           </div>
 
           <ul class="ho__stats ho__stats--live" aria-label="This shift so far">
@@ -278,69 +366,55 @@ onBeforeUnmount(() => clearInterval(clockTimer));
           </ul>
 
           <div class="ho__field">
-            <label class="ho__label" for="ho-note">Note for {{ partnerLabel }}</label>
-            <textarea
-              id="ho-note"
-              v-model="note"
-              class="app-control ho__textarea"
-              rows="6"
-              :maxlength="NOTE_MAX"
-              placeholder="Fussy after the 3 PM feed, settled by 4."
-            ></textarea>
-            <p v-if="noteLeft < 50" class="ho__muted">{{ noteLeft }} characters left</p>
-          </div>
-
-          <div class="ho__check ho__rule">
-            <input id="ho-attention" v-model="needsAttention" type="checkbox" role="switch" class="ho__checkbox" />
-            <label class="ho__label" for="ho-attention">Needs attention</label>
-          </div>
-          <div v-if="needsAttention" class="ho__field">
-            <label class="ho__label" for="ho-attention-note">What needs attention?</label>
+            <h3 id="ho-picks-title" class="ho__sub-title">Anything {{ partnerLabel }} should know?</h3>
+            <p class="ho__muted">Tap what applies. Optional.</p>
+            <div class="ho__picks" role="group" aria-labelledby="ho-picks-title">
+              <button
+                v-for="text in PICKS"
+                :key="text"
+                type="button"
+                class="ho__pick"
+                :aria-pressed="picks.includes(text) ? 'true' : 'false'"
+                @click="togglePick(text)"
+              >
+                {{ text }}
+              </button>
+            </div>
+            <label class="visually-hidden" for="ho-line">One more thing for {{ partnerLabel }}</label>
             <input
-              id="ho-attention-note"
-              v-model="attentionNote"
+              id="ho-line"
+              v-model="line"
               type="text"
               class="app-control"
-              :maxlength="ATTENTION_MAX"
-              placeholder="Nappy rash, cream used at 2 PM"
+              :maxlength="LINE_MAX"
+              placeholder="One more thing? e.g. cream used at 2 PM"
             />
           </div>
 
           <div class="ho__field ho__rule">
-            <h3 class="ho__sub-title">Coming up</h3>
-            <ul v-if="nextUp.length" class="ho__chips">
-              <li v-for="item in nextUp" :key="item" class="ho__chip">
-                <span>{{ item }}</span>
-                <button
-                  type="button"
-                  class="ho__chip-remove"
-                  :aria-label="`Remove ${item}`"
-                  @click="removeNextUp(item)"
-                >
-                  <Icon name="x" :size="16" />
-                </button>
-              </li>
-            </ul>
-            <ul v-if="suggestions.length && !nextUpFull" class="ho__suggest-list">
-              <li v-for="text in suggestions" :key="text" class="ho__suggest-row">
-                <button type="button" class="ho__suggest-btn" @click="addNextUp(text)">
-                  <span aria-hidden="true">+</span>
-                  <span class="ho__suggest-text">{{ text }}</span>
-                </button>
-              </li>
-            </ul>
-            <form v-if="!nextUpFull" class="ho__add" @submit.prevent="addDraft">
-              <label class="visually-hidden" for="ho-next">Add something that is coming up</label>
-              <input
-                id="ho-next"
-                v-model="draft"
-                type="text"
-                class="app-control"
-                maxlength="80"
-                placeholder="Add something, e.g. bath at 7:30 PM"
-              />
-              <button type="submit" class="app-textbtn" :disabled="!draft.trim()">Add</button>
-            </form>
+            <div class="ho__tasks-head">
+              <h3 id="ho-tasks-title" class="ho__sub-title">Tasks to pass on to {{ partnerLabel }}</h3>
+              <RouterLink :to="ROUTES.CHECKLIST" class="app-link">Open checklist</RouterLink>
+            </div>
+            <template v-if="openMine.length">
+              <p class="ho__muted">Tick the ones {{ partnerLabel }} should take over. Unticked tasks stay with you.</p>
+              <ul class="ho__tasklist" aria-labelledby="ho-tasks-title">
+                <li v-for="task in openMine" :key="task.id" class="ho__task">
+                  <label class="ho__task-label">
+                    <input
+                      type="checkbox"
+                      class="ho__task-box"
+                      :checked="passed(task)"
+                      :disabled="tasksFull && !passed(task)"
+                      @change="togglePass(task)"
+                    />
+                    <span>{{ task.title }}</span>
+                  </label>
+                  <span class="ho__task-source">{{ [dueLabel(task, now), task.queued ? "Queued on the checklist" : ""].filter(Boolean).join(". ") }}</span>
+                </li>
+              </ul>
+            </template>
+            <p v-else class="ho__muted">You have no open tasks. Add some on the checklist and they will show here.</p>
           </div>
 
           <p v-if="!hasPartner" class="ho__muted ho__no-partner">
@@ -349,45 +423,46 @@ onBeforeUnmount(() => clearInterval(clockTimer));
           <p v-if="sendError" class="ho__row-error" role="alert">{{ sendError }}</p>
           <div class="ho__actions ho__foot">
             <button type="button" class="btn btn-primary" :disabled="sending || !hasPartner" @click="send">
-              {{ sending ? "Sending..." : "Send handover" }}
+              {{ sending ? "Sending..." : `Send to ${partnerLabel}` }}
             </button>
+            <p class="ho__muted ho__foot-note">{{ partnerLabel }} will be asked to accept it.</p>
           </div>
         </section>
 
         </div>
 
-        <!-- History -->
-        <section class="ho__history ho__card" aria-labelledby="ho-history">
-          <h2 id="ho-history" class="ho__h2">Earlier handovers</h2>
-          <div v-if="!history.length" class="ho__empty">
+        <!-- Last handover -->
+        <section class="ho__history ho__card" aria-labelledby="ho-last">
+          <h2 id="ho-last" class="ho__h2">Last handover</h2>
+          <div v-if="!last" class="ho__empty">
             <Icon name="clock" :size="20" />
             <p class="ho__muted ho__none">No handovers yet.</p>
           </div>
-          <ul v-else class="ho__rows">
-            <li v-for="row in history" :key="row.id" class="ho__row">
-              <div class="ho__row-head">
-                <span class="ho__row-time">
-                  <Icon :name="/accepted/i.test(row.status) ? 'check' : 'clock'" :size="16" />
-                  {{ row.time }}
-                </span>
-                <div class="ho__row-body">
-                  <p class="ho__row-who">{{ row.who }}</p>
-                  <p class="ho__row-meta">{{ row.status }}. {{ row.summary }}</p>
-                </div>
-                <button
-                  v-if="row.note"
-                  type="button"
-                  class="app-textbtn ho__row-toggle"
-                  :aria-expanded="openRow === row.id ? 'true' : 'false'"
-                  :aria-controls="`ho-note-${row.id}`"
-                  @click="toggleRow(row.id)"
-                >
-                  {{ openRow === row.id ? "Hide note" : "Show note" }}
-                </button>
-              </div>
-              <p v-if="row.note && openRow === row.id" :id="`ho-note-${row.id}`" class="ho__row-note">{{ row.note }}</p>
-            </li>
-          </ul>
+          <div v-else class="ho__last">
+            <p class="ho__row-time">
+              <Icon :name="last.accepted ? 'check' : 'clock'" :size="16" />
+              {{ last.when }}
+            </p>
+            <p class="ho__row-who">{{ last.who }}</p>
+            <p class="ho__row-meta">{{ last.status }}</p>
+            <p class="ho__row-meta">{{ last.summary }}</p>
+            <p v-if="last.note" class="ho__last-note">{{ last.note }}</p>
+            <p v-else class="ho__muted">No note was left.</p>
+            <template v-if="last.tasks.length">
+              <h3 class="ho__sub-title ho__last-tasks">
+                {{ last.mine ? "Tasks for you" : "Tasks you handed over" }}
+                <span class="ho__muted">{{ last.progress.label }}</span>
+              </h3>
+              <HandoverTasks
+                :tasks="last.tasks"
+                :editable="last.mine"
+                :busy="ticking"
+                :label="last.mine ? 'Tasks for you' : 'Tasks you handed over'"
+                @toggle="toggleChecklist($event)"
+              />
+              <p v-if="tickError" class="ho__row-error" role="alert">{{ tickError }}</p>
+            </template>
+          </div>
         </section>
       </div>
     </template>
@@ -411,8 +486,15 @@ onBeforeUnmount(() => clearInterval(clockTimer));
 
 .ho__card { background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; padding: 24px; }
 .ho__card-head { display: flex; align-items: center; gap: 12px; }
+.ho__change { margin-left: auto; align-self: flex-start; }
 .ho__icon-sq { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; border-radius: 8px; background: var(--nt-apricot); color: var(--nt-plum); }
 .ho__card-titles { min-width: 0; }
+.ho__window { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.ho__picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.ho__pick { min-height: 44px; padding: 8px 12px; font-family: inherit; font-size: 0.875rem; line-height: 1.3; color: var(--nt-ink); background: #fff; border: 1px solid var(--nt-line); border-radius: 8px; cursor: pointer; transition: border-color 0.15s, background-color 0.15s; }
+.ho__pick:hover { border-color: var(--nt-muted); }
+.ho__pick[aria-pressed="true"] { border-color: var(--nt-plum); background: var(--nt-apricot); font-weight: 600; }
+.ho__pick:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 .ho__card-kicker { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
 
 .ho__panel { display: flex; flex-direction: column; gap: 20px; }
@@ -436,44 +518,32 @@ onBeforeUnmount(() => clearInterval(clockTimer));
 
 .ho__field { display: flex; flex-direction: column; gap: 8px; }
 .ho__label { font-size: 0.875rem; font-weight: 500; color: var(--nt-ink); }
-.ho__textarea { resize: vertical; min-height: 140px; }
-.ho__check { display: flex; align-items: center; gap: 10px; }
-.ho__checkbox { appearance: none; position: relative; flex: none; width: 32px; height: 18px; margin: 0; background: var(--nt-line); border-radius: 999px; cursor: pointer; transition: background-color 0.15s; }
-.ho__checkbox::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: #fff; border-radius: 50%; transition: transform 0.15s; }
-.ho__checkbox:checked { background: var(--nt-plum); }
-.ho__checkbox:checked::after { transform: translateX(14px); }
-.ho__checkbox:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 
-.ho__chips { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
-.ho__chip { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--nt-line); font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); }
-.ho__chip-remove { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; background: none; border: 0; color: var(--nt-muted); cursor: pointer; }
-.ho__chip-remove:hover { color: var(--nt-coral); }
-.ho__chip-remove:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
 
-.ho__suggest-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.ho__suggest-btn { display: inline-flex; gap: 8px; padding: 4px 0; background: none; border: 0; font-family: inherit; font-size: 0.875rem; line-height: 1.45; text-align: left; color: var(--nt-plum); cursor: pointer; }
-.ho__suggest-btn:hover .ho__suggest-text { text-decoration: underline; text-underline-offset: 3px; }
-.ho__suggest-btn:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
-.ho__add { display: flex; align-items: center; gap: 12px; }
-.ho__add .app-control { flex: 1; min-width: 0; }
 .ho__no-partner { max-width: 48ch; }
 
 .ho__actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.ho__foot { margin-top: auto; padding-top: 20px; border-top: 1px solid var(--nt-line); }
+.ho__foot { margin-top: auto; align-items: center; gap: 16px; padding-top: 20px; border-top: 1px solid var(--nt-line); }
+.ho__foot-note { flex: 1; min-width: 160px; }
+.ho__last { display: flex; flex-direction: column; gap: 4px; }
+.ho__tasks-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ho__tasklist { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
+.ho__task { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--nt-line); }
+.ho__task-label { display: flex; align-items: flex-start; gap: 10px; font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); cursor: pointer; }
+.ho__task-box { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--nt-plum); cursor: pointer; }
+.ho__task-box:disabled { cursor: not-allowed; }
+.ho__task-box:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
+.ho__task-source { padding-left: 28px; font-size: 0.875rem; color: var(--nt-muted); }
+.ho__last-tasks { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 16px; }
+.ho__last-note { margin: 8px 0 0; font-size: 1rem; line-height: 1.5; color: var(--nt-ink); overflow-wrap: anywhere; }
 .ho__row-error { margin: 0; font-size: 0.875rem; color: var(--nt-coral); }
 
 .ho__history { display: flex; flex-direction: column; }
 .ho__empty { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 24px 0; color: var(--nt-muted); }
 .ho__none { padding: 0; }
-.ho__rows { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
-.ho__row { padding: 12px 0; border-bottom: 1px solid var(--nt-line); }
-.ho__row-head { display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
 .ho__row-time { display: inline-flex; align-items: center; gap: 6px; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); white-space: nowrap; }
-.ho__row-body { min-width: 0; }
 .ho__row-who { margin: 0; font-size: 0.875rem; font-weight: 600; line-height: 1.45; color: var(--nt-ink); }
 .ho__row-meta { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
-.ho__row-note { margin: 8px 0 0 100px; font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); overflow-wrap: anywhere; }
-.ho__row-toggle { white-space: nowrap; }
 
 @media (min-width: 1100px) {
   .ho__cols { grid-template-columns: minmax(0, 1fr) 380px; }
@@ -483,7 +553,5 @@ onBeforeUnmount(() => clearInterval(clockTimer));
 }
 @media (max-width: 575px) {
   .ho__card { padding: 20px 16px; }
-  .ho__row-head { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-  .ho__row-note { margin-left: 0; }
-}
+    }
 </style>

@@ -156,3 +156,44 @@ export function handoverRows(entries, handovers) {
   }
   return rows;
 }
+
+// ---- Tasks handed over with a handover -----------------------------------------------------
+//
+// A handover carries a frozen list of the checklist tasks that were passed on: { id, text, ref },
+// where ref is the id of the task on the shared checklist. Whether one is done is never copied:
+// it is read from the checklist, so there is only one place to tick it.
+export const TASKS_MAX = 6;
+export const TASK_TEXT_MAX = 120;
+
+// The tasks as they are stored: trimmed, one per checklist task, numbered t1, t2.
+export function cleanTasks(list) {
+  const seen = new Set();
+  const out = [];
+  for (const item of list ?? []) {
+    const text = String(item?.text ?? "").replace(/\s+/g, " ").trim().slice(0, TASK_TEXT_MAX);
+    const ref = typeof item?.ref === "string" ? item.ref.slice(0, 64) : "";
+    const key = ref || text.toLowerCase();
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ id: `t${out.length + 1}`, text, ref });
+    if (out.length >= TASKS_MAX) break;
+  }
+  return out;
+}
+
+// Adds `done` to each handed over task, read from the checklist tasks by ref. A task that was
+// deleted from the checklist counts as not done.
+export function tasksWithState(tasks, checklist) {
+  const byId = new Map((checklist ?? []).map((task) => [task.id, task]));
+  return (tasks ?? []).map((task) => ({ ...task, done: Boolean(byId.get(task.ref)?.done) }));
+}
+
+// { done, total, label } where label is "2 of 3 done", "All done" or "" when there are none.
+export function taskProgress(tasks) {
+  const list = tasks ?? [];
+  const done = list.filter((task) => task?.done).length;
+  const total = list.length;
+  let label = "";
+  if (total) label = done === total ? "All done" : `${done} of ${total} done`;
+  return { done, total, label };
+}

@@ -42,8 +42,8 @@ async function google() {
 </script>
 
 <template>
-  <Header />
-  <main class="app-container app-body">
+  <Header full />
+  <main class="app-container app-body signin-wrap">
     <div class="app-stack app-stack--24 signin">
       <div class="signin__title">
         <h1 class="signin__h1">Sign in</h1>
@@ -87,7 +87,10 @@ async function google() {
 </template>
 
 <style scoped>
-.signin { width: 480px; max-width: 100%; }
+.signin-wrap { display: flex; justify-content: center; align-items: flex-start; padding-top: clamp(32px, 8vh, 96px); padding-bottom: 64px; }
+.signin { width: 480px; max-width: 100%; box-sizing: border-box; padding: 40px; background: #fff; border: 1px solid var(--nt-line, #e5e7eb); border-radius: 12px; }
+.signin :deep(.app-btn--outline) { color: var(--nt-ink); }
+@media (max-width: 575px) { .signin { padding: 24px 20px; } }
 .signin__title { display: flex; flex-direction: column; gap: 12px; width: 100%; }
 .signin__h1 { margin: 0; font-family: var(--nt-serif); font-weight: 400; font-size: 36px; line-height: 44px; letter-spacing: -0.36px; color: var(--nt-ink); }
 .signin__lead { margin: 0; font-size: 17px; line-height: 26px; color: var(--nt-muted); }

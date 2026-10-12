@@ -237,6 +237,7 @@ describe("App return to work page, plan tab", () => {
       owner: PARTNER,
       due: "2026-10-16",
       notes: "",
+      queued: false,
     });
     expect(wrapper.find("#rtw-form").exists()).toBe(false);
   });
@@ -316,6 +317,7 @@ describe("App return to work page, plan tab", () => {
       owner: "both",
       due: null,
       notes: "",
+      queued: false,
     });
     api.cb.tasks([task({ title: "Arrange a childcare trial", group: "childcare" })]);
     await flushPromises();

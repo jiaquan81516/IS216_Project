@@ -3,7 +3,8 @@
 //
 // households/{hid}/handovers/{handoverId}
 //   { from, to, sentAt, periodStart, note, needsAttention, attentionNote,
-//     summary: { feeds, sleepMinutes, nappies }, nextUp, acceptedAt, acceptedBy, createdAt }
+//     summary: { feeds, sleepMinutes, nappies }, nextUp, tasks: [{ id, text, ref }],
+//     acceptedAt, acceptedBy, createdAt }
 //
 // sentAt is the sending device's clock rather than serverTimestamp(), so the shift window the
 // sender just read on screen is exactly what is stored, the list is ordered the moment the
@@ -21,12 +22,14 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db } from "./db";
+import { cleanTasks, TASKS_MAX } from "./handoverHelpers";
 
 const TAG = "[app handover]";
 export const HANDOVERS_MAX = 30;
 export const NOTE_MAX = 400;
 export const ATTENTION_MAX = 140;
 export const NEXT_UP_MAX = 3;
+export { TASKS_MAX };
 
 const handoversRef = (hid) => collection(db, "households", hid, "handovers");
 const handoverRef = (hid, id) => doc(db, "households", hid, "handovers", id);
@@ -68,7 +71,7 @@ export function subscribeLatestHandover(hid, onData, onError) {
 export async function sendHandover(
   user,
   hid,
-  { to, note = "", needsAttention = false, attentionNote = "", nextUp = [], periodStart = null, summary = {} } = {},
+  { to, note = "", needsAttention = false, attentionNote = "", nextUp = [], tasks = [], periodStart = null, summary = {} } = {},
 ) {
   const ref = await addDoc(handoversRef(hid), {
     from: user.uid,
@@ -84,6 +87,7 @@ export async function sendHandover(
       nappies: Number(summary.nappies) || 0,
     },
     nextUp: (nextUp ?? []).slice(0, NEXT_UP_MAX).map((text) => String(text)),
+    tasks: cleanTasks(tasks),
     acceptedAt: null,
     acceptedBy: null,
     createdAt: serverTimestamp(),

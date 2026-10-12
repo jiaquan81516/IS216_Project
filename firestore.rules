@@ -123,7 +123,8 @@ service cloud.firestore {
           && request.resource.data.to in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds
           && request.resource.data.sentAt is timestamp
           && request.resource.data.acceptedAt == null
-          && request.resource.data.acceptedBy == null;
+          && request.resource.data.acceptedBy == null
+          && (!('tasks' in request.resource.data) || request.resource.data.tasks.size() <= 6);
 
         allow update: if sharedMember()
           && resource.data.acceptedAt == null
