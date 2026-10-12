@@ -73,12 +73,13 @@ beforeEach(() => {
 });
 
 describe("App app shell", () => {
-  it("renders the main nav with eight items and Home as the current page", async () => {
+  it("renders the main nav with nine items and Home as the current page", async () => {
     const { wrapper } = await mountShell();
     const links = wrapper.findAll('nav[aria-label="Main"] a');
     expect(links.map((a) => a.text())).toEqual([
       "Home",
       "Care log",
+      "Checklist",
       "Handover",
       "Sleep rota",
       "Return to work",
@@ -89,6 +90,7 @@ describe("App app shell", () => {
     expect(links.map((a) => a.attributes("href"))).toEqual([
       "/home",
       "/care-log",
+      "/checklist",
       "/handover",
       "/rota",
       "/return-to-work",
@@ -112,7 +114,7 @@ describe("App app shell", () => {
     const badge = second.wrapper.get(".side__count");
     expect(badge.text()).toBe("1");
     expect(badge.attributes("aria-hidden")).toBe("true");
-    const link = second.wrapper.findAll('nav[aria-label="Main"] a')[2];
+    const link = second.wrapper.findAll('nav[aria-label="Main"] a')[3];
     expect(link.text()).toContain("1 handover waiting for you");
   });
 

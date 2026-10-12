@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  cleanTasks,
   formatWindow,
   handoverRows,
   handoverStatus,
@@ -8,6 +9,9 @@ import {
   summariseWindow,
   summaryBlocks,
   summaryLine,
+  taskProgress,
+  tasksWithState,
+  TASKS_MAX,
 } from "@/app/api/handoverHelpers";
 
 const at = (iso) => new Date(iso);
@@ -219,5 +223,56 @@ describe("handoverRows", () => {
     expect(handoverRows(list, []).map((r) => r.kind)).toEqual(["entry", "entry", "entry"]);
     expect(handoverRows(list, undefined)).toHaveLength(3);
     expect(handoverRows(undefined, handovers)).toEqual([]);
+  });
+});
+
+describe("cleanTasks", () => {
+  it("trims, numbers, keeps the checklist id as ref and drops repeats and empties", () => {
+    const out = cleanTasks([
+      { text: "  Buy   formula ", ref: "c1" },
+      { text: "Buy formula again", ref: "c1" },
+      { text: "" },
+      { text: "Clinic", ref: "c2" },
+      { text: "Clinic", ref: "c2" },
+      { text: "No ref" },
+      { text: "no ref" },
+    ]);
+    expect(out).toEqual([
+      { id: "t1", text: "Buy formula", ref: "c1" },
+      { id: "t2", text: "Clinic", ref: "c2" },
+      { id: "t3", text: "No ref", ref: "" },
+    ]);
+  });
+
+  it("caps the list and the length of a title, and copes with nothing", () => {
+    const many = cleanTasks(Array.from({ length: 12 }, (_, i) => ({ text: `Task ${i}`, ref: `c${i}` })));
+    expect(many).toHaveLength(TASKS_MAX);
+    expect(cleanTasks([{ text: "x".repeat(300) }])[0].text).toHaveLength(120);
+    expect(cleanTasks(undefined)).toEqual([]);
+  });
+});
+
+describe("tasksWithState and taskProgress", () => {
+  const handed = [
+    { id: "t1", text: "A", ref: "c1" },
+    { id: "t2", text: "B", ref: "c2" },
+    { id: "t3", text: "C", ref: "gone" },
+  ];
+
+  it("reads whether each task is done from the checklist, and treats a missing one as not done", () => {
+    const checklist = [
+      { id: "c1", done: true },
+      { id: "c2", done: false },
+    ];
+    expect(tasksWithState(handed, checklist).map((t) => t.done)).toEqual([true, false, false]);
+    expect(tasksWithState(undefined, checklist)).toEqual([]);
+    expect(tasksWithState(handed, undefined).every((t) => t.done === false)).toBe(true);
+  });
+
+  it("counts what is done", () => {
+    expect(taskProgress([{ done: true }, { done: false }, {}])).toEqual({ done: 1, total: 3, label: "1 of 3 done" });
+    expect(taskProgress([{ done: true }])).toEqual({ done: 1, total: 1, label: "All done" });
+    expect(taskProgress([])).toEqual({ done: 0, total: 0, label: "" });
+    expect(taskProgress(undefined).label).toBe("");
   });
 });

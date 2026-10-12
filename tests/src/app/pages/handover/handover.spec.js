@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
-import { computed, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { HOME_KEY } from "@/app/composables/useHome";
 import { ENTRIES_KEY } from "@/app/composables/useEntries";
@@ -37,15 +37,6 @@ const ME = "u1";
 const PARTNER = "u2";
 const NOW = new Date("2026-10-10T19:00:00");
 
-const ROTA_VIEW = {
-  pattern: "alternate",
-  firstOnDuty: "me",
-  startDate: "2026-10-10",
-  handoverTime: "07:00",
-  overrides: {},
-  swaps: [],
-};
-
 function incomingHandover(extra = {}) {
   return {
     id: "ho1",
@@ -70,7 +61,12 @@ function statsOf(wrapper) {
     .map((li) => `${li.get(".ho__stat-value").text()} ${li.get(".ho__stat-label").text()}`);
 }
 
-async function mountPage({ handovers = [], entries = [], partner = true, rota = ROTA_VIEW } = {}) {
+async function mountPage({ handovers = [], entries = [], partner = true, checklist = [] } = {}) {
+  const rtw = reactive({
+    tasks: checklist,
+    toggleTask: vi.fn(async () => true),
+    updateTask: vi.fn(async () => ({})),
+  });
   const list = ref(handovers);
   const home = {
     loading: ref(false),
@@ -102,12 +98,12 @@ async function mountPage({ handovers = [], entries = [], partner = true, rota = 
         [HOME_KEY]: home,
         [ENTRIES_KEY]: { entries: ref(entries), loading: ref(false), error: ref(null), retry: vi.fn() },
         [HANDOVERS_KEY]: shared,
-        [SHARED_KEY]: { rota: { view: rota } },
+        [SHARED_KEY]: { rtw },
       },
     },
   });
   await flushPromises();
-  return { wrapper, list, shared };
+  return { wrapper, list, shared, rtw };
 }
 
 beforeEach(() => {
@@ -180,7 +176,7 @@ describe("the App handover page", () => {
   });
 
   describe("when one is waiting for them", () => {
-    it("shows the send form and the status in the history", async () => {
+    it("shows the send form and only the last handover in the side panel", async () => {
       const sent = {
         id: "ho2",
         from: ME,
@@ -192,30 +188,24 @@ describe("the App handover page", () => {
         nextUp: [],
         acceptedAt: null,
       };
-      const { wrapper } = await mountPage({ handovers: [sent] });
+      const older = { ...sent, id: "ho1", sentAt: new Date("2026-10-09T07:10:00"), note: "Older note." };
+      const { wrapper } = await mountPage({ handovers: [sent, older] });
       expect(wrapper.find("#ho-received").exists()).toBe(false);
-      expect(wrapper.get("#ho-send").text()).toBe("Since 7:10 AM");
-      const row = wrapper.get(".ho__row");
-      expect(row.text()).toContain("Daniel to Mei");
-      expect(row.text()).toContain("waiting for Mei");
-      expect(row.text()).toContain("2 feeds, 1 h sleep, 1 nappy");
-    });
-
-    it("shows a sent note only when asked", async () => {
-      const { wrapper } = await mountPage({
-        handovers: [{ id: "ho2", from: ME, to: PARTNER, sentAt: NOW, note: "All calm.", summary: {} }],
-      });
-      const toggle = wrapper.get(".ho__row-toggle");
-      expect(toggle.attributes("aria-expanded")).toBe("false");
-      expect(wrapper.find(".ho__row-note").exists()).toBe(false);
-      await toggle.trigger("click");
-      expect(toggle.attributes("aria-expanded")).toBe("true");
-      expect(wrapper.get(".ho__row-note").text()).toBe("All calm.");
+      expect(wrapper.get("#ho-send").text()).toBe("Since your last handover at 7:10 AM");
+      expect(wrapper.get("#ho-last").text()).toBe("Last handover");
+      const card = wrapper.get(".ho__last");
+      expect(card.text()).toContain("Today, 7:10 AM");
+      expect(card.text()).toContain("Daniel to Mei");
+      expect(card.text()).toContain("waiting for Mei");
+      expect(card.text()).toContain("2 feeds, 1 h sleep, 1 nappy");
+      expect(card.text()).toContain("All calm.");
+      expect(wrapper.text()).not.toContain("Older note.");
+      expect(wrapper.find(".ho__row").exists()).toBe(false);
     });
   });
 
   describe("when there is none yet", () => {
-    it("covers the day so far and says the history is empty", async () => {
+    it("covers the day so far and says there is no last handover", async () => {
       const entries = [
         { id: "e1", type: "feed", at: new Date("2026-10-10T18:00:00") },
         { id: "e2", type: "nappy", at: new Date("2026-10-10T09:00:00") },
@@ -226,25 +216,36 @@ describe("the App handover page", () => {
       expect(wrapper.text()).toContain("No handovers yet.");
       const solid = wrapper.findAll("button.btn-primary");
       expect(solid).toHaveLength(1);
-      expect(solid[0].text()).toBe("Send handover");
+      expect(solid[0].text()).toBe("Send to Mei");
     });
 
-    it("offers suggestions built from the care log and the rota, and sends what I picked", async () => {
+    it("has no attention switch and no coming up list on the send form", async () => {
+      const { wrapper } = await mountPage();
+      expect(wrapper.find("#ho-attention").exists()).toBe(false);
+      expect(wrapper.get("#ho-send").element.closest("section").textContent).not.toContain("Needs attention");
+      expect(wrapper.get("#ho-send").element.closest("section").textContent).not.toContain("Coming up");
+    });
+
+    it("turns the taps and the one line into a single note when sent", async () => {
       const entries = [{ id: "e1", type: "feed", at: new Date("2026-10-10T18:00:00") }];
       const { wrapper } = await mountPage({ entries });
-      const suggestions = wrapper.findAll(".ho__suggest-row").map((row) => row.get(".ho__suggest-text").text());
-      expect(suggestions).toEqual(["Next feed due around 9:00 PM", "Daniel is on duty tonight"]);
-
-      await wrapper.findAll(".ho__suggest-row")[0].get("button").trigger("click");
-      expect(wrapper.findAll(".ho__chip").map((c) => c.text())).toContain("Next feed due around 9:00 PM");
-      // An added suggestion is not offered twice.
-      expect(wrapper.findAll(".ho__suggest-row")).toHaveLength(1);
-
-      await wrapper.get("#ho-next").setValue("Bath at 7:30 PM");
-      await wrapper.get(".ho__add").trigger("submit");
-      await wrapper.get("#ho-note").setValue("Settled by 4.");
-      await wrapper.get("#ho-attention").setValue(true);
-      await wrapper.get("#ho-attention-note").setValue("Nappy rash");
+      const picks = wrapper.findAll(".ho__picks .ho__pick");
+      expect(picks.map((b) => b.text())).toEqual([
+        "Fussy after feeds",
+        "Nappy rash",
+        "Spit-up",
+        "Slept well",
+        "Needed rocking",
+        "Long nap",
+      ]);
+      // Tapped out of order, the note still follows the list order.
+      await picks[1].trigger("click");
+      await picks[0].trigger("click");
+      expect(picks[0].attributes("aria-pressed")).toBe("true");
+      await picks[2].trigger("click");
+      await picks[2].trigger("click");
+      expect(picks[2].attributes("aria-pressed")).toBe("false");
+      await wrapper.get("#ho-line").setValue("Cream used at 2 PM");
       await wrapper.get("button.btn-primary").trigger("click");
       await flushPromises();
 
@@ -254,35 +255,38 @@ describe("the App handover page", () => {
       expect(hid).toBe("h1");
       expect(payload).toMatchObject({
         to: PARTNER,
-        note: "Settled by 4.",
-        needsAttention: true,
-        attentionNote: "Nappy rash",
-        nextUp: ["Next feed due around 9:00 PM", "Bath at 7:30 PM"],
+        note: "Fussy after feeds, Nappy rash. Cream used at 2 PM",
         summary: { feeds: 1, sleepMinutes: 0, nappies: 0 },
       });
+      expect(payload).not.toHaveProperty("needsAttention");
       expect(payload.periodStart.getHours()).toBe(0);
       expect(wrapper.text()).toContain("Handover sent to Mei.");
-      expect(wrapper.get("#ho-note").element.value).toBe("");
+      expect(wrapper.get("#ho-line").element.value).toBe("");
+      expect(wrapper.findAll(".ho__picks [aria-pressed='true']")).toHaveLength(0);
     });
 
-    it("stops at three things coming up and lets me take one out", async () => {
+    it("can send with nothing tapped or typed", async () => {
       const { wrapper } = await mountPage();
-      for (const text of ["One", "Two", "Three"]) {
-        await wrapper.get("#ho-next").setValue(text);
-        await wrapper.get(".ho__add").trigger("submit");
-      }
-      expect(wrapper.findAll(".ho__chip")).toHaveLength(3);
-      expect(wrapper.find(".ho__add").exists()).toBe(false);
-      await wrapper.findAll(".ho__chip-remove")[0].trigger("click");
-      expect(wrapper.findAll(".ho__chip").map((c) => c.text())).toEqual(["Two", "Three"]);
-      expect(wrapper.find(".ho__add").exists()).toBe(true);
+      await wrapper.get("button.btn-primary").trigger("click");
+      await flushPromises();
+      expect(api.send.mock.calls[0][2].note).toBe("");
     });
 
-    it("hides the attention input until the box is ticked", async () => {
-      const { wrapper } = await mountPage();
-      expect(wrapper.find("#ho-attention-note").exists()).toBe(false);
-      await wrapper.get("#ho-attention").setValue(true);
-      expect(wrapper.find("#ho-attention-note").exists()).toBe(true);
+    it("lets me change where the summary starts", async () => {
+      const entries = [
+        { id: "e1", type: "feed", at: new Date("2026-10-10T08:00:00") },
+        { id: "e2", type: "feed", at: new Date("2026-10-10T17:00:00") },
+      ];
+      const { wrapper } = await mountPage({ entries });
+      expect(wrapper.find("#ho-window").exists()).toBe(false);
+      expect(statsOf(wrapper)[0]).toBe("2 feeds");
+      await wrapper.get(".ho__change").trigger("click");
+      const choices = wrapper.findAll("#ho-window .ho__pick");
+      expect(choices.map((b) => b.text())).toEqual(["Start of today", "Last 6 hours"]);
+      await choices[1].trigger("click");
+      expect(wrapper.find("#ho-window").exists()).toBe(false);
+      expect(wrapper.get("#ho-send").text()).toBe("Since 1:00 PM");
+      expect(statsOf(wrapper)[0]).toBe("1 feed");
     });
 
     it("explains a failed send inline", async () => {
@@ -291,6 +295,150 @@ describe("the App handover page", () => {
       await wrapper.get("button.btn-primary").trigger("click");
       await flushPromises();
       expect(wrapper.get('[role="alert"]').text()).toContain("could not send the handover");
+    });
+  });
+
+  describe("tasks", () => {
+    const task = (id, extra = {}) => ({ id, title: `Task ${id}`, owner: ME, due: null, done: false, queued: false, ...extra });
+
+    it("lists my own open checklist tasks, unticked, and says so when there are none", async () => {
+      const { wrapper } = await mountPage({
+        checklist: [
+          task("a", { title: "Call clinic", due: "2026-10-10" }),
+          task("b", { title: "Mei's job", owner: PARTNER }),
+          task("c", { title: "Shared job", owner: "both" }),
+          task("d", { title: "Finished", done: true }),
+        ],
+      });
+      expect(wrapper.get("#ho-tasks-title").text()).toBe("Tasks to pass on to Mei");
+      const rows = wrapper.findAll(".ho__task");
+      expect(rows).toHaveLength(1);
+      expect(rows[0].text()).toContain("Call clinic");
+      expect(rows[0].text()).toContain("Due today");
+      expect(rows[0].get("input").element.checked).toBe(false);
+      expect(wrapper.get(".ho__tasks-head a").text()).toBe("Open checklist");
+
+      const empty = await mountPage();
+      expect(empty.wrapper.text()).toContain("You have no open tasks");
+    });
+
+    it("starts with the tasks I queued on the checklist ticked", async () => {
+      const { wrapper } = await mountPage({ checklist: [task("a", { queued: true }), task("b")] });
+      const boxes = wrapper.findAll(".ho__task input");
+      expect(boxes.map((b) => b.element.checked)).toEqual([true, false]);
+      expect(wrapper.findAll(".ho__task")[0].text()).toContain("Queued on the checklist");
+    });
+
+    it("sends the ticked tasks and then gives them to my partner on the checklist", async () => {
+      const { wrapper, rtw } = await mountPage({
+        checklist: [task("a", { title: "Call clinic" }), task("b", { title: "Book vaccination", queued: true }), task("c", { title: "Stays" })],
+      });
+      // b starts ticked from the queue; tick a as well and leave c. The list is sorted by title.
+      const row = wrapper.findAll(".ho__task").find((r) => r.text().includes("Call clinic"));
+      await row.get("input").setValue(true);
+      await wrapper.get("button.btn-primary").trigger("click");
+      await flushPromises();
+
+      expect(api.send.mock.calls[0][2].tasks).toEqual([
+        { id: "t1", text: "Book vaccination", ref: "b" },
+        { id: "t2", text: "Call clinic", ref: "a" },
+      ]);
+      expect(rtw.updateTask).toHaveBeenCalledTimes(2);
+      expect(rtw.updateTask).toHaveBeenCalledWith("a", { owner: PARTNER, queued: false });
+      expect(rtw.updateTask).toHaveBeenCalledWith("b", { owner: PARTNER, queued: false });
+    });
+
+    it("lets me untick a queued task, and hands over nothing when nothing is ticked", async () => {
+      const { wrapper, rtw } = await mountPage({ checklist: [task("a", { queued: true })] });
+      await wrapper.get(".ho__task input").setValue(false);
+      await wrapper.get("button.btn-primary").trigger("click");
+      await flushPromises();
+      expect(api.send.mock.calls[0][2].tasks).toEqual([]);
+      expect(rtw.updateTask).not.toHaveBeenCalled();
+    });
+
+    it("stops at six ticked tasks", async () => {
+      const checklist = Array.from({ length: 8 }, (_, i) => task(`t${i}`, { queued: true }));
+      const { wrapper } = await mountPage({ checklist });
+      const boxes = wrapper.findAll(".ho__task input");
+      expect(boxes.filter((b) => b.element.checked)).toHaveLength(8);
+      await wrapper.get("button.btn-primary").trigger("click");
+      await flushPromises();
+      expect(api.send.mock.calls[0][2].tasks).toHaveLength(6);
+    });
+
+    it("shows my tasks to tick before I accept, and ticks them on the checklist", async () => {
+      const handed = [
+        { id: "t1", text: "Clinic visit", ref: "a" },
+        { id: "t2", text: "Buy formula", ref: "b" },
+      ];
+      const { wrapper, rtw } = await mountPage({
+        handovers: [incomingHandover({ tasks: handed })],
+        checklist: [task("a", { done: true }), task("b")],
+      });
+      expect(wrapper.text()).toContain("Tasks for you");
+      const boxes = wrapper.findAll(".hot__box");
+      expect(boxes.map((b) => b.element.checked)).toEqual([true, false]);
+      await boxes[1].setValue(true);
+      await flushPromises();
+      expect(rtw.toggleTask).toHaveBeenCalledWith("b");
+    });
+
+    it("shows my partner's tasks in the last handover card with progress, and ticks from there", async () => {
+      const handed = [
+        { id: "t1", text: "Clinic visit", ref: "a" },
+        { id: "t2", text: "Buy formula", ref: "b" },
+      ];
+      const { wrapper, rtw } = await mountPage({
+        handovers: [incomingHandover({ tasks: handed, acceptedAt: new Date("2026-10-10T07:20:00"), acceptedBy: ME })],
+        checklist: [task("a", { done: true }), task("b")],
+      });
+      const card = wrapper.get(".ho__last");
+      expect(card.text()).toContain("Tasks for you");
+      expect(card.text()).toContain("1 of 2 done");
+      await card.findAll(".hot__box")[0].setValue(false);
+      await flushPromises();
+      expect(rtw.toggleTask).toHaveBeenCalledWith("a");
+    });
+
+    it("shows progress, read only, on tasks I handed over", async () => {
+      const sent = {
+        id: "ho2",
+        from: ME,
+        to: PARTNER,
+        sentAt: new Date("2026-10-10T07:10:00"),
+        note: "",
+        summary: {},
+        tasks: [
+          { id: "t1", text: "Clinic visit", ref: "a" },
+          { id: "t2", text: "Buy formula", ref: "b" },
+        ],
+      };
+      const { wrapper } = await mountPage({
+        handovers: [sent],
+        checklist: [task("a", { done: true, owner: PARTNER }), task("b", { done: true, owner: PARTNER })],
+      });
+      const card = wrapper.get(".ho__last");
+      expect(card.text()).toContain("Tasks you handed over");
+      expect(card.text()).toContain("All done");
+      expect(card.findAll(".hot__box").every((box) => box.attributes("disabled") !== undefined)).toBe(true);
+    });
+
+    it("explains a failed tick inline", async () => {
+      const { wrapper, rtw } = await mountPage({
+        handovers: [
+          incomingHandover({
+            tasks: [{ id: "t1", text: "Buy formula", ref: "b" }],
+            acceptedAt: new Date("2026-10-10T07:20:00"),
+            acceptedBy: ME,
+          }),
+        ],
+        checklist: [task("b")],
+      });
+      rtw.toggleTask.mockResolvedValueOnce(false);
+      await wrapper.get(".ho__last .hot__box").setValue(true);
+      await flushPromises();
+      expect(wrapper.get('[role="alert"]').text()).toContain("could not update that task");
     });
   });
 

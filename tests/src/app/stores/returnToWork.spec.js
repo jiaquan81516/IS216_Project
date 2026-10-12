@@ -158,6 +158,7 @@ describe("return to work store writes", () => {
       due: "2026-10-20",
       owner: PARTNER,
       notes: "",
+      queued: false,
     });
     expect(await store.addTask({ title: "   " })).toBeNull();
 
@@ -178,7 +179,9 @@ describe("return to work store writes", () => {
       due: null,
       owner: "both",
       notes: "",
+      queued: false,
     });
+    expect(cleanTask({ title: "x", queued: true }).queued).toBe(true);
     expect(cleanTask({ title: "  " })).toBeNull();
   });
 

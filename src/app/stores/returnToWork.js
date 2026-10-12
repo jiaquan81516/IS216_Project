@@ -28,6 +28,7 @@ export function cleanTask(data, fallbackOwner = "both") {
     due: isIsoDate(data.due) ? data.due : null,
     owner: data.owner || fallbackOwner,
     notes: typeof data.notes === "string" ? data.notes : "",
+    queued: Boolean(data.queued),
   };
 }
 

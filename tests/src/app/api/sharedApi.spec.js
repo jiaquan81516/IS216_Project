@@ -210,6 +210,7 @@ describe("return to work api", () => {
       group: "childcare",
       due: "2026-10-20",
       owner: PARTNER,
+      queued: false,
       done: false,
       doneAt: null,
       doneBy: null,
@@ -218,6 +219,11 @@ describe("return to work api", () => {
       createdAt: "STAMP",
       updatedAt: "STAMP",
     });
+  });
+
+  it("keeps the mark that says a task is queued for the next handover", async () => {
+    await rtw.addTask(HID, ME, { title: "Call clinic", owner: ME, queued: true });
+    expect(fs.addDoc.mock.calls[0][1].queued).toBe(true);
   });
 
   it("records who ticked a task and clears that when it is unticked", async () => {
