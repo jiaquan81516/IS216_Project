@@ -25,7 +25,7 @@ const api = vi.hoisted(() => ({
 
 vi.mock("@/composables/useAuth", () => ({ useAuth: () => ({ currentUser: { value: { uid: ME } } }) }));
 // The pumping tab lists the shared room directory, which is Firestore now.
-vi.mock("@/app/api/rooms", () => ({
+vi.mock("@/api/rooms", () => ({
   subscribeRooms: (onData) => {
     queueMicrotask(() => onData(rooms.list));
     return () => {};
@@ -33,7 +33,7 @@ vi.mock("@/app/api/rooms", () => ({
   addRoom: vi.fn(async () => "room-new"),
   reportRoom: vi.fn(async () => "report-new"),
 }));
-vi.mock("@/app/api/rtw", () => ({
+vi.mock("@/api/rtw", () => ({
   subscribeRtwPlan: (hid, onData, onError) => {
     api.cb.plan = onData;
     queueMicrotask(() => (api.error ? onError(api.error) : onData(api.plan)));

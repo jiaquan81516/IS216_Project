@@ -7,27 +7,27 @@ import { ROUTES } from "@/app/routes";
 const state = vi.hoisted(() => ({ members: [], household: null, handovers: [], posts: [] }));
 
 vi.mock("@/api/firebase", () => ({ default: {}, auth: {} }));
-vi.mock("@/app/api/db", () => ({ db: {} }));
+vi.mock("@/api/db", () => ({ db: {} }));
 vi.mock("firebase/firestore", () => ({}));
 vi.mock("@/composables/useAuth", async () => {
   const { ref } = await import("vue");
   const currentUser = ref({ uid: "u1", displayName: "daniel Tan", email: "daniel@example.com" });
   return { useAuth: () => ({ currentUser, logout: vi.fn() }) };
 });
-vi.mock("@/app/api/profile", async (importOriginal) => ({
+vi.mock("@/api/profile", async (importOriginal) => ({
   ...(await importOriginal()),
   getUserProfile: vi.fn(async () => ({ displayName: "daniel Tan", householdId: "h1" })),
   getHousehold: vi.fn(async () => state.household),
   getHouseholdMembers: vi.fn(async () => state.members),
 }));
 
-vi.mock("@/app/api/entries", () => ({
+vi.mock("@/api/entries", () => ({
   subscribeEntries: (_id, onData) => {
     queueMicrotask(() => onData([]));
     return () => {};
   },
 }));
-vi.mock("@/app/api/handovers", () => ({
+vi.mock("@/api/handovers", () => ({
   HANDOVERS_MAX: 30,
   subscribeHandovers: (_id, onData) => {
     queueMicrotask(() => onData(state.handovers));
@@ -35,7 +35,7 @@ vi.mock("@/app/api/handovers", () => ({
   },
 }));
 
-vi.mock("@/app/api/posts", () => ({
+vi.mock("@/api/posts", () => ({
   POST_TEXT_MAX: 500,
   subscribePosts: (_id, onData) => {
     queueMicrotask(() => onData(state.posts));

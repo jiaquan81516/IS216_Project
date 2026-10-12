@@ -1,6 +1,6 @@
 import { computed, getCurrentScope, onScopeDispose, ref, watch } from "vue";
-import { subscribeHandovers } from "@/app/api/handovers";
-import { toDate } from "@/app/api/entryHelpers";
+import { subscribeHandovers } from "@/api/handovers";
+import { toDate } from "@/app/utils/entryHelpers";
 
 // Key used by the layout to share one handovers listener with its child pages.
 export const HANDOVERS_KEY = Symbol("app-handovers");

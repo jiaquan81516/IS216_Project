@@ -45,4 +45,4 @@ The file in the repo is currently an empty snapshot (`"clinics": []`). The build
 
 ## Tests
 
-`tests/src/app/api/kidsCareHelpers.spec.js`, `tests/scripts/build-chas-clinics.spec.js`, `tests/src/app/pages/kids-care/kids-care.spec.js`. No network is used.
+`tests/src/app/utils/kidsCareHelpers.spec.js`, `tests/scripts/build-chas-clinics.spec.js`, `tests/src/app/pages/kids-care/kids-care.spec.js`. No network is used.

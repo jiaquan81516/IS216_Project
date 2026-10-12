@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { formatPrefTime, resetDisplay, setDisplay, usePrefs } from "@/app/composables/usePrefs";
-import { weekdayLabels } from "@/app/api/calendarHelpers";
+import { weekdayLabels } from "@/app/utils/calendarHelpers";
 
 beforeEach(() => resetDisplay());
 

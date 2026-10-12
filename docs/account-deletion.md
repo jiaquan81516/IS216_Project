@@ -1,7 +1,7 @@
 # Account deletion
 
 **Status: built.** The function is `api/account/delete.js` and it follows the procedure below.
-The client calls `deleteAccount()` in `src/app/api/server.js`, which posts to
+The client calls `deleteAccount()` in `src/api/server.js`, which posts to
 `/api/account/delete` with `Authorization: Bearer <Firebase ID token>`. When the function is
 not deployed, or `pnpm dev` is used instead of `vercel dev`, the call fails with the code
 `server/unreachable` and the Settings page still runs the browser side fallback that can only
@@ -26,7 +26,7 @@ Request body: none. The caller is identified by a Firebase ID token, not by a ui
 because a uid in a body is a request to delete somebody else's account.
 
 Headers: `Authorization: Bearer <Firebase ID token>`. The client sends this now: `callServer`
-in `src/app/api/server.js` reads `auth.currentUser.getIdToken()` and adds the header to every
+in `src/api/server.js` reads `auth.currentUser.getIdToken()` and adds the header to every
 server call. A signed out caller sends no header and gets a 401.
 
 Answers:
@@ -40,7 +40,7 @@ Answers:
 
 Every error body also carries the same code and message nested under `error`, so
 `{ error: { code, message }, code, message }`. The nested shape is the one every other
-endpoint uses; the flat one is what the client in `src/app/api/server.js` reads. Both are sent
+endpoint uses; the flat one is what the client in `src/api/server.js` reads. Both are sent
 rather than breaking either reader.
 
 409 `account/last-member` is **not** used. See "The last member".
@@ -101,7 +101,7 @@ No 409 is ever returned, so the client needs no new case for this.
 
 ## Fallback, which exists now
 
-`deleteAccountFallback` in `src/app/api/account.js` runs only when the endpoint is missing. From
+`deleteAccountFallback` in `src/api/account.js` runs only when the endpoint is missing. From
 the browser, under the rules, it can:
 
 - delete `users/{uid}/checkins/*` and `users/{uid}/devices/*`

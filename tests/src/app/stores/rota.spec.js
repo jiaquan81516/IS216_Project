@@ -17,7 +17,7 @@ const api = vi.hoisted(() => ({
   migrateLegacyRota: vi.fn(async () => false),
 }));
 
-vi.mock("@/app/api/rota", () => ({
+vi.mock("@/api/rota", () => ({
   subscribeRotaSettings: (hid, onData, onError) => {
     api.settings = onData;
     api.settingsError = onError;

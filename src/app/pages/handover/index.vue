@@ -4,10 +4,10 @@ import { computed, inject, onBeforeUnmount, onMounted, ref } from "vue";
 import Icon from "@/app/components/Icon.vue";
 import { RouterLink } from "vue-router";
 import HandoverTasks from "@/app/components/HandoverTasks.vue";
-import { acceptHandover, NOTE_MAX, sendHandover } from "@/app/api/handovers";
-import { dueLabel, myOpenTasks } from "@/app/api/checklistHelpers";
-import { dayLabel, formatTime, startOfDay } from "@/app/api/entryHelpers";
-import { describeSharedError } from "@/app/api/sharedHelpers";
+import { acceptHandover, NOTE_MAX, sendHandover } from "@/api/handovers";
+import { dueLabel, myOpenTasks } from "@/app/utils/checklistHelpers";
+import { dayLabel, formatTime, startOfDay } from "@/app/utils/entryHelpers";
+import { describeSharedError } from "@/app/utils/sharedHelpers";
 import {
   formatWindow,
   handoverStatus,
@@ -19,7 +19,7 @@ import {
   summariseWindow,
   summaryBlocks,
   summaryLine,
-} from "@/app/api/handoverHelpers";
+} from "@/app/utils/handoverHelpers";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { useHandovers, HANDOVERS_KEY } from "@/app/composables/useHandovers";

@@ -10,8 +10,8 @@ import {
   eventTimeLabel,
   NOTES_MAX,
   validateEvent,
-} from "@/app/api/calendarHelpers";
-import { ownerKey, ownerLabel } from "@/app/api/sharedHelpers";
+} from "@/app/utils/calendarHelpers";
+import { ownerKey, ownerLabel } from "@/app/utils/sharedHelpers";
 
 defineOptions({ name: "CalendarDayPanel" });
 

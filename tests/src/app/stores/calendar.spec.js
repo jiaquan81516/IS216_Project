@@ -12,7 +12,7 @@ const api = vi.hoisted(() => ({
   migrateLegacyCalendar: vi.fn(async () => false),
 }));
 
-vi.mock("@/app/api/calendar", () => ({
+vi.mock("@/api/calendar", () => ({
   subscribeEvents: (hid, onData, onError) => {
     api.onData = onData;
     api.onError = onError;

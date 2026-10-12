@@ -19,7 +19,7 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("@/composables/useAuth", () => ({ useAuth: () => ({}) }));
-vi.mock("@/app/api/calendar", () => ({
+vi.mock("@/api/calendar", () => ({
   subscribeEvents: (hid, onData, onError) => {
     api.cb.events = onData;
     queueMicrotask(() => (api.error ? onError(api.error) : onData(api.events)));
@@ -30,7 +30,7 @@ vi.mock("@/app/api/calendar", () => ({
   deleteEvent: (...a) => api.deleteEvent(...a),
   migrateLegacyCalendar: vi.fn(async () => false),
 }));
-vi.mock("@/app/api/rota", () => ({
+vi.mock("@/api/rota", () => ({
   subscribeRotaSettings: (hid, onData) => {
     queueMicrotask(() => onData(api.rotaSettings));
     return () => {};

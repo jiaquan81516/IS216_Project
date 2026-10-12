@@ -22,7 +22,7 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("@/composables/useAuth", () => ({ useAuth: () => ({}) }));
-vi.mock("@/app/api/rota", () => ({
+vi.mock("@/api/rota", () => ({
   subscribeRotaSettings: (hid, onData, onError) => {
     api.cb.settings = onData;
     queueMicrotask(() => (api.error ? onError(api.error) : onData(api.settings)));
