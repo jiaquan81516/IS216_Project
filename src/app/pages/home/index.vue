@@ -8,7 +8,8 @@ import Icon from "@/app/components/Icon.vue";
 import { acceptHandover } from "@/app/api/handovers";
 import { ownerUid } from "@/app/api/sharedHelpers";
 import { buildStream, groupByDay, firstNameOf } from "@/app/api/stream";
-import { addDays, formatHandover, toIso, weekNights } from "@/app/api/rotaHelpers";
+import { agoText, dutyTonight, nextUp, todaySummary } from "@/app/api/homeSummary";
+import { formatMinutes, formatTime as clockTime } from "@/app/api/entryHelpers";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { useHandovers, HANDOVERS_KEY } from "@/app/composables/useHandovers";
@@ -89,23 +90,41 @@ function seenLine(item) {
   return item.ackedByNames.length ? `Seen by ${item.ackedByNames.join(" and ")}` : "";
 }
 
-// Tonight: who is on night duty, from the shared rota. Before the handover time the night
-// that matters is the one that started yesterday.
-const tonight = computed(() => {
-  const rota = shared.rota ?? null;
-  if (!rota || rota.loading || rota.error || !rota.settings) return "";
-  const view = rota.view;
-  const [h, m] = String(view.handoverTime || "07:00").split(":").map(Number);
-  const beforeHandover = now.value.getHours() * 60 + now.value.getMinutes() < h * 60 + m;
-  const today = toIso(now.value);
-  const night = weekNights(view, beforeHandover ? addDays(today, -1) : today)[0];
-  if (night.who !== "me" && night.who !== "partner") return "";
-  const person = night.who === "me" ? me.value : partner.value;
-  const full = String(person?.displayName || person?.firstName || "").trim();
-  if (!full) return "";
-  const name = full.split(/\s+/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
-  return `Tonight: ${name} on duty, handover ${formatHandover(view.handoverTime)}`;
+// Tonight: who is on night duty, from the shared rota the shell already binds. Nothing here
+// binds a store. While the rota is loading or unreadable the card stays out of the way.
+const rotaStore = computed(() => shared.rota ?? null);
+const dutyReady = computed(() => !rotaStore.value || (!rotaStore.value.loading && !rotaStore.value.error));
+const duty = computed(() => {
+  const rota = rotaStore.value;
+  const hasRota = Boolean(rota?.settings);
+  return dutyTonight({
+    rotaSettings: hasRota ? rota.settings : null,
+    view: hasRota ? rota.view : null,
+    now: now.value,
+    uid: myUid.value,
+    members: members.value,
+  });
 });
+
+// Today at a glance, from the shared care log, calendar and return to work tasks.
+const entriesFailed = computed(() => Boolean(entriesShared.error?.value));
+const summary = computed(() => todaySummary({ entries: entriesShared.entries.value, now: now.value }));
+const lastFeed = computed(() =>
+  summary.value.lastFeedAt ? `${clockTime(summary.value.lastFeedAt)}, ${agoText(summary.value.lastFeedAt, now.value)}` : "",
+);
+const upNext = computed(() =>
+  nextUp({
+    events: shared.calendar?.events ?? [],
+    tasks: rtw.tasks,
+    handoverTime: shared.rota?.settings ? shared.rota.view.handoverTime : null,
+    now: now.value,
+  }),
+);
+const countRows = computed(() => [
+  { key: "feeds", label: "Feeds", value: summary.value.feeds ? String(summary.value.feeds) : "None" },
+  { key: "sleep", label: "Sleep total", value: summary.value.sleepMinutes ? formatMinutes(summary.value.sleepMinutes) : "None" },
+  { key: "nappies", label: "Nappies", value: summary.value.nappies ? String(summary.value.nappies) : "None" },
+]);
 
 // Composer
 const text = ref("");
@@ -313,6 +332,8 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
         <p class="hp__sub">Good {{ greeting }}, {{ myName }}. {{ dateText }}</p>
       </header>
 
+      <div class="hp__grid">
+      <div class="hp__top">
       <div v-if="showInvite" class="hp__invite" role="status">
         <p class="hp__invite-text">
           Invite your partner with code <strong>{{ inviteCode }}</strong>
@@ -383,15 +404,59 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
         </div>
       </form>
 
-      <p v-if="tonight" class="hp__tonight">{{ tonight }}</p>
+      </div>
 
+      <div class="hp__rail">
+        <section v-if="dutyReady" class="hp__card" aria-labelledby="hp-duty-title">
+          <div class="hp__duty">
+            <span class="hp__moon" :class="`hp__moon--${duty.tone}`" aria-hidden="true"><Icon name="moon" :size="18" /></span>
+            <div class="hp__duty-body">
+              <h2 id="hp-duty-title" class="hp__card-title">{{ duty.title }}</h2>
+              <p class="hp__muted">{{ duty.line }}</p>
+              <AppLink class="hp__link" :to="ROUTES.ROTA">{{ duty.link }}</AppLink>
+            </div>
+          </div>
+        </section>
+
+        <section class="hp__card" aria-labelledby="hp-glance-title">
+          <h2 id="hp-glance-title" class="hp__card-title">Today at a glance</h2>
+          <p v-if="entriesFailed" class="hp__muted">The care log could not be read yet.</p>
+          <template v-else>
+            <dl class="hp__rows">
+              <div v-for="row in countRows" :key="row.key" class="hp__row">
+                <dt>{{ row.label }}</dt>
+                <dd>{{ row.value }}</dd>
+              </div>
+            </dl>
+            <div class="hp__block">
+              <p class="hp__label">Last feed</p>
+              <p v-if="lastFeed" class="hp__big">{{ lastFeed }}</p>
+              <p v-else class="hp__muted">No feeds logged today</p>
+            </div>
+            <div class="hp__block">
+              <p class="hp__label">Next up</p>
+              <template v-if="upNext">
+                <p class="hp__big">{{ upNext.title }}</p>
+                <p class="hp__muted">{{ upNext.when }}</p>
+              </template>
+              <p v-else class="hp__muted">Nothing coming up</p>
+            </div>
+          </template>
+          <AppLink class="hp__link" :to="ROUTES.CARE_LOG">Open care log</AppLink>
+        </section>
+      </div>
+
+      <div class="hp__lower">
       <section class="hp__stream" aria-label="Household stream">
         <p v-if="streamLoading" class="hp__status">Loading...</p>
-        <div v-else-if="streamError" role="alert">
+        <div v-else-if="streamError" class="hp__notice" role="alert">
           <p class="hp__muted">{{ streamError.text }}</p>
           <p v-if="streamError.detail" class="hp__muted">{{ streamError.detail }}</p>
         </div>
-        <p v-else-if="!groups.length" class="hp__muted">Nothing here yet. Post a message or log something.</p>
+        <div v-else-if="!groups.length" class="hp__empty">
+          <Icon name="note" :size="20" />
+          <p class="hp__muted">Nothing here yet. Post a message or log something.</p>
+        </div>
 
         <template v-else>
         <div v-for="group in groups" :key="group.key" class="hp__group">
@@ -435,12 +500,14 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
         <span>How are you holding up?</span>
         <AppLink class="hp__link" :to="ROUTES.WELLNESS">Check in privately</AppLink>
       </p>
+      </div>
+      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
-.hp { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 820px; font-size: 1rem; }
+.hp { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 1100px; font-size: 1rem; }
 .hp__status { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
 .hp__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 0; font-size: 0.875rem; border-radius: 8px; }
 
@@ -483,7 +550,34 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__who label { display: inline-flex; align-items: center; gap: 6px; }
 .hp__task-actions { display: flex; gap: 16px; }
 
-.hp__tonight { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
+.hp__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.hp__top, .hp__lower { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.hp__rail { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+@media (min-width: 1100px) {
+  .hp__grid { grid-template-columns: minmax(0, 1fr) 340px; grid-template-areas: "top rail" "lower rail"; column-gap: 24px; }
+  .hp__top { grid-area: top; }
+  .hp__lower { grid-area: lower; }
+  .hp__rail { grid-area: rail; align-self: start; }
+}
+
+.hp__card { display: flex; flex-direction: column; gap: 12px; padding: 20px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
+.hp__card-title { margin: 0; font-family: Inter, system-ui, sans-serif; font-size: 1rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
+.hp__duty { display: flex; align-items: flex-start; gap: 12px; }
+.hp__duty-body { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.hp__moon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; background: var(--nt-gray); color: var(--nt-ink); }
+.hp__moon--partner { background: #dce6f2; }
+.hp__moon--you { background: #f6d8c6; }
+.hp__card .hp__link { align-self: flex-start; }
+.hp__rows { margin: 0; }
+.hp__row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--nt-line); font-size: 1rem; color: var(--nt-ink); }
+.hp__row:first-child { border-top: 0; padding-top: 0; }
+.hp__row dt { font-weight: 400; color: var(--nt-muted); }
+.hp__row dd { margin: 0; font-weight: 500; color: var(--nt-ink); }
+.hp__block { display: flex; flex-direction: column; gap: 2px; padding-top: 12px; border-top: 1px solid var(--nt-line); }
+.hp__label { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
+.hp__big { margin: 0; font-size: 1rem; line-height: 1.4; color: var(--nt-ink); overflow-wrap: anywhere; }
+.hp__notice { padding: 16px; border: 1px solid var(--nt-line); border-radius: 12px; background: var(--nt-white); display: flex; flex-direction: column; gap: 4px; }
+.hp__empty { display: flex; align-items: center; gap: 12px; padding: 20px; border: 1px solid var(--nt-line); border-radius: 12px; background: var(--nt-white); color: var(--nt-muted); }
 
 .hp__text-btn { padding: 0; background: none; border: 0; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-plum); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .hp__text-btn:hover { color: var(--nt-plum-hover); }

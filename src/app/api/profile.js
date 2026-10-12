@@ -141,6 +141,17 @@ export async function createHousehold(user, baby = {}) {
   return { householdId, inviteCode };
 }
 
+// Reads the invite and says whether it can be used, without changing anything. Lets a page
+// check a code before it takes the user out of their current household.
+export async function checkInviteCode(code) {
+  const inviteCode = normaliseInviteCode(code);
+  const inviteSnap = inviteCode ? await getDoc(doc(db, "invites", inviteCode)) : null;
+  const invite = inviteSnap?.exists() ? inviteSnap.data() : null;
+  const state = inviteState(invite);
+  if (state !== "valid") return { ok: false, householdId: null, message: describeInviteState(state) };
+  return { ok: true, householdId: invite.householdId ?? null, message: "" };
+}
+
 export async function joinHousehold(user, code) {
   const inviteCode = normaliseInviteCode(code);
   const inviteSnap = inviteCode ? await getDoc(doc(db, "invites", inviteCode)) : null;

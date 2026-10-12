@@ -25,6 +25,7 @@ import { addDays, parseIso, toIso } from "@/app/api/rotaHelpers";
 import { describeSharedError, ownerKey, ownerLabel, ownerUid } from "@/app/api/sharedHelpers";
 import { displayName, HOME_KEY } from "@/app/composables/useHome";
 import { usePrefs } from "@/app/composables/usePrefs";
+import { setGoogleToggle, useGoogleCalendarClient } from "@/app/composables/useGoogleCalendarClient";
 import { SHARED_KEY } from "@/app/composables/useShared";
 import { useCalendarStore } from "@/app/stores/calendar";
 import { useRotaStore } from "@/app/stores/rota";
@@ -50,6 +51,10 @@ const googleSynced = computed(() => Boolean(home?.profile?.value?.settings?.cale
 // An owner is a uid or "both": the name comes from the signed in uid, the colour from a key.
 const ownerName = (owner) => ownerLabel(owner, myUid.value, names.value.me, names.value.partner);
 const ownerTone = (owner) => ownerKey(owner, myUid.value) ?? "both";
+// Google Calendar events (browser mode) are a read only layer, never written to Firestore.
+const gcal = useGoogleCalendarClient();
+const isGoogle = (event) => event?.source === "google";
+const tone = (event) => (isGoogle(event) ? "google" : ownerTone(event.owner));
 
 // Shared data state. The page waits for the household id, so it never shows an error first.
 const householdId = computed(() => home?.householdId?.value ?? store.householdId);
@@ -108,7 +113,9 @@ async function toggleSearch() {
 
 const visibleEvents = computed(() => {
   const q = query.value.trim().toLowerCase();
-  return store.events.filter((e) => layers[ownerTone(e.owner)] !== false && (!q || String(e.title).toLowerCase().includes(q)));
+  const own = store.events.filter((e) => layers[ownerTone(e.owner)] !== false && (!q || String(e.title).toLowerCase().includes(q)));
+  const google = gcal.layerEvents.value.filter((e) => !q || String(e.title).toLowerCase().includes(q));
+  return [...own, ...google];
 });
 
 const shownIsos = computed(() => (view.value === "month" ? grid.value.flat().map((d) => d.iso) : weekIsos.value));
@@ -151,6 +158,10 @@ function dayLabel(iso) {
   return count ? `${base}, ${count} ${count === 1 ? "event" : "events"}` : base;
 }
 function eventLabel(event) {
+  if (isGoogle(event)) {
+    const at = event.allDay || !event.start ? "all day" : eventTimeLabel(event);
+    return `${event.title}, ${at}, from Google Calendar`;
+  }
   const when = event.allDay || !event.start ? "all day" : eventTimeLabel(event);
   return `${event.title}, ${when}, ${ownerName(event.owner)}`;
 }
@@ -234,6 +245,7 @@ function openDay(iso, trigger = null, adding = false, editId = "") {
   panelOpen.value = true;
 }
 function openEvent(event, trigger) {
+  if (isGoogle(event)) return openDay(event.date, trigger);
   openDay(event.date, trigger, false, event.id);
 }
 function onCellKey(iso, event) {
@@ -391,6 +403,20 @@ function onDelete(id) {
               <span class="cal__lname">{{ item.text }}</span>
             </label>
           </li>
+          <li v-if="gcal.state.connected">
+            <label class="cal__layer">
+              <input
+                type="checkbox"
+                class="visually-hidden"
+                :checked="gcal.state.toggles.show"
+                @change="setGoogleToggle('show', $event.target.checked)"
+              />
+              <span class="cal__box" :class="{ 'cal__box--on': gcal.state.toggles.show }" data-owner="google" aria-hidden="true">
+                <Icon v-if="gcal.state.toggles.show" name="check" :size="12" />
+              </span>
+              <span class="cal__lname">Show Google events</span>
+            </label>
+          </li>
         </ul>
       </aside>
 
@@ -429,7 +455,7 @@ function onDelete(id) {
                     v-for="event in dayEvents[day.iso].slice(0, 4)"
                     :key="event.id"
                     class="cal__dot"
-                    :data-owner="ownerTone(event.owner)"
+                    :data-owner="tone(event)"
                   ></span>
                 </span>
               </div>
@@ -457,7 +483,7 @@ function onDelete(id) {
                   item.bar ? 'cal__bar' : 'cal__ev',
                   { 'cal__bar--l': item.contLeft, 'cal__bar--r': item.contRight, 'cal__item--out': !week[item.start].inMonth && !week[item.end].inMonth },
                 ]"
-                :data-owner="ownerTone(item.event.owner)"
+                :data-owner="tone(item.event)"
                 :data-event="item.event.id"
                 :aria-label="eventLabel(item.event)"
                 :style="{ gridColumn: `${item.start + 1} / span ${item.span}`, gridRow: item.lane + 2 }"
@@ -520,7 +546,7 @@ function onDelete(id) {
                   type="button"
                   class="cal__item cal__bar"
                   :class="{ 'cal__bar--l': item.contLeft, 'cal__bar--r': item.contRight }"
-                  :data-owner="ownerTone(item.event.owner)"
+                  :data-owner="tone(item.event)"
                   :data-event="item.event.id"
                   :aria-label="eventLabel(item.event)"
                   :style="{ gridColumn: `${item.start + 1} / span ${item.span}`, gridRow: item.lane + 1 }"
@@ -559,7 +585,7 @@ function onDelete(id) {
                       :key="b.event.id"
                       type="button"
                       class="cal__block"
-                      :data-owner="ownerTone(b.event.owner)"
+                      :data-owner="tone(b.event)"
                       :data-event="b.event.id"
                       :aria-label="eventLabel(b.event)"
                       :style="blockStyle(b)"
@@ -598,6 +624,8 @@ function onDelete(id) {
   --cal-me: var(--nt-apricot-d);
   --cal-partner: var(--nt-powder-d);
   --cal-both: #3f7d5c;
+  --cal-google: #9ca3af;
+  --cal-google-bg: #f3f4f6;
   --cal-today: #f3f4f3;
   display: flex;
   flex-direction: column;
@@ -637,6 +665,9 @@ function onDelete(id) {
 .cal__swatch[data-owner="me"] { background: var(--cal-me); }
 .cal__swatch[data-owner="partner"] { background: var(--cal-partner); }
 .cal__swatch[data-owner="both"] { background: var(--cal-both); }
+.cal__box[data-owner="google"] { --c: var(--cal-google); }
+.cal__bar[data-owner="google"], .cal__block[data-owner="google"] { background: var(--cal-google-bg); color: var(--nt-ink); border: 1px solid var(--nt-line); font-weight: 400; }
+.cal__ev[data-owner="google"] .cal__evdot, .cal__dot[data-owner="google"] { background: var(--cal-google); }
 
 /* Layout and calendar list */
 .cal__layout { display: flex; flex-direction: column; flex: 1 1 auto; gap: 16px; }

@@ -1,6 +1,6 @@
 // Pure helpers for the kids care page: links, text filter, paging and labels.
 // Distance and sorting are reused from mapHelpers (sortByDistance, formatDistance).
-import { mapsDirectionsLink, mapsSearchLink } from "@/app/api/roomHelpers";
+import { oneMapEmbedUrl, oneMapPlaceUrl } from "@/app/api/oneMapHelpers";
 
 export const KIDS_VIEWS = Object.freeze(["emergency", "clinics"]);
 export const DEFAULT_KIDS_VIEW = "emergency";
@@ -12,14 +12,12 @@ export function normalizeView(value) {
   return KIDS_VIEWS.includes(v) ? v : DEFAULT_KIDS_VIEW;
 }
 
-// Key free Google Maps embed. With no place it shows Singapore.
+// OneMap embed (no key). With no place it shows the whole island.
 export function embedUrl(place) {
-  const q = place ? [place.name, place.address].filter(Boolean).join(", ") : "Singapore";
-  const zoom = place ? 15 : 11;
-  return `https://www.google.com/maps?q=${encodeURIComponent(q || "Singapore")}&output=embed&z=${zoom}`;
+  return oneMapEmbedUrl(place ? { lat: place.lat, lng: place.lng } : {});
 }
 
-export { mapsDirectionsLink, mapsSearchLink };
+export { oneMapPlaceUrl };
 
 // "6357 8754" becomes tel:+6563578754. Anything that does not look like a number gives "".
 export function telHref(phone) {
