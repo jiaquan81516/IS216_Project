@@ -7,8 +7,7 @@ import {
   embedUrl,
   filterPlaces,
   formatDate,
-  mapsDirectionsLink,
-  mapsSearchLink,
+  oneMapPlaceUrl,
   normalizeView,
   telHref,
 } from "@/app/api/kidsCareHelpers";
@@ -28,15 +27,15 @@ describe("kids care helpers", () => {
     expect(normalizeView("nope")).toBe("emergency");
     expect(normalizeView(undefined)).toBe("emergency");
   });
-  it("builds the keyless embed url", () => {
-    expect(embedUrl(null)).toBe("https://www.google.com/maps?q=Singapore&output=embed&z=11");
-    expect(embedUrl({ name: "A & B", address: "1 Road" })).toBe(
-      "https://www.google.com/maps?q=A%20%26%20B%2C%201%20Road&output=embed&z=15",
+  it("builds the OneMap embed url", () => {
+    expect(embedUrl(null)).toBe("https://www.onemap.gov.sg/amm/amm.html?mapStyle=Default&zoomLevel=12&latLng=1.3521,103.8198");
+    expect(embedUrl(places[0])).toBe(
+      "https://www.onemap.gov.sg/amm/amm.html?mapStyle=Default&zoomLevel=15&latLng=1.3,103.8&marker=latLng:1.3,103.8!colour:red&popupWidth=200",
     );
   });
-  it("builds Google Maps links from name and address", () => {
-    expect(mapsSearchLink(places[0])).toBe("https://www.google.com/maps/search/?api=1&query=Zeta%20Clinic%2C%201%20Road%2C%20Singapore%20111111");
-    expect(mapsDirectionsLink(places[0])).toContain("https://www.google.com/maps/dir/?api=1&destination=Zeta%20Clinic");
+  it("builds the OneMap place link from coordinates", () => {
+    expect(oneMapPlaceUrl(places[0].lat, places[0].lng)).toContain("https://www.onemap.gov.sg/amm/amm.html?");
+    expect(oneMapPlaceUrl(null, null)).toBe("");
   });
   it("builds tel links", () => {
     expect(telHref("6357 8754")).toBe("tel:+6563578754");

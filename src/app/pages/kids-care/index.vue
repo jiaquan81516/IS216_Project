@@ -10,14 +10,13 @@ import {
   SAVED_KIDS_KEY,
   byName,
   countText,
-  embedUrl,
   filterPlaces,
   formatDate,
-  mapsDirectionsLink,
-  mapsSearchLink,
   normalizeView,
   telHref,
 } from "@/app/api/kidsCareHelpers";
+import OneMapEmbed from "@/app/components/OneMapEmbed.vue";
+import { oneMapPlaceUrl } from "@/app/api/oneMapHelpers";
 import { loadChasClinics } from "@/app/api/chasClinics";
 import { KIDS_EMERGENCY, KIDS_EMERGENCY_NUMBERS, RETRIEVED_AT } from "@/app/data/kidsEmergency";
 
@@ -86,7 +85,6 @@ const visible = computed(() => (view.value === "clinics" ? matches.value.slice(0
 const hasMore = computed(() => view.value === "clinics" && matches.value.length > shown.value);
 const savedCount = computed(() => source.value.filter((p) => savedIds.value.includes(p.id)).length);
 const count = computed(() => countText(matches.value.length, located.value ? "near you" : "in Singapore"));
-const iframeSrc = computed(() => embedUrl(mapPlace.value));
 const filterCount = computed(() => (includeDental.value ? 1 : 0));
 
 const retrievedText = computed(() => formatDate(view.value === "emergency" ? RETRIEVED_AT : clinicMeta.value.retrievedAt));
@@ -206,14 +204,9 @@ const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
       </button>
     </div>
 
-    <iframe
-      id="kc-map"
-      class="kc__map"
-      :src="iframeSrc"
-      :title="mapPlace ? `Map showing ${mapPlace.name}` : 'Map of Singapore'"
-      loading="lazy"
-      referrerpolicy="no-referrer-when-downgrade"
-    ></iframe>
+    <div id="kc-map" class="kc__map">
+      <OneMapEmbed :lat="mapPlace?.lat ?? null" :lng="mapPlace?.lng ?? null" :label="mapPlace ? mapPlace.name : ''" />
+    </div>
 
     <ul v-if="visible.length" class="kc__list" :aria-label="view === 'emergency' ? 'Children\'s emergency services' : 'CHAS clinics'">
       <li v-for="place in visible" :id="`kc-card-${place.id}`" :key="place.id" class="kc__card">
@@ -233,11 +226,8 @@ const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
           >
             {{ savedIds.includes(place.id) ? "Saved" : "Save" }}
           </button>
-          <a class="app-link" :href="mapsSearchLink(place)" target="_blank" rel="noopener noreferrer">
-            Open in Google Maps<span class="visually-hidden"> for {{ place.name }}, opens in a new tab</span>
-          </a>
-          <a class="app-link" :href="mapsDirectionsLink(place)" target="_blank" rel="noopener noreferrer">
-            Directions<span class="visually-hidden"> to {{ place.name }}, opens in a new tab</span>
+          <a v-if="oneMapPlaceUrl(place.lat, place.lng)" class="app-link" :href="oneMapPlaceUrl(place.lat, place.lng)" target="_blank" rel="noopener noreferrer">
+            Open in OneMap<span class="visually-hidden"> for {{ place.name }}, opens in a new tab</span>
           </a>
           <button type="button" class="app-textbtn" :aria-label="`Show ${place.name} on map`" @click="showOnMap(place)">Show on map</button>
           <a v-if="telHref(place.phone)" class="app-link" :href="telHref(place.phone)">
@@ -257,7 +247,7 @@ const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
         <h2 class="nt-heading nt-heading--sm">The clinic list is not available yet</h2>
         <p class="kc__muted">
           {{ clinicsState === "failed" ? "The clinic list could not be loaded." : "The CHAS clinic list has not been added to this app yet." }}
-          Use Open in Google Maps from the Emergency tab to find care, or search Google Maps for a clinic near you.
+          Use the Emergency tab to find care, or search OneMap for a clinic near you.
         </p>
       </template>
       <template v-else>
@@ -308,7 +298,7 @@ const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
 .kc__controls { display: flex; flex-wrap: wrap; gap: 8px; }
 .kc__filters { margin-bottom: 12px; padding: 12px 16px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 8px; }
 .kc__check { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; }
-.kc__map { display: block; width: 100%; height: 360px; margin-bottom: 16px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
+.kc__map { margin-bottom: 16px; }
 .kc__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
 .kc__card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 24px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
 .kc__name { margin: 0; font-family: inherit; font-size: 1rem; line-height: 1.4; font-weight: 600; }

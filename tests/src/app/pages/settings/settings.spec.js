@@ -1,3 +1,6 @@
+// The page reads the client id once at load. Keep these tests independent of the developer's .env.
+vi.hoisted(() => vi.stubEnv("VITE_GOOGLE_OAUTH_CLIENT_ID", ""));
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { ref } from "vue";
@@ -13,6 +16,8 @@ const api = vi.hoisted(() => ({
   leaveHousehold: vi.fn(async () => {}),
   deleteAccountFallback: vi.fn(async () => ({ removed: [], kept: ["the care log entries you wrote"] })),
   regenerateInviteCode: vi.fn(async () => ({ inviteCode: "NT-NEW1" })),
+  checkInviteCode: vi.fn(async () => ({ ok: true, householdId: "h2", message: "" })),
+  joinHousehold: vi.fn(async () => ({ householdId: "h2" })),
   getInvite: vi.fn(async () => ({ code: "NT-4F7K", expiresAt: new Date(Date.now() + 6 * 86400000 + 3600000) })),
   deleteAccount: vi.fn(async () => {}),
   startGoogleConnect: vi.fn(async () => "/api/google/connect"),
@@ -35,6 +40,8 @@ vi.mock("@/app/api/profile", async (importOriginal) => ({
   ...(await importOriginal()),
   regenerateInviteCode: (...a) => api.regenerateInviteCode(...a),
   getInvite: (...a) => api.getInvite(...a),
+  checkInviteCode: (...a) => api.checkInviteCode(...a),
+  joinHousehold: (...a) => api.joinHousehold(...a),
 }));
 vi.mock("@/app/api/server", async (importOriginal) => ({
   ...(await importOriginal()),
@@ -68,6 +75,7 @@ async function mountPage(home = makeHome()) {
     routes: [
       { path: ROUTES.SETTINGS, component: { template: "<p />" } },
       { path: ROUTES.HOUSEHOLD, component: { template: "<p />" } },
+      { path: ROUTES.HOME, component: { template: "<p />" } },
       { path: ROUTES.LANDING, component: { template: "<p />" } },
     ],
   });
@@ -91,6 +99,9 @@ beforeEach(() => {
   api.saveHouseholdBaby.mockResolvedValue(undefined);
   api.deleteAccount.mockResolvedValue(undefined);
   api.regenerateInviteCode.mockResolvedValue({ inviteCode: "NT-NEW1" });
+  api.checkInviteCode.mockResolvedValue({ ok: true, householdId: "h2", message: "" });
+  api.joinHousehold.mockResolvedValue({ householdId: "h2" });
+  api.leaveHousehold.mockResolvedValue(undefined);
   api.getInvite.mockResolvedValue({ code: "NT-4F7K", expiresAt: new Date(Date.now() + 6 * 86400000 + 3600000) });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -411,5 +422,124 @@ describe("deleting the account", () => {
     await flushPromises();
     expect(wrapper.get('[role="alert"]').text()).toMatch(/sign in again/);
     expect(wrapper.text()).toContain("your sign in");
+  });
+});
+
+describe("the settings section nav", () => {
+  it("scrolls to the section, focuses its heading and marks the link current", async () => {
+    const { wrapper } = await mountPage();
+    const scroll = vi.fn();
+    const card = wrapper.get('[aria-labelledby="st-privacy"]').element;
+    card.scrollIntoView = scroll;
+    const link = wrapper.findAll("nav a").find((a) => a.text() === "Privacy");
+    expect(link.attributes("href")).toBe("#st-privacy");
+    expect(link.attributes("aria-current")).toBeUndefined();
+    await link.trigger("click");
+    expect(scroll).toHaveBeenCalledWith({ behavior: expect.stringMatching(/^(auto|smooth)$/), block: "start" });
+    expect(link.attributes("aria-current")).toBe("true");
+    expect(wrapper.findAll("nav a[aria-current]")).toHaveLength(1);
+  });
+
+  it("scrolls without animation when the person reduces motion", async () => {
+    const { wrapper } = await mountPage();
+    await toggle(wrapper, "st-motion").trigger("click");
+    const scroll = vi.fn();
+    wrapper.get('[aria-labelledby="st-cal"]').element.scrollIntoView = scroll;
+    await wrapper.findAll("nav a").find((a) => a.text() === "Google Calendar").trigger("click");
+    expect(scroll).toHaveBeenCalledWith({ behavior: "auto", block: "start" });
+  });
+
+  it("moves focus to the heading without scrolling again", async () => {
+    const { wrapper } = await mountPage();
+    const heading = wrapper.get("#st-house").element;
+    const focus = vi.spyOn(heading, "focus");
+    wrapper.get('[aria-labelledby="st-house"]').element.scrollIntoView = vi.fn();
+    await wrapper.findAll("nav a").find((a) => a.text() === "Household").trigger("click");
+    expect(heading.getAttribute("tabindex")).toBe("-1");
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+  });
+});
+
+describe("joining a partner's household from a solo household", () => {
+  const openForm = async (wrapper) => {
+    await wrapper.findAll("button").find((b) => b.text().startsWith("Have a code from your partner")).trigger("click");
+  };
+  const submit = async (wrapper, code) => {
+    await wrapper.get("#st-join-code").setValue(code);
+    await btn(wrapper, "Join household").trigger("click");
+    await flushPromises();
+  };
+
+  it("shows the link only when nobody else has joined", async () => {
+    const solo = await mountPage();
+    expect(solo.wrapper.text()).toContain("Have a code from your partner? Join their household");
+    const home = makeHome();
+    home.partner.value = { uid: "u2", firstName: "mei", displayName: "Mei Lin", role: "mum" };
+    const paired = await mountPage(home);
+    expect(paired.wrapper.text()).not.toContain("Have a code from your partner");
+  });
+
+  it("opens inline with a labelled input, a warning and an outline button", async () => {
+    const { wrapper } = await mountPage();
+    await openForm(wrapper);
+    expect(wrapper.get('label[for="st-join-code"]').text()).toBe("Invitation code");
+    expect(wrapper.text()).toContain("You will leave your current household.");
+    expect(btn(wrapper, "Join household").classes()).toContain("btn-outline");
+    await btn(wrapper, "Cancel").trigger("click");
+    expect(wrapper.find("#st-join-code").exists()).toBe(false);
+  });
+
+  it.each([
+    ["missing", "We could not find that code. Check it with your partner and try again."],
+    ["expired", "That code has expired. Ask your partner for a new one."],
+  ])("does not leave when the code is %s", async (_name, message) => {
+    api.checkInviteCode.mockResolvedValue({ ok: false, householdId: null, message });
+    const { wrapper } = await mountPage();
+    await openForm(wrapper);
+    await submit(wrapper, "NT-ZZZZ");
+    expect(wrapper.get('[role="alert"]').text()).toBe(message);
+    expect(api.leaveHousehold).not.toHaveBeenCalled();
+    expect(api.joinHousehold).not.toHaveBeenCalled();
+  });
+
+  it("asks for a code before doing anything", async () => {
+    const { wrapper } = await mountPage();
+    await openForm(wrapper);
+    await submit(wrapper, "  ");
+    expect(wrapper.text()).toContain("Enter the invitation code from your partner.");
+    expect(api.checkInviteCode).not.toHaveBeenCalled();
+  });
+
+  it("refuses the user's own household code", async () => {
+    api.checkInviteCode.mockResolvedValue({ ok: true, householdId: "h1", message: "" });
+    const { wrapper } = await mountPage();
+    await openForm(wrapper);
+    await submit(wrapper, "NT-4F7K");
+    expect(wrapper.get('[role="alert"]').text()).toBe("That is your own household code. Give it to your partner instead.");
+    expect(api.leaveHousehold).not.toHaveBeenCalled();
+  });
+
+  it("leaves, then joins, then reloads and goes Home", async () => {
+    const order = [];
+    api.leaveHousehold.mockImplementation(async () => order.push("leave"));
+    api.joinHousehold.mockImplementation(async () => order.push("join"));
+    const { wrapper, home, router } = await mountPage();
+    home.reload.mockImplementation(async () => order.push("reload"));
+    await openForm(wrapper);
+    await submit(wrapper, "nt-ab2c");
+    expect(api.leaveHousehold).toHaveBeenCalledWith("u1", "h1");
+    expect(api.joinHousehold).toHaveBeenCalledWith(expect.objectContaining({ uid: "u1" }), "nt-ab2c");
+    expect(order).toEqual(["leave", "join", "reload"]);
+    expect(router.currentRoute.value.path).toBe(ROUTES.HOME);
+  });
+
+  it("explains and routes to the household page when joining fails after leaving", async () => {
+    api.joinHousehold.mockRejectedValue(new Error("boom"));
+    const { wrapper, router } = await mountPage();
+    await openForm(wrapper);
+    await submit(wrapper, "NT-AB2C");
+    expect(api.leaveHousehold).toHaveBeenCalled();
+    expect(router.currentRoute.value.path).toBe(ROUTES.HOUSEHOLD);
+    expect(wrapper.text()).toContain("You are not in a household right now. Enter the code again.");
   });
 });

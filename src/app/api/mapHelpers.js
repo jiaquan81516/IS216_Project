@@ -1,5 +1,5 @@
 // Pure helpers for the pumping rooms map page: distance, sorting, clustering, merging and
-// filtering. Nothing here touches the DOM or Google Maps, so all of it is unit tested.
+// filtering. Nothing here touches the DOM or a map, so all of it is unit tested.
 
 export const DEFAULT_CENTER = Object.freeze({ lat: 1.3521, lng: 103.8198 });
 export const DEFAULT_ZOOM = 12;

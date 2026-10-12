@@ -87,7 +87,7 @@ const ts = (date) => ({ toDate: () => date });
 const at = (day, h, m = 0) => new Date(2026, 9, day, h, m);
 
 let router;
-async function mountHome({ rota = null } = {}) {
+async function mountHome({ rota = null, calendar = null } = {}) {
   router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: "/:pathMatch(.*)*", component: { template: "<div />" } }],
@@ -98,7 +98,7 @@ async function mountHome({ rota = null } = {}) {
   const rtw = useReturnToWorkStore();
   posts.bind("h1", "u1");
   rtw.bind("h1", "u1", "u2");
-  const shared = { posts, rtw, rota };
+  const shared = { posts, rtw, rota, calendar };
   const wrapper = mount(HomePage, { global: { plugins: [router, pinia], provide: { [SHARED_KEY]: shared } }, attachTo: document.body });
   await flushPromises();
   return wrapper;
@@ -132,6 +132,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+function rotaWith({ firstOnDuty }) {
+  return {
+    loading: false,
+    error: null,
+    settings: {},
+    view: { pattern: "alternate", firstOnDuty, startDate: "2026-10-11", handoverTime: "07:00", overrides: {}, swaps: [] },
+  };
+}
 const partnerPost = (over = {}) => ({ id: "p1", text: "Home by 6", authorUid: "u2", createdAt: ts(at(11, 9, 10)), ackedBy: [], ...over });
 const buttonByText = (wrapper, text) => wrapper.findAll("button").find((b) => b.text() === text);
 
@@ -148,7 +156,7 @@ describe("Home layout", () => {
   it("drops the old cards and keeps the private check in link", async () => {
     const wrapper = await mountHome();
     const text = wrapper.text();
-    for (const gone of ["Last feed", "Sleep today", "Nappies today", "Coming up", "Recent activity"]) expect(text).not.toContain(gone);
+    for (const gone of ["Sleep today", "Nappies today", "Coming up", "Recent activity"]) expect(text).not.toContain(gone);
     const link = wrapper.findAll("a").find((a) => a.text() === "Check in privately");
     expect(link.attributes("href")).toBe("/wellness");
   });
@@ -178,6 +186,7 @@ describe("Home layout", () => {
     state.postsError = { code: "permission-denied" };
     const wrapper = await mountHome();
     expect(wrapper.text()).toContain("Publish the latest firestore.rules");
+    expect(wrapper.find(".hp__notice").exists()).toBe(true);
   });
 
   it("has exactly one solid plum control, and only once there is text", async () => {
@@ -188,16 +197,76 @@ describe("Home layout", () => {
     expect(wrapper.findAll(".btn-primary")).toHaveLength(0);
   });
 
-  it("adds the Tonight line from the rota and omits it without one", async () => {
-    expect((await mountHome()).find(".hp__tonight").exists()).toBe(false);
-    const rota = {
-      loading: false,
-      error: null,
-      settings: {},
-      view: { pattern: "alternate", firstOnDuty: "partner", startDate: "2026-10-11", handoverTime: "07:00", overrides: {}, swaps: [] },
-    };
-    const wrapper = await mountHome({ rota });
-    expect(wrapper.get(".hp__tonight").text()).toBe("Tonight: Mei Lin on duty, handover 7:00 AM");
+  it("says the rota is not set up when there is none", async () => {
+    const wrapper = await mountHome();
+    const card = wrapper.get('section[aria-labelledby="hp-duty-title"]');
+    expect(card.get("h2").text()).toBe("No night rota yet");
+    expect(card.get("a").text()).toBe("Set up your night rota");
+    expect(card.get("a").attributes("href")).toBe("/rota");
+  });
+
+  it("shows You're on duty tonight with the handover time when it is my night", async () => {
+    const wrapper = await mountHome({ rota: rotaWith({ firstOnDuty: "me" }) });
+    const card = wrapper.get('section[aria-labelledby="hp-duty-title"]');
+    expect(card.get("h2").text()).toBe("You're on duty tonight");
+    expect(card.text()).toContain("Handover at 7:00 AM");
+    expect(card.get("a").text()).toBe("Sleep rotation");
+    expect(card.get("a").attributes("href")).toBe("/rota");
+    expect(card.get(".hp__moon").classes()).toContain("hp__moon--you");
+  });
+
+  it("names the partner when it is their night", async () => {
+    const wrapper = await mountHome({ rota: rotaWith({ firstOnDuty: "partner" }) });
+    const card = wrapper.get('section[aria-labelledby="hp-duty-title"]');
+    expect(card.get("h2").text()).toBe("Mei is on duty tonight");
+    expect(card.get(".hp__moon").classes()).toContain("hp__moon--partner");
+  });
+
+  it("counts the hour before handover as last night's duty", async () => {
+    vi.setSystemTime(at(11, 6, 30));
+    const wrapper = await mountHome({ rota: rotaWith({ firstOnDuty: "partner" }) });
+    expect(wrapper.get("#hp-duty-title").text()).toBe("You're on duty tonight");
+  });
+
+  it("invites the partner to share nights when there is none", async () => {
+    state.members = [daniel];
+    const wrapper = await mountHome({ rota: rotaWith({ firstOnDuty: "me" }) });
+    expect(wrapper.get("#hp-duty-title").text().length).toBeGreaterThan(0);
+    expect(wrapper.text()).toContain("Invite your partner to share nights.");
+  });
+
+  it("shows the quick summary with counts, last feed and next up", async () => {
+    state.entries = [
+      { id: "e1", type: "feed", by: "u2", byName: "mei", at: ts(at(11, 10)), details: { method: "bottle", ml: 120 } },
+      { id: "e2", type: "feed", by: "u2", byName: "mei", at: ts(at(11, 6)), details: { method: "bottle", ml: 90 } },
+      { id: "e3", type: "nappy", by: "u2", byName: "mei", at: ts(at(11, 7)), details: { nappyType: "wet" } },
+      { id: "e4", type: "sleep", by: "u2", byName: "mei", at: ts(at(11, 1)), endedAt: ts(at(11, 3, 30)), details: {} },
+    ];
+    const calendar = { events: [{ id: "c1", title: "Health visitor", date: "2026-10-13", allDay: true }] };
+    const wrapper = await mountHome({ calendar });
+    const card = wrapper.get('section[aria-labelledby="hp-glance-title"]');
+    expect(card.get("h2").text()).toBe("Today at a glance");
+    const rows = card.findAll(".hp__row").map((r) => r.text());
+    expect(rows).toEqual(["Feeds2", "Sleep total2 h 30 min", "Nappies1"]);
+    expect(card.text()).toContain("10:00 AM, 2 h ago");
+    expect(card.text()).toContain("Health visitor");
+    expect(card.text()).toContain("Tue 13 Oct");
+    expect(card.get("a").text()).toBe("Open care log");
+    expect(card.get("a").attributes("href")).toBe("/care-log");
+  });
+
+  it("keeps the summary calm when nothing is logged", async () => {
+    const wrapper = await mountHome();
+    const card = wrapper.get('section[aria-labelledby="hp-glance-title"]');
+    expect(card.text()).toContain("No feeds logged today");
+    expect(card.text()).toContain("Nothing coming up");
+    expect(card.findAll(".hp__row").map((r) => r.text())).toEqual(["FeedsNone", "Sleep totalNone", "NappiesNone"]);
+  });
+
+  it("uses a tinted square, never a second solid plum control, in the cards", async () => {
+    const wrapper = await mountHome({ rota: rotaWith({ firstOnDuty: "me" }) });
+    expect(wrapper.findAll(".btn-primary")).toHaveLength(0);
+    expect(wrapper.find(".hp__send").exists()).toBe(false);
   });
 });
 
