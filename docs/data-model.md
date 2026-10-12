@@ -78,7 +78,7 @@ Settings
 - displayName, photoURL, role, joinedAt
 - Copied from the user profile when they join and when they edit it, so the partner can see a name and photo without reading the private user document.
 - App: the Profile page writes `users/{uid}` and this document in one batch (`saveProfile` in
-  `src/app/api/account.js`), so the two copies of the name and role can never disagree. Only
+  `src/api/account.js`), so the two copies of the name and role can never disagree. Only
   the member themselves may write or delete their own member document.
 
 ### households/{id}/entries/{entryId}  (the care log)
@@ -104,7 +104,7 @@ Settings
   "Needs attention", never colour alone
 - summary: { feeds, sleepMinutes, nappies }: a snapshot of the care log between periodStart
   and sentAt, worked out at send time (`summariseWindow` in
-  `src/app/api/handoverHelpers.js`) and then frozen, so editing an entry later never rewrites
+  `src/app/utils/handoverHelpers.js`) and then frozen, so editing an entry later never rewrites
   a handover that has already been sent
 - nextUp (array of string, at most 3): short lines, offered from real data by
   `suggestedNextUp` or typed by hand
@@ -122,7 +122,7 @@ Settings
   only for a member who is not the author
 - Index: none. The query orders by `createdAt` only (newest 50)
 - The Home stream is not a collection. It is built in the browser by `buildStream` in
-  `src/app/api/stream.js` from posts, care log entries, handovers and tasks, so no existing
+  `src/app/utils/stream.js` from posts, care log entries, handovers and tasks, so no existing
   collection changed. Push alerts for new posts are not built; the stream relies on future
   push (FCM) to tell a parent something arrived.
 
@@ -132,7 +132,7 @@ Settings
 - startDate ("YYYY-MM-DD"): the day the pattern starts counting from
 - handoverTime ("HH:MM")
 - updatedAt (timestamp), updatedBy (uid): drives the "Updated by Mei 5 minutes ago" line
-- App: the plan maths stays in `src/app/api/rotaHelpers.js`. A settings map cannot hold the
+- App: the plan maths stays in `src/app/utils/rotaHelpers.js`. A settings map cannot hold the
   per night overrides, because two parents editing different nights would overwrite each
   other, so each night is its own document (below).
 
@@ -162,7 +162,7 @@ Settings
 - owner (uid, or the string "both"): the local App stores used "me" and "partner", which mean
   nothing once the data is shared, so an owner is now a uid. The UI shows Me, the partner's
   name or Both by comparing with the signed in uid (`ownerLabel` in
-  `src/app/api/sharedHelpers.js`).
+  `src/app/utils/sharedHelpers.js`).
 - notes (string, 280 characters)
 - googleEventId (string or null): so syncing never duplicates
 - googleUpdatedAt (string or null): Google's own `updated` stamp from the last sync, which is
@@ -205,8 +205,8 @@ Settings
   kept, never deleted, so an old code answers "That code was replaced" rather than "not
   found".
 - Helpers: `inviteState`, `describeInviteState`, `expiresInText` in
-  `src/app/api/inviteHelpers.js`. Writes: `createHousehold`, `joinHousehold`,
-  `regenerateInviteCode` in `src/app/api/profile.js`.
+  `src/app/utils/inviteHelpers.js`. Writes: `createHousehold`, `joinHousehold`,
+  `regenerateInviteCode` in `src/api/profile.js`.
 
 ## 4. Pumping rooms (global, shared by all households)
 
@@ -219,7 +219,7 @@ room for everyone. While the collection is empty the Support page shows the two 
 - details (string, at most 200): the precise floor and room location entered by the member
 - lat, lng (number), placeId (string, at most 200): selected through Google Places autocomplete
 - features (map): { chair, power, lockable, sink, stroller }, each a boolean. The UI shows
-  labels ("Power outlet"); `featureLabels` and `featureMap` in `src/app/api/roomHelpers.js` are
+  labels ("Power outlet"); `featureLabels` and `featureMap` in `src/app/utils/roomHelpers.js` are
   the only place the two shapes meet.
 - status: verified | unverified. The page calls `unverified` "needs verification", which is
   what it has always said.
@@ -302,13 +302,13 @@ room for everyone. While the collection is empty the Support page shows the two 
 - **Built.** `GET /api/google/connect`, `GET /api/google/callback`,
   `POST /api/google/disconnect`, `POST /api/google/sync`: the Google Calendar consent flow and
   the two way sync. `GET /api/health` reports which environment variable groups are set.
-  The client calls them through `src/app/api/server.js`, which adds
+  The client calls them through `src/api/server.js`, which adds
   `Authorization: Bearer <Firebase ID token>` to every call and still shows "The calendar
   server is not set up yet." when the functions are not deployed. Setup in `docs/setup.md`.
 - **Still needed.** A Cloud Function or Vercel endpoint to send FCM pushes. Not built: there is
   no FCM, no service worker and no `firebase/messaging` import anywhere, and
   `VITE_FIREBASE_VAPID_KEY` is the variable it will need.
-- Rate limiting. `src/app/api/limits.js` keeps a sliding window in `localStorage` (5 room
+- Rate limiting. `src/app/utils/limits.js` keeps a sliding window in `localStorage` (5 room
   reports, 10 entries, 3 invite regenerations, 3 deletion attempts per 10 minutes), which is a
   courtesy guard, not security: anyone can clear their own storage. The real counters are now
   on the server in `serverLimits/{uid}` for the endpoints that exist (3 account deletions, 10

@@ -7,23 +7,23 @@ import ChipGroup from "@/app/components/ChipGroup.vue";
 import ConfirmDanger from "@/app/components/ConfirmDanger.vue";
 import GoogleCalendarClientCard from "@/app/components/GoogleCalendarClientCard.vue";
 import Toggle from "@/app/components/Toggle.vue";
-import { isClientModeAvailable } from "@/app/api/googleCalendarClient";
+import { isClientModeAvailable } from "@/api/googleCalendarClient";
 import {
   deleteAccountFallback,
   leaveHousehold,
   saveHouseholdBaby,
   saveSettingsPatch,
-} from "@/app/api/account";
-import { expiresInText, inviteState } from "@/app/api/inviteHelpers";
-import { takeLimit } from "@/app/api/limits";
-import { checkInviteCode, getInvite, joinHousehold, regenerateInviteCode } from "@/app/api/profile";
+} from "@/api/account";
+import { expiresInText, inviteState } from "@/app/utils/inviteHelpers";
+import { takeLimit } from "@/app/utils/limits";
+import { checkInviteCode, getInvite, joinHousehold, regenerateInviteCode } from "@/api/profile";
 import {
   debounce,
   normaliseSettings,
   settingsPatch,
   TIME_FORMATS,
   WEEK_STARTS,
-} from "@/app/api/settingsHelpers";
+} from "@/app/utils/settingsHelpers";
 import {
   deleteAccount,
   describeServerError,
@@ -31,7 +31,7 @@ import {
   disconnectGoogle,
   startGoogleConnect,
   syncGoogleCalendar,
-} from "@/app/api/server";
+} from "@/api/server";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { setDisplay } from "@/app/composables/usePrefs";
 import { ROUTES } from "@/app/routes";

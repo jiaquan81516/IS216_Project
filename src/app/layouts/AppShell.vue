@@ -10,8 +10,8 @@ import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { useHandovers, HANDOVERS_KEY } from "@/app/composables/useHandovers";
 import { useShared, SHARED_KEY } from "@/app/composables/useShared";
-import { buildStream, unreadCount } from "@/app/api/stream";
-import { resetLimits } from "@/app/api/limits";
+import { buildStream, unreadCount } from "@/app/utils/stream";
+import { resetLimits } from "@/app/utils/limits";
 import { NAV } from "@/app/data/nav";
 import { ROUTES } from "@/app/routes";
 

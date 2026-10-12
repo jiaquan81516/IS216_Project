@@ -5,7 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import AppBadge from "@/components/ui/AppBadge.vue";
 import CareLogPanel from "@/app/components/CareLogPanel.vue";
 import Icon from "@/app/components/Icon.vue";
-import { addEntry, deleteEntry, loadOlder, markSeen, updateEntry } from "@/app/api/entries";
+import { addEntry, deleteEntry, loadOlder, markSeen, updateEntry } from "@/api/entries";
 import {
   describeEntriesError,
   ENTRY_TYPES,
@@ -16,12 +16,12 @@ import {
   summariseEntry,
   toDate,
   todayStats,
-} from "@/app/api/entryHelpers";
+} from "@/app/utils/entryHelpers";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { ENTRIES_PAGE_SIZE, useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { useHandovers, HANDOVERS_KEY } from "@/app/composables/useHandovers";
 import { usePrefs } from "@/app/composables/usePrefs";
-import { handoverRows } from "@/app/api/handoverHelpers";
+import { handoverRows } from "@/app/utils/handoverHelpers";
 
 defineOptions({ name: "CareLogPage" });
 

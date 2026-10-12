@@ -7,6 +7,7 @@ export const ROUTES = Object.freeze({
   HOUSEHOLD: "/household",
   HOME: "/home",
   CARE_LOG: "/care-log",
+  CHECKLIST: "/checklist",
   HANDOVER: "/handover",
   ROTA: "/rota",
   WELLNESS: "/wellness",

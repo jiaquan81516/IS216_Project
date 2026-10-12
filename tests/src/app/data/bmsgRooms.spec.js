@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BMSG_ROOMS, BMSG_SOURCE } from "@/app/data/bmsgRooms";
-import { ROOM_FEATURES } from "@/app/api/roomHelpers";
+import { ROOM_FEATURES } from "@/app/utils/roomHelpers";
 
 const DASH = /[–—]/;
 const strings = (value) => {

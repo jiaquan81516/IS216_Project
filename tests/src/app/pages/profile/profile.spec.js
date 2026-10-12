@@ -10,11 +10,11 @@ vi.mock("@/api/firebase", () => ({
   default: {},
   auth: { get currentUser() { return { uid: "u1", providerData: state.providers }; } },
 }));
-vi.mock("@/app/api/db", () => ({ db: {} }));
+vi.mock("@/api/db", () => ({ db: {} }));
 vi.mock("firebase/firestore", () => ({}));
 vi.mock("firebase/auth", () => ({ deleteUser: vi.fn() }));
 vi.mock("@/composables/useAuth", () => ({ useAuth: () => ({ currentUser: { value: { uid: "u1" } } }) }));
-vi.mock("@/app/api/account", async (importOriginal) => ({
+vi.mock("@/api/account", async (importOriginal) => ({
   ...(await importOriginal()),
   saveProfile: (...a) => api.saveProfile(...a),
 }));

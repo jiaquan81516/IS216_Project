@@ -6,10 +6,10 @@ import { createMemoryHistory, createRouter } from "vue-router";
 const api = vi.hoisted(() => ({ rooms: [], addRoom: vi.fn(async () => "room-new"), reportRoom: vi.fn() }));
 
 vi.mock("@/api/firebase", () => ({ default: {}, auth: {} }));
-vi.mock("@/app/api/db", () => ({ db: {} }));
+vi.mock("@/api/db", () => ({ db: {} }));
 vi.mock("firebase/firestore", () => ({}));
 vi.mock("@/composables/useAuth", () => ({ useAuth: () => ({ currentUser: { value: { uid: "u1" } } }) }));
-vi.mock("@/app/api/rooms", () => ({
+vi.mock("@/api/rooms", () => ({
   ROOMS_MAX: 200,
   subscribeRooms: (onData) => {
     queueMicrotask(() => onData(api.rooms));

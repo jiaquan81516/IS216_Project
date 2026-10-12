@@ -9,7 +9,7 @@ import AppLink from "@/components/ui/AppLink.vue";
 import { SAMPLE } from "@/shared/constants/appConstants";
 import { ROUTES } from "@/app/routes";
 import { useAuth } from "@/app/composables/useAuth";
-import { createHousehold, getHouseholdInviteCode, joinHousehold } from "@/app/api/profile";
+import { createHousehold, getHouseholdInviteCode, joinHousehold } from "@/api/profile";
 import "@/app/app.css";
 
 defineOptions({ name: "HouseholdPage" });

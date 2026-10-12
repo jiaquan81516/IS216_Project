@@ -3,9 +3,9 @@
 // googleCalendarClient.js. Only the toggles are remembered, in localStorage, as a per viewer
 // convenience.
 import { computed, reactive } from "vue";
-import * as client from "@/app/api/googleCalendarClient";
-import * as sync from "@/app/api/googleCalendarSync";
-import { describeCounts, ERROR_TEXT } from "@/app/api/googleCalendarClientHelpers";
+import * as client from "@/api/googleCalendarClient";
+import * as sync from "@/api/googleCalendarSync";
+import { describeCounts, ERROR_TEXT } from "@/app/utils/googleCalendarClientHelpers";
 
 const PREFS_KEY = "nt.app.gcalClient.prefs";
 

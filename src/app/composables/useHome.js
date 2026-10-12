@@ -1,8 +1,8 @@
 import { computed, ref } from "vue";
 import { useAuth } from "@/composables/useAuth";
-import { babySummary, getHousehold, getHouseholdMembers, getUserProfile } from "@/app/api/profile";
-import { normaliseSettings } from "@/app/api/settingsHelpers";
-import { withTimeout } from "@/app/api/timeout";
+import { babySummary, getHousehold, getHouseholdMembers, getUserProfile } from "@/api/profile";
+import { normaliseSettings } from "@/app/utils/settingsHelpers";
+import { withTimeout } from "@/app/utils/timeout";
 import { setDisplay } from "@/app/composables/usePrefs";
 
 // Key used by the layout to share one household load with its child pages.

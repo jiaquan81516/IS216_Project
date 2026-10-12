@@ -8,7 +8,7 @@ import { createMemoryHistory, createRouter } from "vue-router";
 import { HOME_KEY } from "@/app/composables/useHome";
 import { resetDisplay } from "@/app/composables/usePrefs";
 import { ROUTES } from "@/app/routes";
-import { LIMITS_KEY } from "@/app/api/limits";
+import { LIMITS_KEY } from "@/app/utils/limits";
 
 const api = vi.hoisted(() => ({
   saveSettingsPatch: vi.fn(async () => {}),
@@ -25,25 +25,25 @@ const api = vi.hoisted(() => ({
 }));
 
 vi.mock("@/api/firebase", () => ({ default: {}, auth: { currentUser: { uid: "u1", providerData: [] } } }));
-vi.mock("@/app/api/db", () => ({ db: {} }));
+vi.mock("@/api/db", () => ({ db: {} }));
 vi.mock("firebase/firestore", () => ({}));
 vi.mock("firebase/auth", () => ({ deleteUser: vi.fn() }));
 vi.mock("@/composables/useAuth", () => ({ useAuth: () => ({ currentUser: { value: { uid: "u1" } } }) }));
-vi.mock("@/app/api/account", async (importOriginal) => ({
+vi.mock("@/api/account", async (importOriginal) => ({
   ...(await importOriginal()),
   saveSettingsPatch: (...a) => api.saveSettingsPatch(...a),
   saveHouseholdBaby: (...a) => api.saveHouseholdBaby(...a),
   leaveHousehold: (...a) => api.leaveHousehold(...a),
   deleteAccountFallback: (...a) => api.deleteAccountFallback(...a),
 }));
-vi.mock("@/app/api/profile", async (importOriginal) => ({
+vi.mock("@/api/profile", async (importOriginal) => ({
   ...(await importOriginal()),
   regenerateInviteCode: (...a) => api.regenerateInviteCode(...a),
   getInvite: (...a) => api.getInvite(...a),
   checkInviteCode: (...a) => api.checkInviteCode(...a),
   joinHousehold: (...a) => api.joinHousehold(...a),
 }));
-vi.mock("@/app/api/server", async (importOriginal) => ({
+vi.mock("@/api/server", async (importOriginal) => ({
   ...(await importOriginal()),
   deleteAccount: (...a) => api.deleteAccount(...a),
   startGoogleConnect: (...a) => api.startGoogleConnect(...a),

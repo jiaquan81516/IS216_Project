@@ -7,27 +7,27 @@ import { ROUTES } from "@/app/routes";
 const state = vi.hoisted(() => ({ members: [], household: null, handovers: [], posts: [] }));
 
 vi.mock("@/api/firebase", () => ({ default: {}, auth: {} }));
-vi.mock("@/app/api/db", () => ({ db: {} }));
+vi.mock("@/api/db", () => ({ db: {} }));
 vi.mock("firebase/firestore", () => ({}));
 vi.mock("@/composables/useAuth", async () => {
   const { ref } = await import("vue");
   const currentUser = ref({ uid: "u1", displayName: "daniel Tan", email: "daniel@example.com" });
   return { useAuth: () => ({ currentUser, logout: vi.fn() }) };
 });
-vi.mock("@/app/api/profile", async (importOriginal) => ({
+vi.mock("@/api/profile", async (importOriginal) => ({
   ...(await importOriginal()),
   getUserProfile: vi.fn(async () => ({ displayName: "daniel Tan", householdId: "h1" })),
   getHousehold: vi.fn(async () => state.household),
   getHouseholdMembers: vi.fn(async () => state.members),
 }));
 
-vi.mock("@/app/api/entries", () => ({
+vi.mock("@/api/entries", () => ({
   subscribeEntries: (_id, onData) => {
     queueMicrotask(() => onData([]));
     return () => {};
   },
 }));
-vi.mock("@/app/api/handovers", () => ({
+vi.mock("@/api/handovers", () => ({
   HANDOVERS_MAX: 30,
   subscribeHandovers: (_id, onData) => {
     queueMicrotask(() => onData(state.handovers));
@@ -35,7 +35,7 @@ vi.mock("@/app/api/handovers", () => ({
   },
 }));
 
-vi.mock("@/app/api/posts", () => ({
+vi.mock("@/api/posts", () => ({
   POST_TEXT_MAX: 500,
   subscribePosts: (_id, onData) => {
     queueMicrotask(() => onData(state.posts));
@@ -73,12 +73,13 @@ beforeEach(() => {
 });
 
 describe("App app shell", () => {
-  it("renders the main nav with eight items and Home as the current page", async () => {
+  it("renders the main nav with nine items and Home as the current page", async () => {
     const { wrapper } = await mountShell();
     const links = wrapper.findAll('nav[aria-label="Main"] a');
     expect(links.map((a) => a.text())).toEqual([
       "Home",
       "Care log",
+      "Checklist",
       "Handover",
       "Sleep rota",
       "Return to work",
@@ -89,6 +90,7 @@ describe("App app shell", () => {
     expect(links.map((a) => a.attributes("href"))).toEqual([
       "/home",
       "/care-log",
+      "/checklist",
       "/handover",
       "/rota",
       "/return-to-work",
@@ -112,7 +114,7 @@ describe("App app shell", () => {
     const badge = second.wrapper.get(".side__count");
     expect(badge.text()).toBe("1");
     expect(badge.attributes("aria-hidden")).toBe("true");
-    const link = second.wrapper.findAll('nav[aria-label="Main"] a')[2];
+    const link = second.wrapper.findAll('nav[aria-label="Main"] a')[3];
     expect(link.text()).toContain("1 handover waiting for you");
   });
 

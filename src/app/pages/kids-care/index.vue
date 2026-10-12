@@ -4,7 +4,7 @@ import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AppButton from "@/components/ui/AppButton.vue";
 import Icon from "@/app/components/Icon.vue";
-import { formatDistance, sortByDistance } from "@/app/api/mapHelpers";
+import { formatDistance, sortByDistance } from "@/app/utils/mapHelpers";
 import {
   PAGE_SIZE,
   SAVED_KIDS_KEY,
@@ -14,10 +14,10 @@ import {
   formatDate,
   normalizeView,
   telHref,
-} from "@/app/api/kidsCareHelpers";
+} from "@/app/utils/kidsCareHelpers";
 import OneMapEmbed from "@/app/components/OneMapEmbed.vue";
-import { oneMapPlaceUrl } from "@/app/api/oneMapHelpers";
-import { loadChasClinics } from "@/app/api/chasClinics";
+import { oneMapPlaceUrl } from "@/app/utils/oneMapHelpers";
+import { loadChasClinics } from "@/api/chasClinics";
 import { KIDS_EMERGENCY, KIDS_EMERGENCY_NUMBERS, RETRIEVED_AT } from "@/app/data/kidsEmergency";
 
 defineOptions({ name: "KidsCarePage" });
