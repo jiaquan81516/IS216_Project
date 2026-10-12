@@ -4,18 +4,22 @@ Page: `/support/rooms` (`src/app/pages/pumping-rooms/index.vue`), inside the app
 
 ## Data sources
 
-1. Community rooms: the Firestore collection `pumpingRooms` (see `docs/data-model.md`). Shown first. Only these can be "Verified", and only when their `status` is `verified`.
-2. Malls: `src/app/data/malls.fallback.js`, a hand picked starter list of 23 well known malls.
-   - No government dataset was used. A search of data.gov.sg, OneMap, URA, LTA, HPB and SG Enable found no open dataset of Singapore shopping malls, and none that lists nursing or lactation rooms. data.gov.sg search results were unrelated (for example HDB shop counts). The OneMap themes endpoint needs a token.
-   - Coordinates and addresses were looked up in the OneMap public search API (`https://www.onemap.gov.sg/api/common/elastic/search`, Singapore Land Authority, Singapore Open Data Licence v1.0) on 2026-10-11.
-   - There is no regeneration script because there is no source file to regenerate from. To refresh a mall, search it in OneMap and edit the entry by hand. If a real dataset is found later, add `scripts/build-mall-rooms.mjs` that writes a JSON file and point `loadMalls` in `src/app/api/malls.js` at it.
-3. Seed examples (`src/app/data/pumpingRooms.js`) appear only while the Firestore collection is empty. Their coordinates are in `SEED_COORDS` (OneMap). A seed is dropped when a mall already covers it (Raffles City).
+1. Community rooms: the Firestore collection `pumpingRooms` (see `docs/data-model.md`). Shown first. These are "Verified" only when their `status` is `verified`.
+2. BMSG directory rooms: `src/app/data/bmsgRooms.js`, loaded by `loadBmsgRooms` in `src/app/api/bmsgRooms.js`. They are shown as Verified, with a "Source: BMSG Nursing Room Directory" link on the card.
+   - Source: the Breastfeeding Mothers' Support Group (BMSG) Nursing Room Directory, https://breastfeeding.org.sg/nursing-room-directory/ (page last updated 2026-04-13, text retrieved 2026-10-11). BMSG is a charity. Listings are contributed by its members and parents, and BMSG does not have jurisdiction over the rooms. This is not government data and it is not an audit.
+   - What comes from where: the nursing room facts (room or pod, what is available, location and level text, parent feedback) come from BMSG. Coordinates and addresses come from OneMap (Singapore Land Authority, Singapore Open Data Licence v1.0), looked up by hand on 2026-10-11. No government dataset lists nursing rooms.
+   - Mapping: BMSG's lockable cubicle, power points, wash basin and single or double pram items map to the app's Lockable, Power outlet, Sink and Stroller access features (shown and filterable). Everything else (diaper changing station, water dispenser, family-friendly access and so on) is kept in `facilities` and shown as one plain line on the card. Parent feedback is shown as one muted line. `verifiedOn` is the retrieval date and `verifiedDaysAgo` is computed from it when the page loads.
+   - Included: Raffles City Shopping Centre, Suntec Convention Centre, VivoCity, Waterway Point, Parkway Parade and Takashimaya (inside Ngee Ann City, so it uses the Ngee Ann City address and point). Only these six have a coordinate source on file.
+   - Not included yet, because OneMap's search API now needs an API token and no coordinate could be confirmed without it (coordinates are never guessed): Alexandra Retail Mall, Buangkok Square Mall, Forum Shopping Mall, IMM, Orchard Central, Paragon, The Star Vista, United Square, Institute of Mental Health, Ng Teng Fong Hospital, Serangoon Polyclinic, Holy Cross Church and Pusara Aman Mosque. Their BMSG details are in the directory page. Ng Teng Fong Hospital needs care: the Tower B Level 2 room is inside an office area and the Tower C Level 1M room is staff only, so say so in `details`.
+   - Excluded on purpose: the Embassy of the Republic of the Philippines in Singapore, because it is not publicly accessible.
+   - How to refresh or add one by hand: open the directory page, then add or edit a row in `ROWS` in `src/app/data/bmsgRooms.js` (name, kind `mall`, `public` or `worship`, type, level text, BMSG's "available" list and feedback copied as written). Get the address and coordinates from the OneMap search (`https://www.onemap.gov.sg/api/common/elastic/search?searchVal=<name>&returnGeom=Y&getAddrDetails=Y&pageNum=1`, free token from onemap.gov.sg) and copy the address as OneMap returns it. Update `retrieved` and `pageUpdated` in `BMSG_SOURCE`. `tests/src/app/data/bmsgRooms.spec.js` checks ids, Singapore bounds, address, source and dashes.
+3. Seed examples (`src/app/data/pumpingRooms.js`) appear only while the Firestore collection is empty. Their coordinates are in `SEED_COORDS` in the same file. A seed is dropped when a BMSG room covers it (Raffles City).
 
-Merge order: community rooms, then malls, then seeds. A later entry is dropped when it has the same `placeId`, or a near identical name within 100 m of an earlier one (`mergeRooms` in `src/app/api/mapHelpers.js`).
+Merge order: community rooms, then BMSG rooms, then seeds. A later entry is dropped when it has the same `placeId`, or a near identical name within 100 m of an earlier one (`mergeRooms` in `src/app/api/mapHelpers.js`). The rest of the rooms will come from users adding them (Firestore).
 
 ## Labelling rule
 
-A mall listing does not prove the mall has a pumping or nursing room. Mall entries say "Mall, nursing room not confirmed", never show "Verified", and are hidden by "Verified only". Seed examples say "Example room, not confirmed". If a dataset that truly lists nursing rooms is added, change the label to "Listed as having a nursing room by {source}" and name the source.
+A room with `status` verified reads "Verified", whether it is a community room or a BMSG directory room, and "Verified only" shows both. BMSG rooms always name their source on the card. Seed examples say "Example room, not confirmed". The old "Mall, nursing room not confirmed" hand picked mall list is gone. The foot of the page says: "Verified rooms are from the Breastfeeding Mothers' Support Group directory. Know another room? Add it."
 
 There are no opening hours anywhere on purpose.
 
@@ -40,4 +44,4 @@ There are no opening hours anywhere on purpose.
 
 ## Tests
 
-`tests/src/app/api/mapHelpers.spec.js`, `malls.spec.js`, `tests/src/app/components/RoomCard.spec.js`, `RoomFilterPanel.spec.js`, `tests/src/app/pages/pumping-rooms/pumping-rooms.spec.js`. The Maps loader is mocked; nothing touches the network.
+`tests/src/app/api/mapHelpers.spec.js`, `tests/src/app/api/bmsgRooms.spec.js`, `tests/src/app/data/bmsgRooms.spec.js`, `tests/src/app/components/RoomCard.spec.js`, `RoomFilterPanel.spec.js`, `tests/src/app/pages/pumping-rooms/pumping-rooms.spec.js`. The Maps loader is mocked; nothing touches the network.

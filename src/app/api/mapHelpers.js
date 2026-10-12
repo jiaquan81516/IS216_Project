@@ -87,14 +87,15 @@ export function isDuplicate(a, b) {
   return x === y || x.includes(y) || y.includes(x);
 }
 
-// Community rooms from the database come first, then malls, then the seed examples. A later
-// entry is dropped when it duplicates an earlier one (same placeId, or a near identical name
-// within 100 m), so a real room always beats a mall listing and a mall beats a sample.
-export function mergeRooms(community, malls) {
+// Community rooms from the database come first, then the directory rooms (BMSG), then the seed
+// examples. A later entry is dropped when it duplicates an earlier one (same placeId, or a near
+// identical name within 100 m), so a database room always beats a directory listing and a
+// directory listing beats a sample.
+export function mergeRooms(community, listed) {
   const real = community.filter((room) => !room.seed);
   const seeds = community.filter((room) => room.seed);
   const out = [];
-  for (const room of [...real, ...malls, ...seeds]) {
+  for (const room of [...real, ...listed, ...seeds]) {
     if (out.some((kept) => isDuplicate(kept, room))) continue;
     out.push(room);
   }
@@ -112,12 +113,12 @@ export function prepareCommunityRooms(rooms, seedCoords = {}) {
 }
 
 export function isVerified(room) {
-  return room.kind !== "mall" && !room.seed && room.status === "verified";
+  return !room.seed && room.status === "verified";
 }
 
-// The text under the room name. Only a database room with status verified says "Verified".
+// The text under the room name. Only a room with status verified (a database room or a BMSG
+// directory room) says "Verified".
 export function verificationText(room) {
-  if (room.kind === "mall") return "Mall, nursing room not confirmed";
   if (room.seed) return "Example room, not confirmed";
   if (!isVerified(room)) return "Needs verification";
   const days = room.verifiedDaysAgo;

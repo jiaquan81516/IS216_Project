@@ -24,6 +24,14 @@ export const SEED_ROOMS = Object.freeze([
   },
 ]);
 
+// The two seed rooms have no coordinates. These come from OneMap (SMU Li Ka Shing Library,
+// Raffles City) so they can sit on the map as examples. The Raffles City seed is dropped
+// when the BMSG Raffles City room covers it.
+export const SEED_COORDS = Object.freeze({
+  "seed-smu-library": { lat: 1.29666, lng: 103.8501 },
+  "seed-raffles-city": { lat: 1.29389, lng: 103.85312 },
+});
+
 // Kept under the old name so nothing that imported it has to change.
 export const SAMPLE_ROOMS = SEED_ROOMS;
 
