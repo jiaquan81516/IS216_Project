@@ -81,7 +81,7 @@ describe("clusterRooms", () => {
 });
 
 describe("merge and de-duplicate", () => {
-  const mall = (over) => room({ id: "mall-x", kind: "mall", status: "mall", ...over });
+  const mall = (over) => room({ id: "bmsg-x", kind: "mall", status: "verified", ...over });
   it("drops a mall that matches a real room by placeId", () => {
     const real = room({ id: "fs1", name: "Mall nursing room", placeId: "P1", lat: 1.3, lng: 103.85 });
     const merged = mergeRooms([real], [mall({ name: "Other", placeId: "P1", lat: 1.5, lng: 103.9 })]);
@@ -116,17 +116,19 @@ describe("verification text and filters", () => {
     expect(verificationText(room({ status: "verified", verifiedDaysAgo: 0 }))).toBe("Verified today");
     expect(verificationText(room({ status: "verified", verifiedDaysAgo: 3 }))).toBe("Verified 3 days ago");
     expect(verificationText(room())).toBe("Needs verification");
-    expect(verificationText(room({ kind: "mall", status: "verified" }))).toBe("Mall, nursing room not confirmed");
+    expect(verificationText(room({ kind: "mall", status: "verified", verifiedDaysAgo: 0 }))).toBe("Verified today");
   });
   it("filters by text, features and verified only", () => {
     const rooms = [
       room({ id: "a", name: "Alpha", features: ["Chair", "Sink"], status: "verified", verifiedDaysAgo: 1 }),
       room({ id: "b", name: "Beta", address: "Tampines", features: ["Chair"] }),
-      room({ id: "m", name: "Gamma Mall", kind: "mall", status: "mall", features: [] }),
+      room({ id: "m", name: "Gamma Mall", kind: "mall", status: "needs verification", features: [] }),
     ];
     expect(applyFilters(rooms, { text: "tampines" }).map((r) => r.id)).toEqual(["b"]);
     expect(applyFilters(rooms, { features: ["Chair", "Sink"] }).map((r) => r.id)).toEqual(["a"]);
     expect(applyFilters(rooms, { verifiedOnly: true }).map((r) => r.id)).toEqual(["a"]);
+    const listed = room({ id: "bmsg-y", name: "Listed", kind: "mall", status: "verified", verifiedDaysAgo: 0 });
+    expect(applyFilters([...rooms, listed], { verifiedOnly: true }).map((r) => r.id)).toEqual(["a", "bmsg-y"]);
     expect(activeFilterCount({ features: ["Chair"], verifiedOnly: true })).toBe(2);
   });
   it("draws a plum pin with no gradient", () => {

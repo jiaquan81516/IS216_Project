@@ -35,6 +35,7 @@ vi.mock("@/app/api/googleMaps", () => ({
 }));
 
 import { resetMapsState, setMapsState } from "@/app/api/mapsState";
+import { BMSG_ROOMS } from "@/app/data/bmsgRooms";
 import PumpingRoomsPage from "@/app/pages/pumping-rooms/index.vue";
 
 const stubs = {
@@ -63,17 +64,22 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("pumping rooms page", () => {
-  it("renders the heading, a real list and the mall entries, none verified", async () => {
+  it("renders the heading, a real list and the BMSG rooms, all verified", async () => {
     const w = await mountPage();
     expect(w.get("h1").text()).toBe("Find a pumping room");
     expect(w.get("ul[aria-label='Pumping rooms']").exists()).toBe(true);
     expect(names(w)).toContain("VivoCity");
-    expect(w.text()).toContain("Mall, nursing room not confirmed");
-    expect(w.text()).not.toMatch(/Verified \d|Verified today/);
-    expect(w.get("[aria-live='polite']").text()).toMatch(/^\d+ rooms/);
+    expect(w.text()).not.toContain("nursing room not confirmed");
+    expect(w.findAll(".rc__verify--ok")).toHaveLength(BMSG_ROOMS.length);
+    expect(w.findAll(".rc__verify--ok")[0].text()).toMatch(/^Verified (today|\d+ days? ago)$/);
+    expect(w.get("[aria-live='polite']").text()).toBe(`${BMSG_ROOMS.length + 1} rooms in Singapore`);
+    const src = w.findAll("a").filter((a) => a.text().startsWith("Source: BMSG Nursing Room Directory"));
+    expect(src).toHaveLength(BMSG_ROOMS.length);
+    expect(src[0].attributes("rel")).toBe("noopener noreferrer");
+    expect(w.text()).toContain("Verified rooms are from the Breastfeeding Mothers' Support Group directory. Know another room?");
     expect(w.get("label[for='pr-location']").text()).toBe("Location");
   });
-  it("shows database rooms before malls and verified status only for verified rooms", async () => {
+  it("shows database rooms and verified status only for verified rooms", async () => {
     api.rooms = [
       { id: "fs1", name: "Zed Lounge", address: "9 Road", details: "Level 2", placeId: "P", lat: 1.5, lng: 103.9, status: "verified", verifiedAt: new Date(), features: { chair: true } },
     ];
@@ -88,7 +94,7 @@ describe("pumping rooms page", () => {
     await w.get("#pr-location").setValue("zzzz");
     expect(w.text()).toContain("No rooms match");
   });
-  it("opens the filter panel and Verified only hides malls", async () => {
+  it("opens the filter panel and Verified only shows the BMSG rooms", async () => {
     const w = await mountPage();
     const filter = w.findAll("button").find((b) => b.text().startsWith("Filter"));
     expect(filter.attributes("aria-expanded")).toBe("false");
@@ -96,22 +102,23 @@ describe("pumping rooms page", () => {
     expect(w.find("#pr-filters").exists()).toBe(true);
     const verifiedBox = w.findAll("label").find((l) => l.text() === "Verified only").get("input");
     await verifiedBox.setValue(true);
-    expect(names(w)).toEqual([]);
-    expect(w.text()).toContain("0 rooms");
+    expect(names(w)).toHaveLength(BMSG_ROOMS.length);
+    expect(names(w)).not.toContain("SMU Library Nursing Room");
+    expect(w.get("[aria-live='polite']").text()).toContain(`${BMSG_ROOMS.length} rooms`);
   });
   it("marks the selected card and tells the map", async () => {
     const w = await mountPage();
-    await w.findAll(".rc__name-btn").find((b) => b.text() === "JEM").trigger("click");
+    await w.findAll(".rc__name-btn").find((b) => b.text() === "Waterway Point").trigger("click");
     const on = w.findAll("li[aria-current='true']");
     expect(on).toHaveLength(1);
-    expect(on[0].text()).toContain("JEM");
-    expect(w.findComponent({ name: "RoomMap" }).props("selectedId")).toBe("mall-jem");
+    expect(on[0].text()).toContain("Waterway Point");
+    expect(w.findComponent({ name: "RoomMap" }).props("selectedId")).toBe("bmsg-waterway-point");
   });
   it("selects a card when the map reports a pin click", async () => {
     const w = await mountPage();
-    w.findComponent({ name: "RoomMap" }).vm.$emit("select", "mall-funan");
+    w.findComponent({ name: "RoomMap" }).vm.$emit("select", "bmsg-vivocity");
     await flushPromises();
-    expect(w.get("li[aria-current='true']").text()).toContain("Funan");
+    expect(w.get("li[aria-current='true']").text()).toContain("VivoCity");
   });
   it("keeps saved places reachable", async () => {
     const w = await mountPage();
@@ -153,7 +160,7 @@ describe("pumping rooms page", () => {
       value: { getCurrentPosition: (ok) => ok({ coords: { latitude: 1.4361, longitude: 103.786 } }) },
     });
     const w = await mountPage();
-    expect(names(w)[0]).toBe("Causeway Point");
+    expect(names(w)[0]).toBe("Waterway Point");
     expect(w.get("[aria-live='polite']").text()).toContain("near you");
     delete globalThis.navigator.geolocation;
   });
@@ -189,12 +196,12 @@ describe("pumping rooms page without a Maps key", () => {
   });
   it("moves the embed to a room when its Show on map link is used", async () => {
     const w = await mountPage();
-    const card = w.findAll(".rc").find((c) => c.text().includes("JEM"));
+    const card = w.findAll(".rc").find((c) => c.text().includes("Waterway Point"));
     await card.findAll("button").find((b) => b.text().startsWith("Show on map")).trigger("click");
     const src = w.get("iframe").attributes("src");
-    expect(src).toMatch(/^https:\/\/www\.google\.com\/maps\?q=.*JEM.*&z=15&output=embed$/);
-    expect(decodeURIComponent(src)).toMatch(/q=1\.\d+,103\.\d+ \(JEM\)/);
-    expect(w.get("iframe").attributes("title")).toBe("Map of JEM");
+    expect(src).toMatch(/^https:\/\/www\.google\.com\/maps\?q=.*Waterway.*&z=15&output=embed$/);
+    expect(decodeURIComponent(src)).toMatch(/q=1\.\d+,103\.\d+ \(Waterway Point\)/);
+    expect(w.get("iframe").attributes("title")).toBe("Map of Waterway Point");
   });
   it("uses the embed when the key was rejected, without any status notice", async () => {
     vi.stubEnv("VITE_GOOGLE_MAPS_API_KEY", "AIzaTestKey1234567890");
@@ -223,8 +230,8 @@ describe("pumping rooms page without a Maps key", () => {
   });
   it("filters by the text search", async () => {
     const w = await mountPage();
-    await w.get("#pr-location").setValue("tampines");
-    expect(names(w)).toEqual(["Tampines Mall"]);
+    await w.get("#pr-location").setValue("orchard");
+    expect(names(w)).toEqual(["Takashimaya"]);
   });
   it("explains that adding a room is off, with no autocomplete and a disabled save", async () => {
     const w = await mountPage();
@@ -242,7 +249,7 @@ describe("pumping rooms page without a Maps key", () => {
     const w = await mountPage();
     expect(w.text()).not.toMatch(/ away/);
     await w.findAll("button").find((b) => b.text() === "Use my location").trigger("click");
-    expect(names(w)[0]).toBe("Causeway Point");
+    expect(names(w)[0]).toBe("Waterway Point");
     expect(w.text()).toMatch(/ away/);
     expect(w.get("[aria-live='polite']").text()).toContain("near you");
     delete globalThis.navigator.geolocation;
