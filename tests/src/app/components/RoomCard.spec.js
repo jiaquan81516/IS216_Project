@@ -30,14 +30,37 @@ describe("RoomCard", () => {
     expect(mountCard({}, { selected: true }).get("li").attributes("aria-current")).toBe("true");
     expect(mountCard().get("li").attributes("aria-current")).toBeUndefined();
   });
-  it("never calls a mall verified", () => {
-    const w = mountCard({ kind: "mall", status: "mall", features: [], details: "Shopping mall" });
-    expect(w.text()).toContain("Mall, nursing room not confirmed");
-    expect(w.text()).not.toContain("Verified");
+  it("shows a BMSG room as verified with its source link, facilities and feedback", () => {
+    const w = mountCard({
+      id: "bmsg-x",
+      kind: "mall",
+      features: ["Sink"],
+      facilities: ["Diaper changing station", "Water dispenser"],
+      feedback: "Clean and spacious.",
+      sourceUrl: "https://breastfeeding.org.sg/nursing-room-directory/",
+      sourceLabel: "BMSG Nursing Room Directory",
+      verifiedDaysAgo: 0,
+    });
+    expect(w.text()).toContain("Verified today");
+    expect(w.text()).not.toContain("not confirmed");
+    const src = w.findAll("a").find((a) => a.text().startsWith("Source:"));
+    expect(src.text()).toContain("Source: BMSG Nursing Room Directory");
+    expect(src.text()).toContain("opens in a new tab");
+    expect(src.attributes("href")).toBe("https://breastfeeding.org.sg/nursing-room-directory/");
+    expect(src.attributes("target")).toBe("_blank");
+    expect(src.attributes("rel")).toBe("noopener noreferrer");
+    expect(w.text()).toContain("Diaper changing station, Water dispenser");
+    expect(w.text()).toContain("Clean and spacious.");
+    expect(w.findAll(".app-pill").map((p) => p.text())).toEqual(["Sink"]);
+  });
+  it("shows no source, facilities or feedback line for a community room", () => {
+    const w = mountCard();
+    expect(w.text()).not.toContain("Source:");
+    expect(w.text()).not.toContain("Parent feedback");
   });
   it("offers Show on map, Open in Google Maps and Directions links", async () => {
     const w = mount(RoomCard, { props: { room: { ...base } } });
-    const links = w.findAll("a").map((a) => a.text());
+    const links = w.findAll("a").filter((a) => !a.text().startsWith("Source:")).map((a) => a.text());
     expect(links[0]).toContain("Open in Google Maps");
     expect(links[1]).toContain("Directions");
     await w.findAll("button").find((b) => b.text().startsWith("Show on map")).trigger("click");

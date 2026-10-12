@@ -33,8 +33,15 @@ const verified = computed(() => isVerified(props.room));
     <ul v-if="room.features.length" class="rc__chips" aria-label="Features">
       <li v-for="f in room.features" :key="f" class="app-pill">{{ f }}</li>
     </ul>
+    <p v-if="room.facilities?.length" class="rc__muted">{{ room.facilities.join(", ") }}</p>
+    <p v-if="room.feedback" class="rc__muted">Parent feedback: {{ room.feedback }}</p>
     <p class="rc__verify" :class="{ 'rc__verify--ok': verified }">{{ verification }}</p>
     <p v-if="distance" class="rc__muted">{{ distance }} away</p>
+    <p v-if="room.sourceUrl" class="rc__muted">
+      <a class="rc__source" :href="room.sourceUrl" target="_blank" rel="noopener noreferrer" @click.stop>
+        Source: {{ room.sourceLabel || "BMSG Nursing Room Directory" }}<span class="visually-hidden">, opens in a new tab</span>
+      </a>
+    </p>
     <div class="rc__actions">
       <button
         type="button"
@@ -68,6 +75,8 @@ const verified = computed(() => isVerified(props.room));
 .rc__name-btn:focus-visible, .rc :deep(a:focus-visible), .rc :deep(button:focus-visible) { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
 .rc__text { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-ink); }
 .rc__muted { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-muted); }
+.rc__source { color: var(--nt-muted); text-decoration: underline; }
+.rc__source:hover { color: var(--nt-plum); }
 .rc__chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; padding: 0; list-style: none; }
 .rc__verify { margin: 0; font-size: 0.875rem; line-height: 1.5; font-weight: 600; color: var(--nt-muted); }
 .rc__verify--ok { color: var(--nt-plum); }

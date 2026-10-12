@@ -12,7 +12,7 @@ import GooglePlaceAutocomplete from "@/app/components/GooglePlaceAutocomplete.vu
 import { embedUrlFor, DEFAULT_EMBED_URL } from "@/app/api/roomHelpers";
 import { loadGoogleMaps } from "@/app/api/googleMaps";
 import { mapsState, setMapsState, syncMapsState } from "@/app/api/mapsState";
-import { loadMalls, SEED_COORDS } from "@/app/api/malls";
+import { loadBmsgRooms } from "@/app/api/bmsgRooms";
 import {
   DEFAULT_CENTER,
   DEFAULT_ZOOM,
@@ -23,7 +23,7 @@ import {
   sortByDistance,
 } from "@/app/api/mapHelpers";
 import { describeSharedError } from "@/app/api/sharedHelpers";
-import { FORM_FEATURES } from "@/app/data/pumpingRooms";
+import { FORM_FEATURES, SEED_COORDS } from "@/app/data/pumpingRooms";
 import { useRoomsStore } from "@/app/stores/rooms";
 
 defineOptions({ name: "PumpingRoomsPage" });
@@ -36,7 +36,7 @@ const fallback = computed(() => mapsState.value === "no-key" || mapsState.value 
 const located = ref(false);
 
 const roomsStore = useRoomsStore();
-const malls = ref([]);
+const listed = ref([]);
 const mapEnabled = computed(() => !fallback.value);
 // Keyless embed shown when there is no working Maps key: whole island, or the chosen room / location.
 const embedPoint = computed(() => {
@@ -87,8 +87,8 @@ function toggleSaved(room) {
   }
 }
 
-// Rooms: database rooms first, then malls, de-duplicated.
-const allRooms = computed(() => mergeRooms(prepareCommunityRooms(roomsStore.rooms, SEED_COORDS), malls.value));
+// Rooms: database rooms first, then the BMSG directory rooms, de-duplicated.
+const allRooms = computed(() => mergeRooms(prepareCommunityRooms(roomsStore.rooms, SEED_COORDS), listed.value));
 const textFilter = computed(() => (placeChosen.value ? "" : query.value));
 const visible = computed(() => {
   const base = view.value === "saved" ? allRooms.value.filter((r) => savedIds.value.includes(r.id)) : allRooms.value;
@@ -131,7 +131,7 @@ let autocomplete = null;
 let placeListener = null;
 onMounted(async () => {
   roomsStore.bind();
-  malls.value = await loadMalls();
+  listed.value = await loadBmsgRooms();
   // Start at the user's location when they allow it; stay quiet when they do not.
   if (fallback.value) return;
   locate({ silent: true });
@@ -400,8 +400,9 @@ watch(supportTab, (id) => {
 
         <div class="pr__foot">
           <button type="button" class="app-link pr__all" @click="viewAll">View all rooms</button>
-          <p class="pr__muted">
-            Malls are listed from a hand picked list. A mall is not proof that it has a nursing room, so check before you go.
+          <p class="pr__muted pr__note">
+            Verified rooms are from the Breastfeeding Mothers' Support Group directory. Know another room?
+            <button type="button" class="app-textbtn pr__add" @click="openForm">Add it<span class="visually-hidden"> (add a room)</span></button>.
           </p>
         </div>
       </div>
@@ -492,7 +493,9 @@ watch(supportTab, (id) => {
 .pr__empty { display: flex; flex-direction: column; gap: 8px; padding: 32px 24px; border-top: 1px solid var(--nt-line); }
 .pr__foot { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px 24px 8px; }
 .pr__all { padding: 0; background: none; border: 0; font: inherit; font-size: 0.875rem; font-weight: 600; text-decoration: underline; cursor: pointer; }
-.pr__all:focus-visible, .pr__x:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
+.pr__note { font-size: 0.875rem; }
+.pr__add { font-size: 0.875rem; }
+.pr__add:focus-visible, .pr__all:focus-visible, .pr__x:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 
 .pr__panel { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; gap: 12px; padding: 32px 24px; overflow-y: auto; background: var(--nt-white); }
 .pr__panel:focus { outline: none; }
