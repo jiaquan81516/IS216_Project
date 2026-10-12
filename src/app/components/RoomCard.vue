@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from "vue";
 import { formatDistance, verificationText, isVerified } from "@/app/api/mapHelpers";
-import { mapsDirectionsLink, mapsSearchLink } from "@/app/api/roomHelpers";
+import { oneMapPlaceUrl } from "@/app/api/oneMapHelpers";
 
 defineOptions({ name: "RoomCard" });
 const props = defineProps({
@@ -15,6 +15,7 @@ const emit = defineEmits(["select", "toggle-save"]);
 const distance = computed(() => (props.showDistance ? formatDistance(props.room.distance) : ""));
 const verification = computed(() => verificationText(props.room));
 const verified = computed(() => isVerified(props.room));
+const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
 </script>
 
 <template>
@@ -55,11 +56,8 @@ const verified = computed(() => isVerified(props.room));
       <button type="button" class="app-textbtn" @click.stop="emit('select', room)">
         Show on map<span class="visually-hidden"> for {{ room.name }}</span>
       </button>
-      <a class="app-link" :href="mapsSearchLink(room)" target="_blank" rel="noopener noreferrer" @click.stop>
-        Open in Google Maps<span class="visually-hidden"> for {{ room.name }}, opens in a new tab</span>
-      </a>
-      <a class="app-link" :href="mapsDirectionsLink(room)" target="_blank" rel="noopener noreferrer" @click.stop>
-        Directions<span class="visually-hidden"> to {{ room.name }}, opens in a new tab</span>
+      <a v-if="placeUrl" class="app-link" :href="placeUrl" target="_blank" rel="noopener noreferrer" @click.stop>
+        Open in OneMap<span class="visually-hidden"> for {{ room.name }}, opens in a new tab</span>
       </a>
     </div>
   </li>

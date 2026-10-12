@@ -57,7 +57,7 @@ export async function addRoom(
     throw error;
   }
   if (!cleanName || !cleanAddress || !cleanDetails || !cleanPlaceId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
-    const error = new Error("A room needs a Google place and exact location details.");
+    const error = new Error("A room needs an address and exact location details.");
     error.code = "rooms/incomplete";
     throw error;
   }

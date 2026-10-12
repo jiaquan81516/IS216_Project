@@ -75,8 +75,9 @@ describe("kids care page", () => {
     const { w } = await mountPage("clinics");
     const card = w.get("#kc-card-chas-C1");
     const hrefs = card.findAll("a").map((a) => a.attributes("href"));
-    expect(hrefs).toContain("https://www.google.com/maps/search/?api=1&query=Alpha%20Clinic%2C%201%20Road%2C%20Singapore%20111111");
-    expect(hrefs).toContain("https://www.google.com/maps/dir/?api=1&destination=Alpha%20Clinic%2C%201%20Road%2C%20Singapore%20111111");
+    expect(hrefs.some((h) => h.startsWith("https://www.onemap.gov.sg/amm/amm.html?") && h.includes("zoomLevel=18"))).toBe(true);
+    expect(card.findAll("a").some((a) => a.text().startsWith("Open in OneMap"))).toBe(true);
+    expect(card.findAll("a").some((a) => a.text().startsWith("Directions"))).toBe(false);
     expect(hrefs).toContain("tel:+6561234567");
     expect(card.find("a[target='_blank'] .visually-hidden").text()).toContain("opens in a new tab");
     expect(w.get("#kc-card-chas-C2").findAll("a").some((a) => a.text().startsWith("Call"))).toBe(false);
@@ -84,12 +85,13 @@ describe("kids care page", () => {
   it("updates the map iframe on Show on map", async () => {
     const { w } = await mountPage();
     const frame = w.get("iframe");
-    expect(frame.attributes("src")).toBe("https://www.google.com/maps?q=Singapore&output=embed&z=11");
+    expect(frame.attributes("src")).toBe("https://www.onemap.gov.sg/amm/amm.html?mapStyle=Default&zoomLevel=12&latLng=1.3521,103.8198");
+    expect(frame.attributes("referrerpolicy")).toBe("no-referrer-when-downgrade");
     expect(frame.attributes("title")).toBeTruthy();
     expect(frame.attributes("loading")).toBe("lazy");
     await w.get("#kc-card-er-nuh").findAll("button").find((b) => b.text() === "Show on map").trigger("click");
-    expect(w.get("iframe").attributes("src")).toContain("NUH%20Children's%20Emergency");
-    expect(w.get("iframe").attributes("src")).toContain("output=embed");
+    expect(w.get("iframe").attributes("src")).toContain("marker=latLng:");
+    expect(w.get("iframe").attributes("title")).toBe("Map of NUH Children's Emergency");
   });
   it("saves places and lists them under Saved places", async () => {
     const { w } = await mountPage();
