@@ -44,7 +44,26 @@ async function deepCheck() {
     const admin = await import("./_lib/admin.js");
     admin.app.current;
     out.adminStart = "ok";
+    out.adminProjectId = admin.PROJECT_ID; // public, and it must match the web app's project id
     out.messaging = typeof admin.messaging.sendEachForMulticast === "function" ? "ok" : "missing";
+    // Can the server reach Firestore with this service account? A read, nothing is written.
+    try {
+      await admin.db.collection("serverLimits").doc("health-check").get();
+      out.firestore = "ok";
+    } catch (error) {
+      out.firestore = `failed: ${error?.code || ""} ${first(error)}`.trim();
+    }
+    // Can it reach Firebase Cloud Messaging? A dry run with a made up token delivers nothing.
+    // FCM rejecting the fake token as invalid is the good answer: it means the credentials and
+    // the FCM API both worked. Anything else names what is wrong (for example the API is off).
+    try {
+      await admin.messaging.send({ token: "nurturetrack-health-check", data: { check: "1" } }, true);
+      out.fcm = "ok";
+    } catch (error) {
+      const code = error?.code || "";
+      const reached = ["messaging/invalid-argument", "messaging/invalid-registration-token", "messaging/registration-token-not-registered"];
+      out.fcm = reached.includes(code) ? "ok (FCM reached, the test token was rejected as expected)" : `failed: ${code} ${first(error)}`.trim();
+    }
   } catch (error) {
     out.adminStart = `failed: ${first(error)}`;
   }
