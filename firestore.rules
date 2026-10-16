@@ -201,6 +201,37 @@ service cloud.firestore {
       // name, with 1 to 500 characters, stamped by the server clock and not yet acknowledged.
       // Only a member who is not the author may acknowledge, and that write adds their own
       // uid to ackedBy and sets ackedAt, nothing else. Only the author may delete.
+      // Feelings. One optional word per person ("hard", "okay" or "good") that the person chose to
+      // share with their partner. Members read it; only its owner writes or removes it. The
+      // private check-in itself is never stored here.
+      match /feelings/{feelingId} {
+        allow read: if sharedMember();
+        allow create, update: if sharedMember()
+          && feelingId == request.auth.uid
+          && request.resource.data.keys().hasOnly(['uid', 'level', 'date', 'updatedAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.level in ['hard', 'okay', 'good']
+          && request.resource.data.date is string
+          && request.resource.data.date.size() == 10
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if sharedMember() && feelingId == request.auth.uid;
+      }
+
+      // The chat between the two parents. Written in your own name, once, and never edited or
+      // deleted. "thanks" marks a thank you so the weekly summary can count it.
+      match /chat/{messageId} {
+        allow read: if sharedMember();
+        allow create: if sharedMember()
+          && request.resource.data.keys().hasOnly(['from', 'text', 'kind', 'createdAt'])
+          && request.resource.data.from == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() >= 1
+          && request.resource.data.text.size() <= 200
+          && request.resource.data.kind in ['text', 'thanks']
+          && request.resource.data.createdAt == request.time;
+        allow update, delete: if false;
+      }
+
       match /posts/{postId} {
         allow read: if sharedMember();
 

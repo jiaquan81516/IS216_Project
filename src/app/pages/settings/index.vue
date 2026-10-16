@@ -34,6 +34,7 @@ import {
 } from "@/api/server";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { setDisplay } from "@/app/composables/usePrefs";
+import { usePush } from "@/app/composables/usePush";
 import { ROUTES } from "@/app/routes";
 
 defineOptions({ name: "SettingsPage" });
@@ -177,6 +178,29 @@ function set(path, value) {
 }
 
 onBeforeUnmount(() => flush.flush());
+
+// Push is on for this device only when the parent allowed it and the device was registered.
+// Turning it off here switches off the master setting, which the server checks for every
+// device of the account.
+const push = usePush(() => me.value.uid);
+async function setPush(on) {
+  if (on) {
+    if (!(await push.enable())) {
+      set("notifications.push", false);
+      return;
+    }
+    set("notifications.push", true);
+  } else {
+    await push.disable();
+    set("notifications.push", false);
+  }
+}
+const pushHint = computed(() => {
+  if (!push.supported) return "This browser cannot receive push notifications. On iPhone, add NurtureTrack to the Home Screen first.";
+  if (!push.configured) return "Web push is not set up yet. Add VITE_FIREBASE_VAPID_KEY to .env.";
+  if (push.permission.value === "denied") return "Notifications are blocked for this site. Allow them in the browser's site settings.";
+  return "Turn on to get alerts on this device. The master switch for everything below.";
+});
 
 const timeFormatOptions = TIME_FORMATS.map((value) => ({ value, label: value === "12h" ? "12 hour" : "24 hour" }));
 const weekStartOptions = WEEK_STARTS.map((value) => ({ value, label: value === "mon" ? "Monday" : "Sunday" }));
@@ -526,16 +550,18 @@ async function confirmDelete() {
       <section class="st__card" aria-labelledby="st-notif">
         <h2 id="st-notif" class="st__h">Notifications</h2>
         <p class="st__muted">
-          Push notifications need the server set up. These preferences are saved now and used
-          once it is connected.
+          Alerts for a message or a task from your partner reach this device while the browser is
+          running. They need the push server from docs/setup.md.
         </p>
+        <p v-if="push.error.value" class="app-error-text" role="alert">{{ push.error.value }}</p>
         <div class="st__rows">
           <Toggle
             id="st-push"
             label="Push notifications"
-            hint="The master switch for everything below."
+            :hint="pushHint"
+            :disabled="push.busy.value || (!form.notifications.push && (!push.supported || !push.configured))"
             :model-value="form.notifications.push"
-            @update:model-value="set('notifications.push', $event)"
+            @update:model-value="setPush"
           />
           <Toggle
             id="st-feeds"
