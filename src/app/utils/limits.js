@@ -1,11 +1,15 @@
-// Light client side rate limiting. A sliding window per action, kept in localStorage.
+// Rate limiting: one sliding window, used by the browser and by the Vercel functions.
 //
-// This is a courtesy guard, not security: anyone can clear their own storage. It exists so
-// a stuck finger or an over eager tester does not write fifty reports in a minute. The real
-// limits belong on the server (see docs/data-model.md, section 7).
+// The browser keeps its stamps in localStorage as a courtesy guard against a stuck finger. It
+// is not security, because anyone can clear their own storage. The real limit is the server's,
+// api/_lib/rateLimit.js, which imports the same decide() and LIMIT_RULES from this file and
+// keeps its stamps in Firestore. See docs/data-model.md, section 7.
+//
+// Nothing here touches the DOM at import time, so the server can load it safely.
 
 export const LIMITS_KEY = "nt.app.limits";
-const TEN_MINUTES = 10 * 60 * 1000;
+export const WINDOW_MS = 10 * 60 * 1000;
+const TEN_MINUTES = WINDOW_MS;
 
 // max actions per window, per action name.
 export const LIMIT_RULES = Object.freeze({
@@ -13,6 +17,9 @@ export const LIMIT_RULES = Object.freeze({
   entry: { max: 10, windowMs: TEN_MINUTES },
   inviteRegenerate: { max: 3, windowMs: TEN_MINUTES },
   accountDelete: { max: 3, windowMs: TEN_MINUTES },
+  // Server only, see api/_lib/rateLimit.js.
+  googleConnect: { max: 10, windowMs: TEN_MINUTES },
+  googleSync: { max: 20, windowMs: TEN_MINUTES },
 });
 
 export const LIMIT_MESSAGE = "You have done that a few times just now. Try again in a few minutes.";
@@ -21,6 +28,7 @@ export const LIMIT_MESSAGE = "You have done that a few times just now. Try again
 export function pruneStamps(stamps, windowMs, now) {
   if (!Array.isArray(stamps)) return [];
   return stamps
+    .map((value) => Number(value))
     .filter((value) => Number.isFinite(value) && value > now - windowMs && value <= now)
     .sort((a, b) => a - b);
 }
@@ -37,6 +45,11 @@ export function decide(stamps, rule, now) {
     retryAfterMs: allowed ? 0 : Math.max(0, oldest + rule.windowMs - now),
     message: allowed ? "" : LIMIT_MESSAGE,
   };
+}
+
+// Seconds for a Retry-After header. Always at least 1.
+export function retryAfterSeconds(retryAfterMs) {
+  return Math.max(1, Math.ceil((Number(retryAfterMs) || 0) / 1000));
 }
 
 function readAll() {
