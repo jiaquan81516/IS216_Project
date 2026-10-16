@@ -1,3 +1,10 @@
 allowBuilds:
   '@firebase/util': false
   protobufjs: false
+
+# firebase-admin (through jwks-rsa) loads jose with require(). jose 6 is ESM only, which an
+# older Node on Vercel cannot require (ERR_REQUIRE_ESM, FUNCTION_INVOCATION_FAILED). jose 5
+# ships a CommonJS build and has every function jwks-rsa uses. Run `pnpm install` after any
+# change here, and commit pnpm-lock.yaml.
+overrides:
+  jose: ^5.10.0
