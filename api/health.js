@@ -7,6 +7,7 @@ import { allowMethod, sendJson } from "./_lib/respond.js";
 
 const GROUPS = Object.freeze({
   firebaseAdmin: ["FIREBASE_PROJECT_ID", "FIREBASE_CLIENT_EMAIL", "FIREBASE_PRIVATE_KEY"],
+  webPush: ["VITE_FIREBASE_VAPID_KEY"],
   google: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REDIRECT_URI"],
   oauthState: ["OAUTH_STATE_SECRET"],
   app: ["APP_URL"],
@@ -31,7 +32,7 @@ export default function handler(req, res) {
     env,
     missing,
     notes: {
-      push: "Push notifications are not built yet. VITE_FIREBASE_VAPID_KEY is needed when they are.",
+      push: "Web push needs firebaseAdmin and webPush to be true. The Google and app groups are only for the Google Calendar server flow.",
     },
   });
 }
