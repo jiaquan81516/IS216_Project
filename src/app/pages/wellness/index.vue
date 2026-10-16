@@ -1,14 +1,26 @@
 <script setup>
 import "@/app/app.css";
-import { computed, ref } from "vue";
+import { computed, inject, ref } from "vue";
 import AppButton from "@/components/ui/AppButton.vue";
 import ChipGroup from "@/app/components/ChipGroup.vue";
+import WeekTogether from "@/app/components/WeekTogether.vue";
+import { NUDGES_KEY } from "@/app/composables/useNudges";
 import { dateKey, useCheckinsStore } from "@/app/stores/checkins";
+import { useTeamStore } from "@/app/stores/team";
+import { HOME_KEY } from "@/app/composables/useHome";
+import { FEELING_LABELS, feelingLevel, needsSupport } from "@/app/utils/loadHelpers";
 import { ROUTES } from "@/app/routes";
 
 defineOptions({ name: "WellnessPage" });
 
 const store = useCheckinsStore();
+const team = useTeamStore();
+const home = inject(HOME_KEY, null);
+const partnerName = computed(() => home?.partner?.value?.firstName || "");
+
+// The weekly summary. Everything between you and your partner lives in the chat.
+const nudgeState = inject(NUDGES_KEY, null);
+const week = computed(() => nudgeState?.together.value ?? null);
 
 const MOODS = [
   { value: 1, label: "Very low" },
@@ -32,16 +44,34 @@ const stress = ref(existing?.stress ?? null);
 const error = ref("");
 const saved = ref(null); // { mood, stress } of the last save in this visit
 
-function save() {
+const sharedNote = ref("");
+
+async function save() {
   if (!mood.value || !stress.value) {
     error.value = "Choose a mood and a stress level first.";
     return;
   }
   error.value = "";
-  store.save({ mood: mood.value, stress: stress.value });
+  const entry = store.save({ mood: mood.value, stress: stress.value });
   saved.value = { mood: mood.value, stress: stress.value };
+  sharedNote.value = "";
+  // Only one word goes to your partner, and only when you turned sharing on.
+  if (team.shareOn && partnerName.value) {
+    const level = feelingLevel(entry);
+    if (await team.shareFeeling(level, entry.date)) {
+      sharedNote.value = `${partnerName.value} can see that you are ${FEELING_LABELS[level]}. Your scores stay private.`;
+    }
+  }
 }
 
+async function onShareChange(event) {
+  const on = event.target.checked;
+  await team.setSharing(on);
+  const entry = store.forDate(dateKey(new Date()));
+  if (on && entry) await team.shareFeeling(feelingLevel(entry), entry.date);
+}
+
+const supportNeeded = computed(() => needsSupport(store.lastSeven(new Date()), new Date()));
 const hardStretch = computed(() => saved.value && (saved.value.mood === 1 || saved.value.stress === 5));
 
 const days = computed(() => store.lastSeven(new Date()));
@@ -63,8 +93,20 @@ const barLabel = (day) =>
       <p class="wl__sub">A short reflection for you. Not a diagnosis and not shared by default.</p>
     </header>
 
+    <div v-if="supportNeeded" class="wl__banner" role="status">
+      <p class="wl__banner-text">
+        Your last few check-ins have been hard. You do not have to carry this alone, and this is not a diagnosis.
+      </p>
+      <AppButton variant="outline" size="md" :to="ROUTES.SUPPORT">See support options</AppButton>
+    </div>
+
     <div class="wl__cols">
       <div class="wl__stack">
+        <section v-if="partnerName && week" class="wl__together" aria-labelledby="wl-together">
+          <h2 id="wl-together" class="wl__h">Together with {{ partnerName }}</h2>
+          <WeekTogether :summary="week" my-name="You" :partner-name="partnerName" />
+        </section>
+
         <form class="wl__card wl__card--private" aria-labelledby="wl-question" novalidate @submit.prevent="save">
           <div class="wl__card-head">
             <h2 id="wl-question" class="wl__h">How are you feeling today?</h2>
@@ -86,13 +128,26 @@ const barLabel = (day) =>
 
           <p v-if="error" class="app-error-text" role="alert">{{ error }}</p>
 
+          <div v-if="partnerName" class="wl__share">
+            <label class="wl__check">
+              <input type="checkbox" :checked="team.shareOn" @change="onShareChange" />
+              <span>Let {{ partnerName }} know when I am having a hard day</span>
+            </label>
+            <p class="wl__muted">
+              Off by default. If you turn it on, only one word is shared (hard, okay or doing well). Your scores stay
+              private, and turning it off removes it.
+            </p>
+          </div>
+
           <div class="wl__actions">
             <AppButton size="md" @click="save">Save privately</AppButton>
             <AppButton variant="outline" size="md" :to="ROUTES.HOME">Not now</AppButton>
           </div>
 
           <div role="status" class="wl__status">
-            <p v-if="saved" class="wl__saved">Saved. Only you can see this.</p>
+            <p v-if="saved && !sharedNote" class="wl__saved">Saved. Only you can see this.</p>
+            <p v-if="sharedNote" class="wl__saved">Saved. {{ sharedNote }}</p>
+            <p v-if="team.writeError" class="app-error-text" role="alert">{{ team.writeError }}</p>
           </div>
 
           <p v-if="hardStretch" class="wl__note">
@@ -159,6 +214,13 @@ const barLabel = (day) =>
 .wl__sub { margin: 0; color: var(--nt-muted); }
 .wl__muted { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
 
+.wl__banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; padding: 16px 20px; background: var(--nt-white, #fff); border: 1px solid var(--nt-line); border-left: 3px solid var(--nt-coral, #c0553b); border-radius: 12px; }
+.wl__banner-text { margin: 0; max-width: 56ch; font-size: 0.9375rem; line-height: 1.5; color: var(--nt-ink); }
+.wl__share { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.wl__check { display: flex; align-items: flex-start; gap: 10px; font-size: 0.9375rem; color: var(--nt-ink); cursor: pointer; }
+.wl__check input { margin-top: 3px; accent-color: var(--nt-plum); }
+
+.wl__together { display: flex; flex-direction: column; gap: 12px; }
 .wl__cols { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; }
 .wl__stack, .wl__rail { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
 .wl__card { display: flex; flex-direction: column; gap: 20px; min-width: 0; padding: 24px; background: var(--nt-white, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
