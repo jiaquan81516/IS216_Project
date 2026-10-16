@@ -13,8 +13,16 @@ import { getMessaging } from "firebase-admin/messaging";
 export const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "";
 export const CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL || "";
 
-function privateKey() {
-  return String(process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+// Forgiving about how the key was pasted into Vercel: literal backslash n sequences, real
+// line breaks, spaces where the line breaks were, or quote marks around the whole thing all
+// give the same key. The body is rebuilt between the BEGIN and END lines.
+export function privateKey(raw = process.env.FIREBASE_PRIVATE_KEY) {
+  const text = String(raw || "").replace(/\\n/g, "\n");
+  const match = /-----BEGIN PRIVATE KEY-----([\s\S]*?)-----END PRIVATE KEY-----/.exec(text);
+  if (!match) return text.trim().replace(/^["']+|["']+$/g, "");
+  const body = match[1].replace(/\s+/g, "");
+  if (!body) return "";
+  return `-----BEGIN PRIVATE KEY-----\n${body.match(/.{1,64}/g).join("\n")}\n-----END PRIVATE KEY-----\n`;
 }
 
 export function hasAdminConfig() {

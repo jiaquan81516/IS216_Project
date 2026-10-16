@@ -32,6 +32,9 @@ export async function requireUser(req) {
   try {
     return await auth.verifyIdToken(token);
   } catch (cause) {
+    // The reason goes to the server log only (first line, never the token), so a 401 can be
+    // told apart: a wrong project, a bad service account key, or a really expired token.
+    console.error("[auth] verifyIdToken failed:", cause?.code, String(cause?.message ?? cause).split("\n")[0].slice(0, 200));
     const error = unauthorised("Your sign in has expired. Sign in again, then try that once more.");
     error.cause = cause;
     return Promise.reject(error);
