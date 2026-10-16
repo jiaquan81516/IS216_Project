@@ -20,6 +20,7 @@ export const LIMIT_RULES = Object.freeze({
   // Server only, see api/_lib/rateLimit.js.
   googleConnect: { max: 10, windowMs: TEN_MINUTES },
   googleSync: { max: 20, windowMs: TEN_MINUTES },
+  pushNotify: { max: 40, windowMs: TEN_MINUTES },
 });
 
 export const LIMIT_MESSAGE = "You have done that a few times just now. Try again in a few minutes.";

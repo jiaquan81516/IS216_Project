@@ -12,6 +12,7 @@ import {
   toggleTask as apiToggleTask,
   updateTask as apiUpdateTask,
 } from "@/api/rtw";
+import { notifyPartner } from "@/api/push";
 import { isIsoDate } from "@/app/utils/rotaHelpers";
 import { PUMPING_ITEMS, PUMPING_SESSIONS, PUMPING_TIMES, RESPONSIBILITY_AREAS, TASK_GROUPS } from "@/app/data/rtw";
 
@@ -147,13 +148,23 @@ export const useReturnToWorkStore = defineStore("app-return-to-work", () => {
     if (!householdId.value) return false;
     writeError.value = "";
     try {
-      await action();
+      lastResult = await action();
       return true;
     } catch (cause) {
       console.error("[app return to work]", cause?.code, cause);
       writeError.value = message;
       return false;
     }
+  }
+
+  // What the last successful write returned, so addTask can read the new task's id.
+  let lastResult;
+
+  // A task given to the other parent gets a system notification. "both" and your own tasks
+  // do not. Fire and forget: the server re-reads the task and checks everything itself.
+  function announce(taskId, owner) {
+    if (!taskId || !owner || owner === "both" || owner === meUid.value) return;
+    notifyPartner(householdId.value, "task", taskId);
   }
 
   const saveFailed = "We could not save the plan. Check your connection and try again.";
@@ -172,6 +183,7 @@ export const useReturnToWorkStore = defineStore("app-return-to-work", () => {
       () => apiAddTask(householdId.value, meUid.value, task),
       "We could not add the task. Check your connection and try again.",
     );
+    if (ok) announce(lastResult, task.owner);
     return ok ? task : null;
   }
 
@@ -184,6 +196,7 @@ export const useReturnToWorkStore = defineStore("app-return-to-work", () => {
       () => apiUpdateTask(householdId.value, id, task),
       "We could not save the task. Check your connection and try again.",
     );
+    if (ok && task.owner !== existing.owner) announce(id, task.owner);
     return ok ? { id, ...task } : null;
   }
 
