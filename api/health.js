@@ -17,7 +17,41 @@ function present(name) {
   return Boolean(String(process.env[name] || "").trim());
 }
 
-export default function handler(req, res) {
+const first = (error) => String(error?.message || error).split("\n")[0].slice(0, 200);
+
+// GET /api/health?deep=1 also loads the server files and starts the Admin SDK, and says
+// which step fails and why. A Vercel function that crashes on load only shows
+// FUNCTION_INVOCATION_FAILED, so this is the way to see the reason without the log page.
+// It reports the first line of the error message, never a variable's value.
+async function deepCheck() {
+  const out = {};
+  const files = {
+    admin: () => import("./_lib/admin.js"),
+    auth: () => import("./_lib/auth.js"),
+    rateLimit: () => import("./_lib/rateLimit.js"),
+    pushHelpers: () => import("./_lib/push.js"),
+    notify: () => import("./push/notify.js"),
+  };
+  for (const [name, load] of Object.entries(files)) {
+    try {
+      await load();
+      out[name] = "ok";
+    } catch (error) {
+      out[name] = `load failed: ${first(error)}`;
+    }
+  }
+  try {
+    const admin = await import("./_lib/admin.js");
+    admin.app.current;
+    out.adminStart = "ok";
+    out.messaging = typeof admin.messaging.sendEachForMulticast === "function" ? "ok" : "missing";
+  } catch (error) {
+    out.adminStart = `failed: ${first(error)}`;
+  }
+  return out;
+}
+
+export default async function handler(req, res) {
   if (!allowMethod(req, res, ["GET", "HEAD"])) return;
   const env = {};
   const missing = [];
@@ -26,11 +60,13 @@ export default function handler(req, res) {
     env[group] = have.length === names.length;
     for (const name of names) if (!present(name)) missing.push(name);
   }
+  const deep = req?.query?.deep === "1" ? { deep: await deepCheck() } : {};
   sendJson(res, 200, {
     ok: true,
     time: new Date().toISOString(),
     env,
     missing,
+    ...deep,
     notes: {
       push: "Web push needs firebaseAdmin and webPush to be true. The Google and app groups are only for the Google Calendar server flow.",
     },
