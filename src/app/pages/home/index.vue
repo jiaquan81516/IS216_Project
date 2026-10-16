@@ -7,7 +7,7 @@ import AppLink from "@/components/ui/AppLink.vue";
 import Icon from "@/app/components/Icon.vue";
 import { acceptHandover } from "@/api/handovers";
 import { ownerUid } from "@/app/utils/sharedHelpers";
-import { buildStream, groupByDay, firstNameOf } from "@/app/utils/stream";
+import { buildStream, groupByDay } from "@/app/utils/stream";
 import { agoText, dutyTonight, nextUp, todaySummary } from "@/app/utils/homeSummary";
 import { formatMinutes, formatTime as clockTime } from "@/app/utils/entryHelpers";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
@@ -105,6 +105,7 @@ const duty = computed(() => {
     members: members.value,
   });
 });
+
 
 // Today at a glance, from the shared care log, calendar and return to work tasks.
 const entriesFailed = computed(() => Boolean(entriesShared.error?.value));

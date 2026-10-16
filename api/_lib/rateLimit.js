@@ -3,27 +3,28 @@
 // of millisecond timestamps per action, trimmed every time it is written. The rules deny all
 // client access to the collection: only Admin touches it.
 //
-// src/app/utils/limits.js keeps the same windows in the browser as a courtesy guard. This one is
-// the real limit.
+// The window logic and the limits live in src/app/utils/limits.js, which the browser also uses
+// as a courtesy guard. This one is the real limit.
 import { db } from "./admin.js";
-import { decide, LIMIT_MESSAGE, LIMITS, retryAfterSeconds, WINDOW_MS } from "./limitWindow.js";
+import { decide, LIMIT_MESSAGE, LIMIT_RULES, retryAfterSeconds } from "../../src/app/utils/limits.js";
 import { fail } from "./respond.js";
 
-export { LIMIT_MESSAGE, LIMITS };
+export { LIMIT_MESSAGE, LIMIT_RULES };
 
 // Records this call and says whether it is allowed. A Firestore failure never blocks the
 // user: a limiter that cannot read its own counters should not take the app down with it.
 export async function takeLimit(uid, action, { now = Date.now() } = {}) {
-  const max = LIMITS[action];
-  if (!uid || !max) return { allowed: true, retryAfterMs: 0 };
+  const rule = LIMIT_RULES[action];
+  if (!uid || !rule) return { allowed: true, retryAfterMs: 0 };
   const ref = db.collection("serverLimits").doc(uid);
   try {
     return await db.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
       const stored = snap.exists ? snap.data() : {};
-      const outcome = decide(stored?.[action], now, max, WINDOW_MS);
-      tx.set(ref, { [action]: outcome.stamps, updatedAt: now }, { merge: true });
-      return outcome;
+      const outcome = decide(stored?.[action], rule, now);
+      const stamps = outcome.allowed ? [...outcome.stamps, now] : outcome.stamps;
+      tx.set(ref, { [action]: stamps, updatedAt: now }, { merge: true });
+      return { ...outcome, retryAfterMs: outcome.allowed ? 0 : Math.max(1000, outcome.retryAfterMs) };
     });
   } catch (cause) {
     console.error("[rate limit]", action, cause?.code, cause?.message);

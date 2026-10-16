@@ -6,10 +6,14 @@ import BrandLogo from "@/components/ui/BrandLogo.vue";
 import { useAuth } from "@/composables/useAuth";
 import Icon from "@/app/components/Icon.vue";
 import UserMenu from "@/app/components/UserMenu.vue";
+import ChatDock from "@/app/components/ChatDock.vue";
+import PartnerToast from "@/app/components/PartnerToast.vue";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { useHandovers, HANDOVERS_KEY } from "@/app/composables/useHandovers";
 import { useShared, SHARED_KEY } from "@/app/composables/useShared";
+import { useNudges, NUDGES_KEY } from "@/app/composables/useNudges";
+import { usePush, usePushMessages } from "@/app/composables/usePush";
 import { buildStream, unreadCount } from "@/app/utils/stream";
 import { resetLimits } from "@/app/utils/limits";
 import { NAV } from "@/app/data/nav";
@@ -30,7 +34,8 @@ const tone = computed(() => {
 const home = useHome();
 provide(HOME_KEY, home);
 // One live entries listener, shared by Home and the care log. It waits for the household id.
-provide(ENTRIES_KEY, useEntries(home.householdId));
+const entriesShared = useEntries(home.householdId);
+provide(ENTRIES_KEY, entriesShared);
 // One set of listeners for the shared pages (sleep rota, calendar, return to work). They
 // wait for the household id too, and are unbound when it changes or the shell unmounts.
 const meUid = computed(() => home.me.value.uid);
@@ -40,6 +45,41 @@ provide(SHARED_KEY, shared);
 // One live handovers listener. The page, the Home line and the care log dividers share it.
 const handovers = useHandovers(home.householdId, meUid);
 provide(HANDOVERS_KEY, handovers);
+
+// The chat with your partner. The button shows on every page, and a pop up appears when
+// something new comes in.
+const chat = useNudges({ home, entries: entriesShared, shared });
+provide(NUDGES_KEY, chat);
+function onToastOpen(toast) {
+  chat.closeToast(toast.id);
+  if (toast.to) router.push(toast.to);
+  else chat.openChat();
+}
+
+// Web push. Keep this device's token current when the parent already allowed it. A push that
+// arrives while this tab is in front is shown here as a pop up (the service worker only shows
+// a system notification when no tab is visible). Chat messages already pop up from the chat
+// listener, so only tasks are added here. A tap on a system notification lands here too.
+const push = usePush(() => meUid.value);
+watch(meUid, (uid) => uid && push.refresh(), { immediate: true });
+usePushMessages((message) => {
+  if (message.source === "nt-push-open") {
+    if (message.type === "chat") chat.openChat();
+    else if (message.url) router.push(message.url);
+    return;
+  }
+  if (message.type === "task") {
+    chat.showToast({ id: `push:${Date.now()}`, kind: "message", title: message.title, text: message.body, to: ROUTES.CHECKLIST });
+  }
+});
+// "/home?chat=1" is where a chat notification opens a fresh tab: open the chat, then tidy the address.
+onMounted(() => {
+  if (route.query.chat !== "1") return;
+  chat.openChat();
+  const rest = { ...route.query };
+  delete rest.chat;
+  router.replace({ path: route.path, query: rest });
+});
 
 const menuOpen = ref(false);
 const menuButton = ref(null);
@@ -159,6 +199,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
         <RouterView />
       </div>
     </main>
+
+    <PartnerToast :toasts="chat.toasts.value" @close="chat.closeToast" @open="onToastOpen" />
+    <ChatDock :chat="chat" :me="meUid" />
   </div>
 </template>
 

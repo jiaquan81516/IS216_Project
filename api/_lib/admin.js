@@ -8,6 +8,7 @@
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { getMessaging } from "firebase-admin/messaging";
 
 export const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "";
 export const CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL || "";
@@ -71,3 +72,4 @@ function lazy(make) {
 
 export const auth = lazy(getAuth);
 export const db = lazy(getFirestore);
+export const messaging = lazy(getMessaging);

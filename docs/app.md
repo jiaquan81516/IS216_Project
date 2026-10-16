@@ -361,7 +361,6 @@ an underscore:
 | `auth.js` | `requireUser(req)` verifies `Authorization: Bearer <idToken>` with `auth.verifyIdToken` and returns the decoded token, or throws a 401. It also accepts a `token` query parameter, for the one request that is a top level navigation. |
 | `respond.js` | `ok`, `fail`, `sendJson`, `allowMethod`, `readBody`, `logLine`. Every error carries `{ error: { code, message }, code, message }`: the nested shape is the house style, the flat one is what `src/api/server.js` already reads, so both are sent. |
 | `rateLimit.js` | a per uid sliding window in `serverLimits/{uid}`, one array of millisecond timestamps per action, trimmed on write. 3 account deletions, 10 calendar connects and 20 syncs per ten minutes, answered 429 with a `Retry-After` header. A Firestore failure in the limiter never blocks the user. |
-| `limitWindow.js` | the pure deciding half of that limiter (`pruneStamps`, `decide`), unit tested |
 | `google.js` | the OAuth2 client from `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_REDIRECT_URI`; loading a stored refresh token, getting an authorised calendar client, persisting a rotated token, finding or creating the secondary calendar called "NurtureTrack", and revoking a grant |
 | `state.js` | the signed OAuth `state` value: `{ uid, nonce }` plus a five minute expiry, HMAC signed with `OAUTH_STATE_SECRET`. Pure, so it is unit tested. |
 | `calendarMap.js` | the mapping between a NurtureTrack event and a Google event in both directions, and the conflict rule. Pure, so it is unit tested. |
