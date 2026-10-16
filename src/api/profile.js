@@ -214,10 +214,23 @@ export async function regenerateInviteCode(user, householdId, oldCode = null) {
     throw error;
   }
   const inviteCode = await freshCode();
+  // Revoke the old code only when this person made it and it still exists. The rules let only
+  // the creator stamp revokedAt, and updating a missing document fails the whole batch, so a
+  // partner (or a household from before invites existed) would otherwise never get a new code.
+  let revokeOld = false;
+  if (oldCode && oldCode !== inviteCode) {
+    try {
+      const oldSnap = await getDoc(doc(db, "invites", oldCode));
+      const old = oldSnap.exists() ? oldSnap.data() : null;
+      revokeOld = Boolean(old && old.createdBy === user.uid && !old.revokedAt);
+    } catch {
+      revokeOld = false;
+    }
+  }
   const batch = writeBatch(db);
   batch.set(doc(db, "invites", inviteCode), inviteDoc(householdId, user.uid));
   batch.update(doc(db, "households", householdId), { inviteCode });
-  if (oldCode && oldCode !== inviteCode) {
+  if (revokeOld) {
     batch.update(doc(db, "invites", oldCode), { revokedAt: serverTimestamp() });
   }
   await batch.commit();

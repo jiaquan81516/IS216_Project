@@ -307,7 +307,10 @@ async function newCode() {
     inviteNote.value = "New code ready. The old one no longer works.";
   } catch (cause) {
     console.error("[app settings invite]", cause?.code, cause);
-    inviteNote.value = "We could not make a new code. Check your connection and try again.";
+    inviteNote.value =
+      cause?.code === "permission-denied"
+        ? "Your database rules do not allow new codes yet. Publish the latest firestore.rules in the Firebase console, then try again."
+        : "We could not make a new code. Check your connection and try again.";
   } finally {
     inviteBusy.value = false;
   }
