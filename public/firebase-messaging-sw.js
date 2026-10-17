@@ -4,7 +4,10 @@
 // the standard Web Push event, and nothing here needs to match the SDK version.
 //
 // If a NurtureTrack tab is visible, the page already shows its own pop up, so this hands the
-// message to that tab instead of showing a system notification as well.
+// message to that tab instead of showing a system notification as well. Only Chrome and Edge
+// allow that. Safari (iPhone, iPad, Mac) and Firefox expect every push to show a notification,
+// and Safari removes the subscription after a few pushes that show nothing, so on those
+// browsers a notification is always shown.
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
@@ -33,7 +36,9 @@ self.addEventListener("push", (event) => {
     (async () => {
       const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       const visible = windows.filter((client) => client.visibilityState === "visible");
-      if (visible.length) {
+      const ua = self.navigator?.userAgent || "";
+      const mayStaySilent = /(Chrome|Edg)\//.test(ua) && !/CriOS/.test(ua);
+      if (visible.length && mayStaySilent) {
         visible.forEach((client) => client.postMessage({ source: "nt-push", ...message }));
         return;
       }
