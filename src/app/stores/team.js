@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { clearFeeling, setFeeling, subscribeFeelings } from "@/api/team";
+import { notifyPartner } from "@/api/push";
 
 export const SHARE_KEY = "nt.app.share-feeling";
 export const NUDGES_KEY = "nt.app.nudges";
@@ -120,6 +121,8 @@ export const useTeamStore = defineStore("app-team", () => {
     writeError.value = "";
     try {
       await setFeeling(householdId.value, meUid.value, { level, date });
+      // A hard day also goes to the partner's phone. The server sends it once a day.
+      if (level === "hard") notifyPartner(householdId.value, "feeling", meUid.value);
       return true;
     } catch (cause) {
       console.error("[app team]", cause?.code, cause);

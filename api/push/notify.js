@@ -1,4 +1,4 @@
-// POST /api/push/notify   { householdId, type: "chat" | "task", id }
+// POST /api/push/notify   { householdId, type: "chat" | "task" | "feeling" | "heavy", id }
 //
 // Sends a web push to the caller's partner. The caller only says WHICH document is new. The
 // function reads that document itself, so it can check that the caller really wrote it, that
@@ -11,9 +11,9 @@ import { db, hasAdminConfig, messaging, notConfigured } from "../_lib/admin.js";
 import { requireUser } from "../_lib/auth.js";
 import { guardLimit } from "../_lib/rateLimit.js";
 import { allowMethod, fail, logLine, ok, readBody } from "../_lib/respond.js";
-import { buildPush, isDeadToken, isFresh, isQuietNow } from "../_lib/push.js";
+import { HEAVY_NIGHT_LOGS, buildPush, countNightLogs, isDeadToken, isFresh, isQuietNow, millisOf, nightKey, todayIso } from "../_lib/push.js";
 
-const TYPES = ["chat", "task"];
+const TYPES = ["chat", "task", "feeling", "heavy"];
 const idOk = (value) => typeof value === "string" && value.length > 0 && value.length <= 128 && !value.includes("/");
 
 export default async function handler(req, res) {
@@ -45,17 +45,39 @@ export default async function handler(req, res) {
     const partnerUid = memberIds.find((uid) => uid !== user.uid);
     if (!partnerUid) return ok(res, { sent: 0, skipped: "no-partner" });
 
-    const source = await db.collection("households").doc(householdId).collection(type === "chat" ? "chat" : "tasks").doc(id).get();
+    const household$ = db.collection("households").doc(householdId);
+    const collectionOf = { chat: "chat", task: "tasks", feeling: "feelings", heavy: "entries" };
+    const source = await household$.collection(collectionOf[type]).doc(id).get();
     const data = source.exists ? source.data() : null;
     if (!data) return fail(res, 404, "push/not-found", "That item is not there any more.");
 
+    // Some pushes are sent once per day or night. The marker is written after a send.
+    let markKey = "";
+    let nightCount = 0;
     if (type === "chat") {
       if (data.from !== user.uid) return fail(res, 403, "push/not-yours", "You can only announce your own messages.");
       if (!isFresh(data.createdAt)) return ok(res, { sent: 0, skipped: "old" });
-    } else {
+    } else if (type === "task") {
       if (data.owner !== partnerUid || data.done) return ok(res, { sent: 0, skipped: "not-for-partner" });
       if (!isFresh(data.updatedAt)) return ok(res, { sent: 0, skipped: "old" });
+    } else if (type === "feeling") {
+      if (id !== user.uid) return fail(res, 403, "push/not-yours", "You can only announce your own feeling.");
+      if (data.level !== "hard" || data.date !== todayIso()) return ok(res, { sent: 0, skipped: "not-hard-today" });
+      if (!isFresh(data.updatedAt)) return ok(res, { sent: 0, skipped: "old" });
+      markKey = data.date;
+    } else {
+      if (data.by !== user.uid) return fail(res, 403, "push/not-yours", "You can only announce your own logs.");
+      if (!isFresh(data.createdAt)) return ok(res, { sent: 0, skipped: "old" });
+      const recent = await household$.collection("entries").orderBy("at", "desc").limit(60).get();
+      nightCount = countNightLogs(
+        recent.docs.map((doc) => ({ by: doc.data()?.by, at: millisOf(doc.data()?.at) })),
+        user.uid,
+      );
+      if (nightCount < HEAVY_NIGHT_LOGS) return ok(res, { sent: 0, skipped: "not-heavy" });
+      markKey = nightKey();
     }
+    const markRef = markKey ? household$.collection("pushState").doc(`${type}-${user.uid}`) : null;
+    if (markRef && (await markRef.get()).data()?.key === markKey) return ok(res, { sent: 0, skipped: "already-sent" });
 
     const [partner, member, devices] = await Promise.all([
       db.collection("users").doc(partnerUid).get(),
@@ -77,6 +99,7 @@ export default async function handler(req, res) {
       kind: data.kind,
       title: data.title,
       due: data.due,
+      count: nightCount,
     });
     const result = await messaging.sendEachForMulticast({
       tokens: targets.map((item) => item.token),
@@ -92,6 +115,7 @@ export default async function handler(req, res) {
         return targets[index].ref.delete().catch(() => null);
       }),
     );
+    if (markRef && result.successCount > 0) await markRef.set({ key: markKey, sentAt: new Date() }).catch(() => null);
     logLine("push notify", { type, sent: result.successCount, failed: result.failureCount, dead });
     return ok(res, { sent: result.successCount, failed: result.failureCount });
   } catch (cause) {
