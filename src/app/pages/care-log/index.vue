@@ -6,6 +6,8 @@ import AppBadge from "@/components/ui/AppBadge.vue";
 import CareLogPanel from "@/app/components/CareLogPanel.vue";
 import Icon from "@/app/components/Icon.vue";
 import { addEntry, deleteEntry, loadOlder, markSeen, updateEntry } from "@/api/entries";
+import { notifyPartner } from "@/api/push";
+import { isNightHour } from "@/app/utils/loadHelpers";
 import {
   describeEntriesError,
   ENTRY_TYPES,
@@ -196,10 +198,13 @@ async function onSave(payload) {
         details: payload.details,
       });
     } else {
-      await addEntry({ uid: myUid.value }, householdId.value, {
+      const id = await addEntry({ uid: myUid.value }, householdId.value, {
         ...payload,
         byName: displayName(me.value.firstName),
       });
+      // A third night log tells the partner. The server counts the night and sends it once.
+      const when = new Date(payload.at);
+      if (!Number.isNaN(when.getTime()) && isNightHour(when.getHours())) notifyPartner(householdId.value, "heavy", id);
     }
     saving.value = false;
     await closePanel();

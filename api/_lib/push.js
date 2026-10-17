@@ -59,6 +59,35 @@ export function dueLabel(due, now = new Date()) {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" }).format(date);
 }
 
+// The overnight window matches the app: 8 PM to 6 AM in Singapore.
+export const NIGHT_START_HOUR = 20;
+export const NIGHT_END_HOUR = 6;
+export const HEAVY_NIGHT_LOGS = 3;
+
+export function isNightMinute(minute) {
+  return minute >= NIGHT_START_HOUR * 60 || minute < NIGHT_END_HOUR * 60;
+}
+
+// How many of one person's entries fall in the night, within the last 24 hours.
+// `entries` are plain { by, at } with `at` as milliseconds.
+export function countNightLogs(entries, uid, now = new Date()) {
+  const until = now.getTime();
+  const since = until - 24 * 60 * 60 * 1000;
+  let count = 0;
+  for (const entry of entries ?? []) {
+    if (!uid || entry?.by !== uid) continue;
+    const at = Number(entry.at);
+    if (!Number.isFinite(at) || at <= since || at > until) continue;
+    if (isNightMinute(minutesOfDay(new Date(at)))) count += 1;
+  }
+  return count;
+}
+
+// One key per night, so a rough night sends one push and not one per log.
+export function nightKey(now = new Date()) {
+  return todayIso(new Date(now.getTime() - NIGHT_END_HOUR * 60 * 60 * 1000));
+}
+
 const clip = (text, max) => {
   const clean = String(text ?? "").replace(/\s+/g, " ").trim();
   return clean.length > max ? `${clean.slice(0, max - 1).trimEnd()}...` : clean;
@@ -67,8 +96,26 @@ const clip = (text, max) => {
 // The notification. Chat text is never put in it, so nothing private shows on a lock screen.
 // A task shows its title, because the title is the point of the push. Every value is a string,
 // which is what FCM data messages require.
-export function buildPush({ type, senderName, kind = "text", title = "", due = null, now = new Date() }) {
+export function buildPush({ type, senderName, kind = "text", title = "", due = null, count = 0, now = new Date() }) {
   const name = firstName(senderName);
+  if (type === "feeling") {
+    return {
+      type: "feeling",
+      title: `${name} is having a hard day`,
+      body: "They chose to share this with you. A kind word helps.",
+      url: "/home?chat=1",
+      tag: "feeling",
+    };
+  }
+  if (type === "heavy") {
+    return {
+      type: "heavy",
+      title: `${name} has had a long night`,
+      body: `${count} logs overnight. A thank you can mean a lot.`,
+      url: "/home?chat=1",
+      tag: "heavy",
+    };
+  }
   if (type === "task") {
     const when = dueLabel(due, now);
     return {

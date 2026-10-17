@@ -64,7 +64,7 @@ const push = usePush(() => meUid.value);
 watch(meUid, (uid) => uid && push.refresh(), { immediate: true });
 usePushMessages((message) => {
   if (message.source === "nt-push-open") {
-    if (message.type === "chat") chat.openChat();
+    if (["chat", "feeling", "heavy"].includes(message.type)) chat.openChat();
     else if (message.url) router.push(message.url);
     return;
   }
