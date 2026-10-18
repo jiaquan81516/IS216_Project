@@ -17,6 +17,7 @@ import {
   getHouseholdBabies,
   getHouseholdInviteCode,
   joinHousehold,
+  getMember,
 } from "@/api/profile";
 import "@/app/app.css";
 import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
@@ -83,11 +84,15 @@ onMounted(async () => {
   try {
     const profile = await loadProfile();
     if (profile?.householdId) {
-      let existing = null;
-      try {
-        existing = await getHouseholdInviteCode(profile.householdId);
-      } catch {
-        existing = null;
+      const membership = await getMember(profile.householdId, currentUser.value?.uid);
+      if (membership) {
+        let existing = null;
+        try {
+          existing = await getHouseholdInviteCode(profile.householdId);
+        } catch {
+          existing = null;
+        }
+        result.value = { kind: "created", inviteCode: existing };
       }
       result.value = { kind: "created", inviteCode: existing };
       householdId.value = profile.householdId;

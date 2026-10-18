@@ -16,6 +16,7 @@ const router = createRouter({
     { path: ROUTES.ACCOUNT, name: "account", component: appPage("account"), meta: { public: true } },
     { path: ROUTES.SIGN_IN, name: "sign-in", component: appPage("sign-in"), meta: { public: true } },
     { path: ROUTES.HOUSEHOLD, name: "household", component: appPage("household"), meta: { requiresAuth: true } },
+    { path: ROUTES.CARE_BRIEF, name: "care-brief", component: appPage("care-brief"), meta: { requiresAuth: true } },
 
     // Invitation links remain valid and open the current household flow.
     {

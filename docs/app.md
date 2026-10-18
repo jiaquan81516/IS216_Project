@@ -215,7 +215,15 @@ separated by a 1px line:
 - Privacy: "Show my partner when I was last active" (`privacy.shareLastSeen`).
 - Partner: the partner's name and role when somebody has joined, otherwise the invitation
   code with Copy, how long it lasts ("Expires in 6 days") and an outline "Generate a new code".
-- Household: baby name, status and date, saved to `households/{hid}` by any member on the same
+- Caregivers: create multiple one-use invite links for a grandparent, domestic helper,
+  babysitter, childcare provider or another trusted caregiver. Each role starts with a suggested
+  permission set; parents can customize it later or remove a caregiver. The separate
+  `/care-brief` route shows only shared routine and health information, the last feed/diaper
+  change when care-log read is allowed, and appointments when enabled. Feeding and health notes
+  live in separate `careBrief` documents so Firestore can gate each category independently.
+  Invite links carry their code through account creation; the invite supplies the caregiver's
+  membership role and permissions when they join.
+- Household: baby name, status and date, saved to `households/{hid}` by a primary parent on the same
   600 ms debounce, then "Leave household" behind a typed LEAVE.
 - Danger zone: "Delete my account" behind a typed DELETE.
 

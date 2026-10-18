@@ -10,7 +10,6 @@ import {
   getDocs,
   serverTimestamp,
   setDoc,
-  updateDoc,
   writeBatch,
 } from "firebase/firestore";
 import { auth } from "@/api/firebase";
@@ -83,11 +82,14 @@ export const BABY_NAME_MAX = 40;
 // one parent.
 export function saveHouseholdBaby(householdId, { babyName, babyStatus, babyDate }) {
   const name = String(babyName ?? "").trim().slice(0, BABY_NAME_MAX);
-  return updateDoc(doc(db, "households", householdId), {
+  const batch = writeBatch(db);
+  batch.update(doc(db, "households", householdId), {
     babyName: name || null,
     babyStatus: babyStatus === "expected" ? "expected" : "born",
     babyDate: /^\d{4}-\d{2}-\d{2}$/.test(String(babyDate ?? "")) ? babyDate : null,
   });
+  batch.set(doc(db, "households", householdId, "careBrief", "child"), { babyName: name }, { merge: true });
+  return batch.commit();
 }
 
 // Leaving removes you from the household and clears your own pointer to it. Everything you
