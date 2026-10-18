@@ -10,6 +10,7 @@ users/{uid}
   checkins/{yyyy-mm-dd}          PRIVATE
 households/{householdId}
   members/{uid}
+  careBrief/{feeding|routine|contacts|child|allergies|medications}
   entries/{entryId}
   rota/settings
   nights/{yyyy-mm-dd}
@@ -74,11 +75,23 @@ Settings
 - createdAt (timestamp)
 
 ### households/{id}/members/{uid}
-- displayName, photoURL, role, joinedAt
+- displayName, photoURL, role, accessLevel (`parent` | `caregiver`), permissions (caregiver access map), joinedAt
 - Copied from the user profile when they join and when they edit it, so the partner can see a name and photo without reading the private user document.
 - App: the Profile page writes `users/{uid}` and this document in one batch (`saveProfile` in
   `src/api/account.js`), so the two copies of the name and role can never disagree. Only
-  the member themselves may write or delete their own member document.
+  the member themselves may change their profile fields. Primary parents manage caregiver
+  roles and permissions; caregivers cannot grant themselves access.
+
+### households/{id}/careBrief/{feeding|routine|contacts|child|allergies|medications}
+- `feeding`: the feeding method; `routine`: napRoutine; `contacts`: parentContacts; `child`:
+  babyName (at most 80 characters); `allergies`: allergy information; `medications`: medication
+  instructions. Every field except babyName is at most 500 characters.
+- Only parents can write these documents. Rules independently gate each document with
+  `feedingInstructions`, `napRoutine`, `careBrief`, `allergyInfo` and `medicationInfo`.
+- Caregiver permission keys: `careBrief`, `careLogRead`, `careLogAdd`, `careLogEdit`,
+  `careLogMedication`, `feedingInstructions`, `napRoutine`, `allergyInfo`, `medicationInfo`
+  and `appointments`. Parent membership has
+  `accessLevel: parent` and full access.
 
 ### households/{id}/entries/{entryId}  (the care log)
 - type: feed | sleep | nappy | medication | note
@@ -184,6 +197,8 @@ Settings
 - Helpers: `inviteState`, `describeInviteState`, `expiresInText` in
   `src/app/utils/inviteHelpers.js`. Writes: `createHousehold`, `joinHousehold`,
   `regenerateInviteCode` in `src/api/profile.js`.
+- Caregiver invite docs also contain `kind: caregiver`, `caregiverName`, `caregiverRole` and
+  the selected `permissions`. They are one use and expire after seven days.
 
 ## 4. Pumping rooms (global, shared by all households)
 
@@ -216,33 +231,37 @@ room for everyone. While the collection is empty the Support page shows the two 
 ## 5. Security rules (outline)
 
 - users/{uid} and all subcollections: read, write only if request.auth.uid == uid.
-- households/{id} and subcollections: read, write only if request.auth.uid in resource.data.memberIds.
-- Joining: a user can add themselves to memberIds only with a valid, unexpired inviteCode, checked by a Cloud Function.
+- households/{id}: only primary parents can read the household document. Caregivers read shared child details from the permission-gated care brief. Primary parents edit household details and manage membership.
+- Members: primary parents read all members and control caregiver roles/permissions. A member may only change their own profile fields; a caregiver cannot grant themselves permissions.
+- Care log: a caregiver needs `careLogRead` to read, `careLogAdd` to create and `careLogEdit` to edit their own records. Medication records additionally require `careLogMedication`.
+- Care brief: parents write each section. Feeding, nap routine, contacts, allergy details and medication instructions each have separate read permissions.
+- Appointments need `appointments`; rota and nights are parent-only. Handovers, chat, posts and household tasks are parent-only. Feelings remain controlled by the existing parent sharing choice.
+- Joining: the household membership update must include the caller and match their own member document to a valid, unexpired, unrevoked invite.
 - pumpingRooms: read for any signed in user. Create needs `createdBy == uid` and a name and an
   address, both within their length caps, and `createdAt == request.time`. Update may touch
   only `status` and `verifiedAt`, and only to the two allowed statuses. Reports are create only,
   with `by == uid` and `at == request.time`. No deletes anywhere.
-- invites: read for any signed in user, because a joiner has to read the code. Create needs
-  `createdBy == uid` with `usedAt` and `usedBy` null. Update is one of two things only:
+- invites: read for any signed in user, because a joiner has to read the code. Create requires
+  a primary parent (or the creator in the household setup batch), `createdBy == uid`, and
+  `usedAt` and `usedBy` null. Update is one of two things only:
   marking it used, which touches `usedAt` and `usedBy` alone, only once, with `usedBy` equal to
-  the caller; or revoking it, which touches `revokedAt` alone and only for the creator. No
+  the caller and is tied to the member joining; or revoking it, which touches `revokedAt` alone
+  and only for a parent in that household. No
   deletes, so the history of codes is kept.
-- households/{id} update: three cases. Joining adds exactly the caller to `memberIds`. Leaving
-  removes exactly the caller from `memberIds`. Editing lets any member change `babyName`,
-  `babyStatus`, `babyDate` and `inviteCode`, with the baby name capped at 80.
-- members/{uid}: read by any member; only the member themselves may create, update or delete
-  their own document, with `displayName` capped at 80.
-- Entries: only the author can edit or delete their entry. seenBy can be written by any member for their own uid only.
-- rota/{doc} and rtw/plan: members read; members create and update when `updatedBy` is their
-  own uid. No deletes.
-- nights: members read; members create and update when `setBy` is their own uid; members
-  delete (clearing a night is how you go back to the pattern).
-- swaps: members read; `from` must be the caller on create and the status must be pending;
+- households/{id} update: joining is tied to a matching valid invite and member doc. A member
+  may leave; a parent may remove a caregiver. Only parents edit baby details and invitation code.
+- Entries: caregiver writes are permission-gated. A caregiver may edit their own entry only
+  with edit access; seenBy can be written by a reader for their own uid only.
+- rota and nights: parent access only. Nap routine notes use the separate `napRoutine` permission.
+- events: caregivers may read with `appointments`; only parents change them.
+- swaps, chat, posts and return-to-work plans: parent access only.
+- feelings: reads and writes remain limited to primary parents and each parent's existing share choice.
+- swaps: parents only; `from` must be the caller on create and the status must be pending;
   only `to` may accept or decline; only `from` may cancel; no deletes, so the history stays.
 - posts: members read; create in your own name with 1 to 500 characters, `createdAt ==
   request.time` and `ackedBy` empty; only a member who is not the author may update, and only
   to add their own uid to `ackedBy` and set `ackedAt`; only the author may delete.
-- events and tasks: members read; `createdBy` must be the caller on create and may not
+- events: caregivers with appointment access read; `createdBy` must be a parent on create and may not
   change; either parent may update or delete, because these are shared plans rather than
   personal records. That is a deliberate choice: a shared calendar where only the author can
   remove an event is worse at 3 AM than one either parent can tidy.

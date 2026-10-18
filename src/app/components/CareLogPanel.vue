@@ -13,6 +13,7 @@ const props = defineProps({
   initialType: { type: String, default: "feed" },
   saving: { type: Boolean, default: false },
   error: { type: String, default: "" },
+  allowedTypes: { type: Array, default: null },
 });
 const emit = defineEmits(["close", "save"]);
 
@@ -24,7 +25,9 @@ const titleId = `clp-title-${Math.random().toString(36).slice(2, 8)}`;
 const dialog = ref(null);
 let opener = null;
 
-const typeOptions = Object.entries(ENTRY_TYPES).map(([value, t]) => ({ value, label: t.label }));
+const typeOptions = computed(() => Object.entries(ENTRY_TYPES)
+  .filter(([value]) => !props.allowedTypes || props.allowedTypes.includes(value))
+  .map(([value, t]) => ({ value, label: t.label })));
 const methodOptions = [
   { value: "breast", label: "Breast" },
   { value: "bottle", label: "Bottle" },

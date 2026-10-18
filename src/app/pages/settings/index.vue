@@ -6,6 +6,7 @@ import AppButton from "@/components/ui/AppButton.vue";
 import ChipGroup from "@/app/components/ChipGroup.vue";
 import ConfirmDanger from "@/app/components/ConfirmDanger.vue";
 import GoogleCalendarClientCard from "@/app/components/GoogleCalendarClientCard.vue";
+import CaregiverAccessPanel from "@/app/components/CaregiverAccessPanel.vue";
 import Toggle from "@/app/components/Toggle.vue";
 import { isClientModeAvailable } from "@/api/googleCalendarClient";
 import {
@@ -52,6 +53,7 @@ const NAV = [
   { id: "st-display", label: "Display" },
   { id: "st-privacy", label: "Privacy" },
   { id: "st-partner-h", label: "Partner" },
+  { id: "st-caregivers", label: "Caregivers" },
   { id: "st-house", label: "Household" },
   { id: "st-danger", label: "Danger zone" },
 ];
@@ -809,6 +811,12 @@ async function confirmDelete() {
             </div>
           </form>
         </template>
+      </section>
+
+      <!-- Household -->
+      <section class="st__card" aria-labelledby="st-caregivers">
+        <h2 id="st-caregivers" class="st__h">Caregivers</h2>
+        <CaregiverAccessPanel :household-id="householdId || ''" :uid="me?.uid || ''" />
       </section>
 
       <!-- Household -->
