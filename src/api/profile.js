@@ -265,3 +265,39 @@ export async function getHouseholdMembers(householdId) {
     .sort((a, b) => joined(a.data) - joined(b.data))
     .map(({ data, uid }) => ({ uid, displayName: data.displayName ?? "", role: data.role ?? null }));
 }
+
+export async function addBaby(householdId, baby = {}) {
+  if (!householdId) {
+    const error = new Error("You need a household before you can add a baby.");
+    error.code = "baby/no-household";
+    throw error;
+  }
+  const clean = cleanBaby(baby);
+  const babyId = crypto.randomUUID();
+  await setDoc(doc(db, "households", householdId, "babies", babyId), {
+    ...clean,
+    createdAt: serverTimestamp(),
+  });
+  return { babyId };
+}
+
+export async function getHouseholdBabies(householdId) {
+  if (!householdId) return [];
+  const household = await getHousehold(householdId);
+  if (!household) return [];
+  const primary = {
+    id: "primary",
+    ...cleanBaby({
+      babyName: household.babyName,
+      babyStatus: household.babyStatus,
+      babyDate: household.babyDate,
+    }),
+  };
+  const snap = await getDocs(collection(db, "households", householdId, "babies"));
+  const created = (data) => data.createdAt?.toMillis?.() ?? 0;
+  const extra = snap.docs
+    .map((d) => ({ id: d.id, ...cleanBaby(d.data()), createdAt: created(d.data()) }))
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map(({ createdAt, ...rest }) => rest);
+  return [primary, ...extra];
+}
