@@ -9,7 +9,14 @@ import AppLink from "@/components/ui/AppLink.vue";
 import { SAMPLE } from "@/shared/constants/appConstants";
 import { ROUTES } from "@/app/routes";
 import { useAuth } from "@/app/composables/useAuth";
-import { createHousehold, getHouseholdInviteCode, joinHousehold } from "@/api/profile";
+import {
+  addBaby,
+  babySummary,
+  createHousehold,
+  getHouseholdBabies,
+  getHouseholdInviteCode,
+  joinHousehold,
+} from "@/api/profile";
 import "@/app/app.css";
 
 defineOptions({ name: "HouseholdPage" });
@@ -40,6 +47,44 @@ const dateMax = computed(() => (babyStatus.value === "born" ? todayIso : undefin
 const dateMin = computed(() => (babyStatus.value === "expected" ? todayIso : undefined));
 let copiedTimer = null;
 
+const householdId = ref("");
+const babies = ref([]);
+const showAddBaby = ref(false);
+const addingBaby = ref(false);
+const babyError = ref("");
+const babyAdded = ref("");
+
+async function loadBabies() {
+  try {
+    babies.value = await getHouseholdBabies(householdId.value);
+  } catch {
+    babies.value = [];
+  }
+}
+
+async function submitNewBaby() {
+  if (addingBaby.value) return;
+  babyError.value = "";
+  addingBaby.value = true;
+  try {
+    await addBaby(householdId.value, {
+      babyName: babyName.value,
+      babyStatus: babyStatus.value,
+      babyDate: babyDate.value,
+    });
+    babyAdded.value = babyName.value.trim() || "Your baby";
+    babyName.value = "";
+    babyDate.value = "";
+    babyStatus.value = "born";
+    showAddBaby.value = false;
+    await loadBabies();
+  } catch {
+    babyError.value = "Could not add the baby. Please try again.";
+  } finally {
+    addingBaby.value = false;
+  }
+}
+
 const ready = computed(() => result.value !== null);
 const joined = computed(() => result.value?.kind === "joined");
 const inviteCode = computed(() => result.value?.inviteCode ?? null);
@@ -69,6 +114,8 @@ onMounted(async () => {
         existing = null;
       }
       result.value = { kind: "created", inviteCode: existing };
+      householdId.value = profile.householdId;
+      await loadBabies();
     }
   } catch {
     // If the profile cannot be read, fall back to the choice screen.
@@ -125,10 +172,13 @@ async function submit() {
         babyDate: babyDate.value,
       });
       result.value = { kind: "created", inviteCode: created.inviteCode };
+      householdId.value = created.householdId;
     } else {
-      await joinHousehold(user, code.value);
+      const joinedHousehold = await joinHousehold(user, code.value);
       result.value = { kind: "joined", inviteCode: null };
+      householdId.value = joinedHousehold.householdId;
     }
+    await loadBabies();
     if (authProfile.value) authProfile.value = { ...authProfile.value, onboarded: true };
   } catch (cause) {
     // Invite errors already carry a sentence for the user (see inviteHelpers.js).
@@ -244,6 +294,74 @@ async function copyCode() {
         </template>
 
         <template v-else>
+                    <div v-if="babies.length" class="hh__babies">
+            <h3 class="hh__babies-title">Your babies</h3>
+            <ul class="hh__babies-list">
+              <li v-for="(baby, i) in babies" :key="baby.id">
+                <strong>{{ baby.babyName || `Baby ${i + 1}` }}</strong>
+                <span v-if="babySummary(baby).line"> · {{ babySummary(baby).line }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <p v-if="babyAdded" class="app-text-link" role="status">{{ babyAdded }} was added.</p>
+
+          <button
+            v-if="!showAddBaby"
+            type="button"
+            class="app-btn app-btn--outline"
+            @click="showAddBaby = true"
+          >
+            Add another baby
+          </button>
+
+          <form v-else class="app-stack app-stack--24 w-100" novalidate @submit.prevent="submitNewBaby">
+            <Field
+              id="app-add-baby-name"
+              v-model="babyName"
+              label="Baby's name (optional)"
+              autocomplete="off"
+              :disabled="addingBaby"
+            />
+            <div class="hh__status" role="radiogroup" aria-label="Baby status" @keydown="onStatusKeydown">
+              <button
+                v-for="opt in [{ value: 'born', label: 'Baby is here' }, { value: 'expected', label: 'Baby is on the way' }]"
+                :key="opt.value"
+                type="button"
+                role="radio"
+                class="hh__seg"
+                :class="{ 'hh__seg--on': babyStatus === opt.value }"
+                :data-status="opt.value"
+                :aria-checked="babyStatus === opt.value"
+                :tabindex="babyStatus === opt.value ? 0 : -1"
+                :disabled="addingBaby"
+                @click="babyStatus = opt.value"
+              >
+                {{ opt.label }}
+              </button>
+            </div>
+            <div class="app-field">
+              <label class="app-field__label" for="app-add-baby-date">{{ dateLabel }} (optional)</label>
+              <input
+                id="app-add-baby-date"
+                v-model="babyDate"
+                class="app-input"
+                type="date"
+                :min="dateMin"
+                :max="dateMax"
+                :disabled="addingBaby"
+              />
+            </div>
+            <div v-if="babyError" class="alert alert-danger app-alert" role="alert">{{ babyError }}</div>
+            <div class="hh__actions">
+              <button type="submit" class="app-btn app-btn--primary" :disabled="addingBaby">
+                {{ addingBaby ? "Saving..." : "Save baby" }}
+              </button>
+              <button type="button" class="app-btn app-btn--outline" :disabled="addingBaby" @click="showAddBaby = false">
+                Cancel
+              </button>
+            </div>
+          </form>
           <div v-if="!joined && inviteCode" class="hh__code" aria-label="Invitation code">
             <p class="hh__code-text">{{ inviteCode }}</p>
           </div>
@@ -300,6 +418,9 @@ async function copyCode() {
 .hh__private { display: flex; flex-direction: column; gap: 6px; padding: 16px 16px 18px; background: var(--nt-butter); border: 1.5px dashed var(--nt-butter-d); border-radius: 8px; font-size: 0.875rem; }
 .hh__private-label { margin: 0; font-weight: 600; color: var(--nt-butter-d); }
 .hh__private-text { margin: 0; line-height: 21px; color: var(--nt-ink); }
+.hh__babies { width: 100%; padding: 16px; background: var(--nt-gray); border-radius: 8px; }
+.hh__babies-title { margin: 0 0 8px; font-size: 1rem; font-weight: 600; color: var(--nt-ink); }
+.hh__babies-list { margin: 0; padding-left: 20px; font-size: 0.875rem; line-height: 24px; color: var(--nt-ink); }
 
 @media (max-width: 1099px) {
   .hh { grid-template-columns: minmax(0, 1fr); gap: 32px; }
