@@ -1,6 +1,6 @@
 # NurtureTrack data model (Firestore)
 
-Cloud Firestore, document and collection based. Shared data lives under one household. Personal data lives under the user. Check-ins are private and locked to one user.
+Cloud Firestore, document and collection based. A parent account normally belongs to one household; a caregiver account can belong to multiple households. Personal data lives under the user. Check-ins are private and locked to one user.
 
 ## 1. Overview
 
@@ -30,7 +30,9 @@ Profile
 - displayName (string): defaults from Google, editable
 - email, photoURL (string): from Google, read only in the app
 - role (string): mum | dad | carer
-- householdId (string or null): null until they create or join one
+- householdId (string or null): the active household, null when none is selected
+- householdIds (array of strings): the households the user belongs to; caregiver accounts may have several
+- householdLabels (map from household id to an account-private label, used in caregiver household switching; for example, "Lee Family")
 - onboarded (boolean): replaces the localStorage flag, so a new phone does not repeat setup
 - confidence (number 1 to 5): from the onboarding scale, private
 - createdAt, lastSeenAt (timestamp)
@@ -237,6 +239,7 @@ room for everyone. While the collection is empty the Support page shows the two 
 - Care brief: parents write each section. Feeding, nap routine, contacts, allergy details and medication instructions each have separate read permissions.
 - Appointments need `appointments`; rota and nights are parent-only. Handovers, chat, posts and household tasks are parent-only. Feelings remain controlled by the existing parent sharing choice.
 - Joining: the household membership update must include the caller and match their own member document to a valid, unexpired, unrevoked invite.
+- Caregiver household selection: `users/{uid}.householdId` is the active household, while `householdIds` tracks all caregiver memberships. Caregivers can join another caregiver invite, switch the active household, or leave one membership without affecting the others.
 - pumpingRooms: read for any signed in user. Create needs `createdBy == uid` and a name and an
   address, both within their length caps, and `createdAt == request.time`. Update may touch
   only `status` and `verifiedAt`, and only to the two allowed statuses. Reports are create only,

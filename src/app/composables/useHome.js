@@ -63,7 +63,9 @@ export function useHome() {
     } catch (cause) {
       if (id !== run) return;
       console.error("[app home]", cause);
-      error.value = "We could not load your household. Check your connection and try again.";
+      error.value = cause?.code === "permission-denied"
+        ? "Your account does not have permission to view this household. Parent accounts need household access; caregivers should use the Care Brief."
+        : "We could not load your household. Check your connection and try again.";
     } finally {
       if (id === run) loading.value = false;
     }
