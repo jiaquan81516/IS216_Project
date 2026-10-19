@@ -1,13 +1,12 @@
 // Pure helpers for the Home stream. No Vue, Pinia or Firebase imports.
 //
 // The stream is one newest-first list that merges four sources: plain messages (posts),
-// care log entries, handovers and tasks. Every source is turned into the same item shape so
+// care log entries and tasks. Every source is turned into the same item shape so
 // the page can draw them with one template.
 //
 //   { id, rawId, kind, at, authorUid, authorName, isMine, text, kindLabel, meta,
 //     needsAck, acked, ackedBy, ackedByNames, pending, done }
 import { toDate } from "./entryHelpers";
-import { summaryLine } from "./handoverHelpers";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -179,34 +178,6 @@ function careItem(entry, { uid, names }) {
   return base({ id: entry.id, kind: "care", at, authorUid: entry.by, uid, names, text: careLine(entry), kindLabel: "Care" });
 }
 
-function handoverItem(handover, { uid, names }) {
-  const at = toDate(handover?.sentAt);
-  if (!handover || !at) return null;
-  const accepted = Boolean(toDate(handover.acceptedAt));
-  const item = base({
-    id: handover.id,
-    kind: "handover",
-    at,
-    authorUid: handover.from,
-    uid,
-    names,
-    text: String(handover.note ?? "").trim() || "Handover sent",
-    kindLabel: "Handover",
-    meta: {
-      to: handover.to ?? "",
-      counts: summaryLine(handover.summary),
-      needsAttention: Boolean(handover.needsAttention),
-      attentionNote: String(handover.attentionNote ?? "").trim(),
-    },
-  });
-  const ackedBy = accepted ? ackList(handover.acceptedBy ? [handover.acceptedBy] : [handover.to]) : [];
-  item.ackedBy = ackedBy;
-  item.ackedByNames = ackedBy.map((u) => (u === uid ? "you" : names.get(u) || "your partner"));
-  item.needsAck = Boolean(uid) && handover.to === uid;
-  item.acked = accepted;
-  return item;
-}
-
 function taskItem(task, { uid, names, now }) {
   if (!task || typeof task.title !== "string" || !task.title.trim()) return null;
   const done = Boolean(task.done);
@@ -254,7 +225,7 @@ function compare(a, b) {
   return a.id < b.id ? 1 : -1;
 }
 
-export function buildStream({ posts = [], entries = [], handovers = [], tasks = [], uid = "", members = [], now = new Date() } = {}) {
+export function buildStream({ posts = [], entries = [], tasks = [], uid = "", members = [], now = new Date() } = {}) {
   const names = nameMap(members);
   const context = { uid, names, now };
   const items = [];
@@ -266,7 +237,6 @@ export function buildStream({ posts = [], entries = [], handovers = [], tasks = 
   };
   push(posts, messageItem);
   push(entries, careItem);
-  push(handovers, handoverItem);
   push(tasks, taskItem);
   return items.sort(compare);
 }
@@ -297,11 +267,11 @@ export function groupByDay(items, now = new Date()) {
   return groups;
 }
 
-// Posts and handovers from your partner that you have not acknowledged yet.
+// Posts from your partner that you have not acknowledged yet.
 export function unreadCount(items, uid) {
   if (!uid) return 0;
   return (items ?? []).filter(
-    (item) => (item.kind === "message" || item.kind === "handover") && item.needsAck && !item.acked && item.authorUid !== uid,
+    (item) => item.kind === "message" && item.needsAck && !item.acked && item.authorUid !== uid,
   ).length;
 }
 

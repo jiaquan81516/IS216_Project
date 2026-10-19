@@ -1,8 +1,7 @@
 // Pure helpers for the App checklist. No Vue, Pinia, Firebase or storage imports.
 //
-// The checklist is the shared task list: { id, title, group, due, owner, queued, done, doneAt,
-// doneBy, notes }. `owner` is a uid or "both"; `queued` means the owner has marked the task to
-// pass on at the next handover. The same tasks also show on the Return to work plan.
+// The checklist is the shared task list: { id, title, group, due, owner, done, doneAt,
+// doneBy, notes }. `owner` is a uid or "both". The same tasks also show on the Return to work plan.
 import { addDays, isIsoDate, toIso } from "./rotaHelpers";
 import { dueText } from "./rtwHelpers";
 import { ownerKey } from "./sharedHelpers";
@@ -64,16 +63,6 @@ export function checklistView(tasks, { meUid = "", tab = "all", today = new Date
 // "Due today", "Due tomorrow", "Due in 3 days" or "Overdue by 2 days"; empty with no date.
 export function dueLabel(task, today = new Date()) {
   return dueText(task?.due, today);
-}
-
-// My open tasks, the ones I can pass on. Shared tasks stay shared, so they are left out.
-export function myOpenTasks(tasks, meUid) {
-  return (tasks ?? []).filter((task) => !task.done && taskOwner(task, meUid) === "me").sort(byDueThenTitle);
-}
-
-// The ones I have marked to pass on at the next handover.
-export function queuedTasks(tasks, meUid) {
-  return myOpenTasks(tasks, meUid).filter((task) => task.queued);
 }
 
 // One short line of what the owner column shows: a first initial and a name.

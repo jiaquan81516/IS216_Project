@@ -10,8 +10,8 @@
 // promise on the Settings page is that shared data stays only so the partner keeps it. With no
 // partner there is nothing to keep. No 409 is ever returned, so the client needs no new case.
 //
-// Anonymising. The user's name is removed, never the row: entries, events, tasks and
-// handovers keep their uid, which is what the rules and the seen markers work off, and gain
+// Anonymising. The user's name is removed, never the row: entries, events and tasks
+// keep their uid, which is what the rules and the seen markers work off, and gain
 // byName "A parent" so no screen has to guess. The member document is gone by then, so the UI
 // would fall back to "A parent" anyway; writing it down means the history cannot drift.
 //
@@ -83,7 +83,6 @@ export default async function handler(req, res) {
       for (const name of ["events", "tasks"]) {
         summary.anonymisedShared += await anonymise(household.collection(name).where("createdBy", "==", uid));
       }
-      summary.anonymisedShared += await anonymise(household.collection("handovers").where("from", "==", uid));
 
       // 5. Out of the household.
       const snap = await household.get();

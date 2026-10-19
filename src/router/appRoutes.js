@@ -33,7 +33,6 @@ const router = createRouter({
         { path: "home", name: "home", component: appPage("home") },
         { path: "care-log", name: "care-log", component: appPage("care-log") },
         { path: "checklist", name: "checklist", component: appPage("checklist") },
-        { path: "handover", name: "handover", component: appPage("handover") },
         { path: "rota", name: "rota", component: appPage("rota") },
         { path: "wellness", name: "wellness", component: appPage("wellness") },
         { path: "support", name: "support", component: appPage("support") },
