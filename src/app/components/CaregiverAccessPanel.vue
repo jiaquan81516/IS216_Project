@@ -22,12 +22,23 @@ const loading = ref(true);
 const busy = ref(false);
 const error = ref("");
 const status = ref("");
+const briefStatus = ref("");
+const briefError = ref("");
 const members = ref([]);
 const invites = ref([]);
 const form = ref({ name: "", role: "grandparent", permissions: caregiverPermissions("grandparent") });
 const brief = ref({ feeding: "", napRoutine: "", allergies: "", medications: "", parentContacts: "" });
 const copiedCode = ref("");
+const lastCreatedInvite = ref(null);
 const caregiverMembers = computed(() => members.value.filter((member) => member.accessLevel !== "parent"));
+const pendingInvites = computed(() => {
+  if (!lastCreatedInvite.value || invites.value.some((invite) => invite.code === lastCreatedInvite.value.code)) return invites.value;
+  return [...invites.value, {
+    code: lastCreatedInvite.value.code,
+    caregiverName: lastCreatedInvite.value.name,
+    caregiverRole: lastCreatedInvite.value.role,
+  }];
+});
 
 function setRole(role) {
   form.value.role = role;
@@ -51,7 +62,9 @@ async function refresh() {
       getHousehold(props.householdId),
     ]);
     const childName = await syncCareBriefChildName(props.householdId, household?.babyName);
-    const careBrief = await getCareBrief(props.householdId);
+    if (lastCreatedInvite.value && loadedInvites.some((invite) => invite.code === lastCreatedInvite.value.code)) {
+      lastCreatedInvite.value = null;
+    }
     members.value = loadedMembers.filter((member) => member.accessLevel !== "parent").map((member) => ({
       ...member,
       role: CAREGIVER_ROLES.some((role) => role.value === member.role) ? member.role : "trusted-caregiver",
@@ -60,7 +73,7 @@ async function refresh() {
       saving: false,
     }));
     invites.value = loadedInvites.filter((invite) => inviteState(invite) === "valid");
-    brief.value = { feeding: "", napRoutine: "", allergies: "", medications: "", parentContacts: "", ...careBrief, babyName: childName };
+    brief.value = { feeding: "", napRoutine: "", allergies: "", medications: "", parentContacts: "", babyName: childName };
   } catch (cause) {
     console.error("[app caregivers]", cause?.code, cause);
     error.value = cause?.code === "permission-denied"
@@ -78,6 +91,7 @@ async function addCaregiver() {
   status.value = "";
   try {
     const created = await createCaregiverInvite(props.uid, props.householdId, form.value);
+    lastCreatedInvite.value = created;
     status.value = `Invite ready for ${created.name || CAREGIVER_ROLES.find((role) => role.value === created.role)?.label}. Share the link or code with them.`;
     form.value = { name: "", role: "grandparent", permissions: caregiverPermissions("grandparent") };
     await refresh();
@@ -138,6 +152,7 @@ async function revokeInvite(code) {
   try {
     await revokeCaregiverInvite(code);
     invites.value = invites.value.filter((invite) => invite.code !== code);
+    if (lastCreatedInvite.value?.code === code) lastCreatedInvite.value = null;
     status.value = "Invitation cancelled.";
   } catch (cause) {
     console.error("[app caregiver revoke]", cause?.code, cause);
@@ -146,16 +161,31 @@ async function revokeInvite(code) {
 }
 
 async function saveBrief() {
+  if (busy.value) return;
   busy.value = true;
-  error.value = "";
+  briefError.value = "";
+  briefStatus.value = "Saving care brief…";
   try {
-    brief.value = await saveCareBrief(props.householdId, brief.value);
-    status.value = "Care brief saved.";
+    const savedBrief = await saveCareBrief(props.householdId, brief.value);
+    const confirmedBrief = await getCareBrief(props.householdId);
+    const fields = ["feeding", "napRoutine", "allergies", "medications", "parentContacts"];
+    const verified = fields.every((field) => (confirmedBrief[field] ?? "") === (savedBrief[field] ?? ""));
+    if (!verified) throw new Error("The saved care brief could not be read back from this household.");
+    brief.value = {
+      ...brief.value,
+      feeding: "",
+      napRoutine: "",
+      allergies: "",
+      medications: "",
+      parentContacts: "",
+    };
+    briefStatus.value = "Care brief saved successfully.";
   } catch (cause) {
     console.error("[app caregiver brief]", cause?.code, cause);
-    error.value = cause?.code === "permission-denied"
-      ? "Saving the care brief is not enabled in the shared database yet. Ask your app administrator for help."
-      : "We could not save the care brief. Try again.";
+    briefStatus.value = "";
+    briefError.value = cause?.code === "permission-denied"
+      ? "Firebase denied this save (permission-denied). The deployed Firestore rules may not include the care brief permissions yet."
+      : `Could not save the care brief${cause?.code ? ` (${cause.code})` : ""}. Check your connection and try again.`;
   } finally {
     busy.value = false;
   }
@@ -179,15 +209,16 @@ onMounted(refresh);
         <label class="cg__field"><span>Caregiver role</span><select :value="form.role" class="app-control" @change="setRole($event.target.value)"><option v-for="role in CAREGIVER_ROLES" :key="role.value" :value="role.value">{{ role.label }}</option></select></label>
         <fieldset class="cg__permissions"><legend>Can access</legend><Toggle v-for="permission in CAREGIVER_PERMISSIONS" :id="`cg-new-${permission.key}`" :key="permission.key" :label="permission.label" :model-value="form.permissions[permission.key]" @update:model-value="setPermission(form, permission.key, $event)" /></fieldset>
         <AppButton type="submit" variant="outline" :disabled="busy">{{ busy ? "Creating invite…" : "Create caregiver invite" }}</AppButton>
+        <div v-if="pendingInvites.length" class="cg__pending">
+          <h4>Pending caregiver invites</h4>
+          <article v-for="invite in pendingInvites" :key="invite.code" class="cg__invite-ready">
+            <strong>{{ invite.caregiverName || CAREGIVER_ROLES.find((role) => role.value === invite.caregiverRole)?.label || "Caregiver" }}</strong>
+            <div class="cg__invite-details"><span>Invite code</span><code>{{ invite.code }}</code><span v-if="invite.expiresAt" class="cg__muted">{{ expiresInText(invite.expiresAt) }}</span></div>
+            <div class="cg__invite-details"><span>Invite link</span><a class="cg__invite-url" :href="inviteUrl(invite.code)">{{ inviteUrl(invite.code) }}</a></div>
+            <div class="cg__actions"><AppButton variant="outline" size="sm" @click="copyInvite(invite.code)">{{ copiedCode === invite.code ? "Link copied" : "Copy invite link" }}</AppButton><button class="cg__link" type="button" @click="revokeInvite(invite.code)">Cancel invite</button></div>
+          </article>
+        </div>
       </form>
-
-      <div v-if="invites.length" class="cg__list">
-        <h3>Pending invitations</h3>
-        <article v-for="invite in invites" :key="invite.code" class="cg__row">
-          <div><strong>{{ invite.caregiverName || CAREGIVER_ROLES.find((role) => role.value === invite.caregiverRole)?.label || "Caregiver" }}</strong><p class="cg__muted">{{ invite.code }} · {{ expiresInText(invite.expiresAt) }}</p></div>
-          <div class="cg__actions"><AppButton variant="outline" size="sm" @click="copyInvite(invite.code)">{{ copiedCode === invite.code ? "Copied" : "Copy link" }}</AppButton><button class="cg__link" type="button" @click="revokeInvite(invite.code)">Cancel invite</button></div>
-        </article>
-      </div>
 
       <div v-if="caregiverMembers.length" class="cg__list">
         <h3>Current caregivers</h3>
@@ -208,8 +239,10 @@ onMounted(refresh);
           { key: 'allergies', label: 'Allergies' },
           { key: 'medications', label: 'Medication instructions' },
           { key: 'parentContacts', label: 'Parent contact details' },
-        ]" :key="item.key" class="cg__field"><span>{{ item.label }}</span><textarea v-model="brief[item.key]" class="app-control" rows="2" maxlength="500" /></label>
-        <AppButton type="submit" variant="outline" :disabled="busy">{{ busy ? "Saving…" : "Save care brief" }}</AppButton>
+        ]" :key="item.key" class="cg__field"><span>{{ item.label }}</span><textarea v-model="brief[item.key]" class="app-control" rows="2" maxlength="500" :placeholder="({ feeding: 'e.g. bottle feed, breastfeeding', napRoutine: 'e.g. nap at 3pm', allergies: 'e.g. peanut allergy, or none', medications: 'e.g. medicine name and dosage', parentContacts: 'e.g. phone numbers to call' })[item.key]" /></label>
+        <AppButton type="button" variant="outline" :disabled="busy" @click="saveBrief">{{ busy ? "Saving…" : "Save care brief" }}</AppButton>
+        <p v-if="briefStatus" class="cg__muted" role="status" aria-live="polite">{{ briefStatus }}</p>
+        <p v-if="briefError" class="app-error-text" role="alert">{{ briefError }}</p>
       </form>
     </template>
   </div>
@@ -226,6 +259,11 @@ onMounted(refresh);
 .cg__permissions { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 14px; border: 1px solid var(--nt-line); border-radius: 8px; }
 .cg__permissions legend { padding: 0 6px; font-size: .875rem; font-weight: 600; }
 .cg__row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border: 1px solid var(--nt-line); border-radius: 8px; }
+.cg__pending { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+.cg__pending h4 { margin: 0; font-size: .9375rem; font-weight: 600; }
+.cg__invite-ready { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid var(--nt-plum); border-radius: 8px; background: var(--nt-surface, #fff); }
+.cg__invite-details { display: flex; flex-direction: column; gap: 4px; width: 100%; font-size: .875rem; }
+.cg__invite-url { display: block; max-width: 100%; margin-top: 4px; overflow-wrap: anywhere; font-size: .875rem; }
 .cg__row > div:first-child { display: flex; flex-direction: column; gap: 4px; }
 .cg__actions, .cg__member-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .cg__actions { justify-content: flex-end; }

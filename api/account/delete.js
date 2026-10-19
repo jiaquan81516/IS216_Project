@@ -65,9 +65,10 @@ export default async function handler(req, res) {
   };
 
   try {
-    // 1 and 2. The verified uid, and the household it points at.
+    // 1 and 2. The verified uid, and every household the account belongs to.
     const userSnap = await db.collection("users").doc(uid).get();
-    const householdId = userSnap.exists ? userSnap.data()?.householdId || "" : "";
+    const userData = userSnap.exists ? userSnap.data() : {};
+    const householdIds = [...new Set([...(userData?.householdIds || []), userData?.householdId].filter(Boolean))];
 
     // 3. Stop other devices writing while this runs.
     try {
@@ -77,9 +78,9 @@ export default async function handler(req, res) {
     }
 
     // 4. Anonymise the shared household data. The rows stay, the name goes.
-    if (householdId) {
+    for (const householdId of householdIds) {
       const household = db.collection("households").doc(householdId);
-      summary.anonymisedEntries = await anonymise(household.collection("entries").where("by", "==", uid));
+      summary.anonymisedEntries += await anonymise(household.collection("entries").where("by", "==", uid));
       for (const name of ["events", "tasks"]) {
         summary.anonymisedShared += await anonymise(household.collection(name).where("createdBy", "==", uid));
       }
@@ -139,7 +140,7 @@ export default async function handler(req, res) {
     // 11. One log line: uids and counts, no email, no name, no check-in numbers.
     logLine("account delete", {
       uid,
-      household: householdId || "none",
+      households: householdIds.length,
       entries: summary.anonymisedEntries,
       shared: summary.anonymisedShared,
       invites: summary.invitesRevoked,

@@ -7,6 +7,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   serverTimestamp,
   setDoc,
@@ -94,7 +95,7 @@ export function saveHouseholdBaby(householdId, { babyName, babyStatus, babyDate 
 
 // Leaving removes you from the household and clears your own pointer to it. Everything you
 // logged stays with the household, because the other parent still needs it.
-export async function leaveHousehold(uid, householdId) {
+export async function leaveHousehold(uid, householdId, nextHouseholdId = null) {
   if (!householdId) {
     const error = new Error("You are not in a household.");
     error.code = "household/none";
@@ -103,7 +104,11 @@ export async function leaveHousehold(uid, householdId) {
   const batch = writeBatch(db);
   batch.delete(doc(db, "households", householdId, "members", uid));
   batch.update(doc(db, "households", householdId), { memberIds: arrayRemove(uid) });
-  batch.update(doc(db, "users", uid), { householdId: null, leftHouseholdAt: serverTimestamp() });
+  batch.update(doc(db, "users", uid), {
+    householdId: nextHouseholdId && nextHouseholdId !== householdId ? nextHouseholdId : null,
+    householdIds: arrayRemove(householdId),
+    leftHouseholdAt: serverTimestamp(),
+  });
   await batch.commit();
 }
 
@@ -141,14 +146,24 @@ export async function deleteAccountFallback(user, householdId) {
   } catch {
     kept.push("your saved devices");
   }
-  if (householdId) {
+  let householdIds = [householdId].filter(Boolean);
+  try {
+    const profile = await getDoc(doc(db, "users", uid));
+    if (profile.exists()) householdIds = [...new Set([...(profile.data()?.householdIds ?? []), profile.data()?.householdId, ...householdIds].filter(Boolean))];
+  } catch {
+    // The current household argument is still useful when the profile cannot be read.
+  }
+  let leftHouseholds = 0;
+  for (const id of householdIds) {
     try {
-      await leaveHousehold(uid, householdId);
-      removed.push("your place in the household");
+      await leaveHousehold(uid, id);
+      leftHouseholds += 1;
     } catch {
-      kept.push("your place in the household");
+      // Continue so one stale membership does not prevent removing other memberships.
     }
   }
+  if (leftHouseholds) removed.push(leftHouseholds === 1 ? "your place in one household" : `your place in ${leftHouseholds} households`);
+  if (leftHouseholds < householdIds.length) kept.push("one or more household memberships");
   kept.push('the care log entries you wrote, which stay with the household and will still show your name rather than "A parent"');
   try {
     await deleteDoc(doc(db, "users", uid));

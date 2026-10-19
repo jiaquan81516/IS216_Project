@@ -1,5 +1,5 @@
 import { useAuth, waitForAuthInitialization } from "@/composables/useAuth";
-import { getMember, getUserProfile } from "@/api/profile";
+import { getCaregiverHouseholds, getMember, getUserProfile } from "@/api/profile";
 import { withTimeout } from "@/app/utils/timeout";
 import { ROUTES } from "@/app/routes";
 
@@ -28,9 +28,14 @@ export function installGuard(router) {
       if (!isAuthenticated.value) return { path: ROUTES.SIGN_IN, query: to.query.code ? { code: to.query.code } : {} };
       try {
         const profile = await withTimeout(getUserProfile(currentUser.value.uid), 2500);
+        let member = null;
         if (profile?.householdId) {
-          const member = await withTimeout(getMember(profile.householdId, currentUser.value.uid), 2500);
-          if (member?.accessLevel === "caregiver") return ROUTES.CARE_BRIEF;
+          member = await withTimeout(getMember(profile.householdId, currentUser.value.uid), 2500);
+          if (member?.accessLevel === "caregiver" && !to.query.code) return ROUTES.CARE_BRIEF;
+        }
+        if (!member && profile?.householdIds?.length && !to.query.code) {
+          const households = await withTimeout(getCaregiverHouseholds(currentUser.value.uid), 4000);
+          if (households.length) return ROUTES.CARE_BRIEF;
         }
       } catch {
         // Let the household page show its own recovery state if profile loading fails.
@@ -44,10 +49,22 @@ export function installGuard(router) {
       if (!isAuthenticated.value) return ROUTES.SIGN_IN;
       try {
         const profile = await withTimeout(getUserProfile(currentUser.value.uid), 2500);
-        if (profile && !profile.householdId) return ROUTES.HOUSEHOLD;
+        if (profile && !profile.householdId) {
+          if (profile.householdIds?.length) {
+            const households = await withTimeout(getCaregiverHouseholds(currentUser.value.uid), 4000);
+            if (households.length) return to.path === ROUTES.CARE_BRIEF ? true : ROUTES.CARE_BRIEF;
+          }
+          return ROUTES.HOUSEHOLD;
+        }
         if (profile?.householdId) {
           const me = await withTimeout(getMember(profile.householdId, currentUser.value.uid), 2500);
-          if (!me) return ROUTES.HOUSEHOLD;
+          if (!me) {
+            if (profile.householdIds?.length) {
+              const households = await withTimeout(getCaregiverHouseholds(currentUser.value.uid), 4000);
+              if (households.length) return to.path === ROUTES.CARE_BRIEF ? true : ROUTES.CARE_BRIEF;
+            }
+            return ROUTES.HOUSEHOLD;
+          }
           if (me && me.accessLevel !== "parent" && to.path !== ROUTES.CARE_BRIEF) return ROUTES.CARE_BRIEF;
           if (me?.accessLevel === "parent" && to.path === ROUTES.CARE_BRIEF) return ROUTES.HOME;
         }

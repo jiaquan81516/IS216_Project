@@ -9,6 +9,7 @@ const props = defineProps({
   size: { type: String, default: "lg" }, // sm | md | lg
   to: { type: [String, Object], default: null },
   block: { type: Boolean, default: false },
+  type: { type: String, default: "button" },
 });
 
 const classes = computed(() => [
@@ -21,5 +22,5 @@ const classes = computed(() => [
 
 <template>
   <RouterLink v-if="to" :to="to" :class="classes" v-bind="$attrs"><slot /></RouterLink>
-  <button v-else type="button" :class="classes" v-bind="$attrs"><slot /></button>
+  <button v-else v-bind="$attrs" :type="type" :class="classes"><slot /></button>
 </template>
