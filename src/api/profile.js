@@ -301,3 +301,13 @@ export async function getHouseholdBabies(householdId) {
     .map(({ createdAt, ...rest }) => rest);
   return [primary, ...extra];
 }
+
+export async function updateBaby(householdId, babyId, baby = {}) {
+  if (!householdId || !babyId) return;
+  const { babyName, babyStatus, babyDate } = cleanBaby(baby);
+  if (babyId === "primary") {
+    await updateDoc(doc(db, "households", householdId), { babyName, babyStatus, babyDate });
+  } else {
+    await updateDoc(doc(db, "households", householdId, "babies", babyId), { babyName, babyStatus, babyDate });
+  }
+}

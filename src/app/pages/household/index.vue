@@ -18,11 +18,14 @@ import {
   joinHousehold,
 } from "@/api/profile";
 import "@/app/app.css";
+import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 
 defineOptions({ name: "HouseholdPage" });
 
 const { currentUser, authProfile, loadProfile } = useAuth();
 const route = useRoute();
+
+const { loadBabies: refreshSidebarBabies } = useSelectedBaby();
 
 const loaded = ref(false);
 // An invite link (/join/NT-XXXX) lands here with ?code= and opens the join form.
@@ -78,6 +81,7 @@ async function submitNewBaby() {
     babyStatus.value = "born";
     showAddBaby.value = false;
     await loadBabies();
+    await refreshSidebarBabies(householdId.value);
   } catch {
     babyError.value = "Could not add the baby. Please try again.";
   } finally {
