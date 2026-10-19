@@ -30,6 +30,8 @@ export function cleanEvent(data, fallbackOwner = "both") {
     owner: data.owner || fallbackOwner,
     type: TYPES.includes(data.type) ? data.type : "family",
     notes: typeof data.notes === "string" ? data.notes.slice(0, NOTES_MAX) : "",
+    // [] means "all babies". Otherwise the ids of the babies the event is for.
+    babyIds: Array.isArray(data.babyIds) ? data.babyIds.filter((x) => typeof x === "string").slice(0, 20) : [],
   };
 }
 
