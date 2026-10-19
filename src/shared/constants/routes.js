@@ -13,8 +13,6 @@ export const ROUTES = Object.freeze({
   HOME: "/home",
   CARE_LOG: "/care-log",
   ADD_ENTRY: "/care-log/new",
-  HANDOVER: "/handover",
-  HANDOVER_RECEIVED: "/handover/received",
   ROTA: "/rota",
   CALENDAR: "/calendar",
   CHECK_IN: "/check-in",

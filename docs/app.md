@@ -14,7 +14,6 @@ App is built page by page. Each iteration adds one screen at a time under `src/a
 | 4 Household | `/household` | requires sign in; create, or join with a code |
 | Home | `/home` | requires sign in and a household; inside the app shell layout |
 | Care log | `/care-log` | same guard as Home; inside the app shell layout. `?log=feed` (or another type) opens the log panel and is then removed from the address |
-| Handover | `/handover` | same guard and layout; real Firestore |
 | Sleep rota | `/rota` | same guard and layout; real Firestore |
 | Wellness | `/wellness` | same guard and layout; local state only |
 | Support | `/support` | same guard and layout; local state only |
@@ -31,7 +30,7 @@ After creating or joining, Step 4 shows an inline success state with a "Go to ho
 
 `src/app/layouts/AppShell.vue` is a router layout: a 264px sticky sidebar (logo, household chip, 7 nav items, privacy note, user row) and a main column with a 1120px content area. Under 992px the sidebar becomes a top bar with a menu button. The shell calls `useHome()` once and provides it to pages (`HOME_KEY`), so the sidebar and page do not load twice. `useHome` reads the profile, household and members (`getHousehold`, `getHouseholdMembers` in `src/api/profile.js`), each with a timeout.
 
-The shell also calls `useEntries(householdId)` once and provides it (`ENTRIES_KEY`), so Home and the care log share one live listener on `households/{id}/entries`. It calls `useHandovers(householdId, meUid)` the same way (`HANDOVERS_KEY`), so one listener on the newest 30 handovers feeds the handover page, the Home line and the care log dividers, and the sidebar can badge the Handover item when one is waiting for you. In the same way it calls `useShared(householdId, meUid, partnerUid)` once and provides it (`SHARED_KEY`), which binds the sleep rota, calendar and return to work stores to the household and unbinds them when the household changes or the shell unmounts. Pages inject it for the "Try again" button; the data itself comes from the Pinia stores. The listener waits for the household id (loading, never an error, until it exists), treats an empty collection as a normal empty snapshot, and reports `{ code }` on failure, with a 15 second watchdog that reports `timeout`.
+The shell also calls `useEntries(householdId)` once and provides it (`ENTRIES_KEY`), so Home and the care log share one live listener on `households/{id}/entries`. It calls `useShared(householdId, meUid, partnerUid)` once and provides it (`SHARED_KEY`), which binds the sleep rota, calendar and return to work stores to the household and unbinds them when the household changes or the shell unmounts. Pages inject it for the "Try again" button; the data itself comes from the Pinia stores. The listener waits for the household id (loading, never an error, until it exists), treats an empty collection as a normal empty snapshot, and reports `{ code }` on failure, with a 15 second watchdog that reports `timeout`.
 
 Home is real data only. The main card reads "Log your first care entry" with a solid "Log care" button when there are no entries, or "Last feed {time}" with "Log a feed" and an outline "Open care log" when a feed exists. "Recent activity" lists the 5 newest entries (New badge for unseen partner entries) or "Nothing logged yet.". The Tonight card was removed until the rota page exists; there is no sample data, no "Sample" badge and no `homeSample.js`. The butter "Yours alone" check-in box stays.
 
@@ -44,7 +43,6 @@ All eight sidebar items link to the current pages (`src/app/data/nav.js`). The H
 - `households/{id}/members/{uid}`: displayName, photoURL, role, joinedAt
 - `invites/{code}` (code looks like `NT-XXXX`): householdId, createdBy, createdAt, expiresAt, usedAt, usedBy, revokedAt
 - `pumpingRooms/{roomId}` and `pumpingRooms/{roomId}/reports/{reportId}`: the shared pumping room directory (fields in `docs/data-model.md`)
-- `households/{id}/handovers/{handoverId}`: the shift handovers (fields in `docs/data-model.md`)
 - `households/{id}/rota/settings`, `households/{id}/nights/{yyyy-mm-dd}`, `households/{id}/swaps/{swapId}`, `households/{id}/events/{eventId}`, `households/{id}/tasks/{taskId}`, `households/{id}/rtw/plan`: the shared sleep rota, calendar and return to work plan (fields in `docs/data-model.md`)
 - `googleTokens/{uid}`, `googleSync/{uid}`, `oauthStates/{nonce}`, `serverLimits/{uid}`: server only, written by the Firebase Admin SDK in the Vercel functions and denied to every client in `firestore.rules` (fields in `docs/data-model.md`, section 7b)
 
@@ -174,66 +172,6 @@ renders the tabpanels).
 - Owner chips still read Me, the partner's name and Both; the stored value is a uid or "both" (`CalendarDayPanel` takes a `me-uid` prop and maps both ways).
 - Planned, not built: Google Calendar sync (V2 notes and `docs/design.md` describe the intent). Every event already carries `googleEventId: null` for it.
 
-## Handover
-
-`src/app/pages/handover/index.vue` is the boundary between two shifts. At the end of a shift
-one parent sends a short summary of what happened, anything that needs attention and what is
-coming up; the other parent reads it and accepts it. It is the same "since the last handover"
-window Home and the care log already talk about, so it is now a real line in the data rather
-than a figure of speech.
-
-Files:
-- `src/api/handovers.js`: `subscribeHandovers` (live, newest 30, ordered by `sentAt`),
-  `subscribeLatestHandover`, `sendHandover`, `acceptHandover`, `updateHandover`. Same shape as
-  `entries.js`: listeners report `{ code }` and log `console.error("[app handover]", code,
-  error)`.
-- `src/app/utils/handoverHelpers.js`: pure, fully tested. `periodStartFrom`, `summariseWindow`,
-  `summaryBlocks`, `summaryLine`, `suggestedNextUp`, `handoverStatus`, `formatWindow`,
-  `handoverRows`.
-- `src/app/composables/useHandovers.js`: one live listener, bound in `AppShell` and shared
-  through `HANDOVERS_KEY`. It also works out `latest`, `waitingForMe` and `waitingCount`.
-- Icon added to `Icon`: `handover`, an arrow passing between two points.
-
-The window: `periodStart` is the previous handover's `sentAt`, or the start of the current day
-when there is none. `summary` is `summariseWindow(entries, periodStart, now)`, worked out from
-the care log at send time and then frozen, so editing an entry later never rewrites history.
-`sentAt` is the sending device's clock rather than `serverTimestamp()`, so the window the
-sender just read on screen is exactly what is stored and the list is ordered the moment the
-write is made locally.
-
-The page: a prominent plain section at the top when a handover is waiting for you ("Mei handed
-over at 7:10 AM", the window line, the summary as three stat blocks split by 1px vertical
-lines, the note, an attention line marked with the words "Needs attention" rather than colour
-alone, the next up list, and the page's single solid plum button "Accept handover"). Otherwise
-the send form in the same plain style: the "Since 7:10 AM" window line, the live summary, a
-note of at most 400 characters with a counter, a "Needs attention" checkbox that reveals a
-short input, up to three removable chips for what is coming up with suggestions offered as
-outline "Add" buttons plus a free text add, and one solid plum button "Send handover to Mei".
-With nobody else in the household the button is disabled and says why. Below both is "Earlier
-handovers", the last 10 as compact rows (time, who to whom, status text, feeds and sleep) that
-expand to show the note. Loading, error and empty states follow the care log, so
-`permission-denied` tells you to publish the latest `firestore.rules`
-(`describeSharedError(code, "handovers")`).
-
-`suggestedNextUp` only ever offers things that are already in the data, at most three: "Next
-feed due around 9:00 PM" from the last feed logged plus three hours, "{name} is on duty
-tonight" (or "Tonight is a split night") from the shared sleep rota, and "Medication due" when
-a medication entry was logged with a repeat written in its note. It never invents clinical
-advice.
-
-Integration: Home shows one quiet line when a handover is waiting for you, linking to the
-page, and no second solid button; its "Recent activity" header reads "Since the last handover"
-once one exists. The care log timeline gets a 1px divider row labelled "Handover sent 7:10 AM"
-at each boundary inside the loaded window, derived from the handovers the shared listener
-already holds, so the log reads as shifts. A boundary with no entry on one side of it is left
-out, so a divider never hangs at the top or the bottom of a day.
-
-Rules (`firestore.rules`, under `households/{id}/handovers/{handoverId}`): members read; a
-member creates one with `from` equal to their own uid and `to` another member, unaccepted; the
-sender may fix it while `acceptedAt` is still null; the reader may only set `acceptedAt` and
-`acceptedBy`, and only to their own uid; nothing is ever deleted. No index is needed, because
-the query orders by `sentAt` alone.
-
 ## Settings and Profile
 
 Both sit inside the app shell, with the same guard as Home, and neither is in the main nav.
@@ -259,8 +197,8 @@ and several fields changed close together go in one write, each under its own do
 quiet "Saved" sits in an `aria-live="polite"` region. The sections, each a plain section
 separated by a 1px line:
 
-- Notifications: the master "Push notifications" switch, then feeds due, partner logs,
-  handovers and swap requests, a check-in reminder with a time, and quiet hours with a start
+- Notifications: the master "Push notifications" switch, then feeds due, partner logs
+  and swap requests, a check-in reminder with a time, and quiet hours with a start
   and an end. Above them: "Push notifications need the server set up. These preferences are
   saved now and used once it is connected." Only the preferences are built. There is no FCM,
   no service worker, no token registration and no Firebase Messaging import anywhere.

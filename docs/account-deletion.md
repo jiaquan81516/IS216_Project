@@ -58,7 +58,7 @@ Run with the Firebase Admin SDK, which is not bound by `firestore.rules`.
    row:
    - `entries/*` where `by == uid`: set `byName` to `"A parent"`. Leave `by` as the uid, so
      the rules and the seen markers still work and the history does not change shape.
-   - `events/*` and `tasks/*` where `createdBy == uid`, and `handovers/*` where `from == uid`:
+   - `events/*` and `tasks/*` where `createdBy == uid`:
      the same `byName` of `"A parent"`, for the same reason. The UI would fall back to "A
      parent" anyway once the member document is gone, but writing it down means the history
      cannot drift if that fallback ever changes. `createdBy` and `from` are left as the uid.
@@ -118,7 +118,7 @@ account". Once the endpoint exists the fallback should stay, as the answer to a 
 ## Checklist, as built
 
 - [x] Verify the ID token, never trust a uid in the body.
-- [x] `byName` becomes "A parent" on the user's entries, events, tasks and handovers.
+- [x] `byName` becomes "A parent" on the user's entries, events and tasks.
 - [x] Member document and `memberIds` cleared.
 - [x] `checkins` and `devices` gone, user document gone (`recursiveDelete`).
 - [x] Unused invite revoked, not deleted.

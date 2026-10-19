@@ -10,7 +10,6 @@ import ChatDock from "@/app/components/ChatDock.vue";
 import PartnerToast from "@/app/components/PartnerToast.vue";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
-import { useHandovers, HANDOVERS_KEY } from "@/app/composables/useHandovers";
 import { useShared, SHARED_KEY } from "@/app/composables/useShared";
 import { useNudges, NUDGES_KEY } from "@/app/composables/useNudges";
 import { usePush, usePushMessages } from "@/app/composables/usePush";
@@ -42,9 +41,6 @@ const meUid = computed(() => home.me.value.uid);
 const partnerUid = computed(() => home.partner.value?.uid ?? "");
 const shared = useShared(home.householdId, meUid, partnerUid);
 provide(SHARED_KEY, shared);
-// One live handovers listener. The page, the Home line and the care log dividers share it.
-const handovers = useHandovers(home.householdId, meUid);
-provide(HANDOVERS_KEY, handovers);
 
 // The chat with your partner. The button shows on every page, and a pop up appears when
 // something new comes in.
@@ -92,20 +88,15 @@ const names = computed(() => {
 const babyName = computed(() => (home.baby.value.name ? `Baby ${home.baby.value.name}` : ""));
 const babyAge = computed(() => home.baby.value.line || "");
 const userName = computed(() => displayName(home.me.value.displayName || home.me.value.firstName));
-const waiting = computed(() => handovers.waitingCount.value);
-// A small dot on Home while there are posts or handovers from your partner you have not
+// A small dot on Home while there are posts from your partner you have not
 // acknowledged. The stream on Home is where you clear them.
 const unread = computed(() =>
-  unreadCount(
-    buildStream({ posts: shared.posts.posts, handovers: handovers.handovers.value, uid: meUid.value }),
-    meUid.value,
-  ),
+  unreadCount(buildStream({ posts: shared.posts.posts, uid: meUid.value }), meUid.value),
 );
 const items = computed(() =>
   NAV.map((item) => ({
     ...item,
     active: item.to === route.path || route.path.startsWith(item.to + "/"),
-    count: item.key === "handover" ? waiting.value : 0,
     dot: item.key === "today" && unread.value > 0,
   })),
 );
@@ -174,12 +165,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
               >
                 <Icon :name="item.icon" />
                 <span>{{ item.label }}</span>
-                <span v-if="item.count" class="side__count" aria-hidden="true">{{ item.count }}</span>
                 <span v-if="item.dot" class="side__dot" aria-hidden="true"></span>
                 <span v-if="item.dot" class="visually-hidden">unread</span>
-                <span v-if="item.count" class="visually-hidden">
-                  {{ item.count === 1 ? "1 handover waiting for you" : `${item.count} handovers waiting for you` }}
-                </span>
               </RouterLink>
             </li>
           </ul>
@@ -317,17 +304,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   line-height: 20px;
   color: var(--nt-muted);
   text-decoration: none;
-}
-.side__count {
-  margin-left: auto;
-  padding: 0 7px;
-  background: var(--nt-gray);
-  border: 1px solid var(--nt-line);
-  border-radius: 999px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 20px;
-  color: var(--nt-plum);
 }
 .side__dot {
   width: 8px;

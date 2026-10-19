@@ -5,28 +5,25 @@ import { useRouter } from "vue-router";
 import AppButton from "@/components/ui/AppButton.vue";
 import AppLink from "@/components/ui/AppLink.vue";
 import Icon from "@/app/components/Icon.vue";
-import { acceptHandover } from "@/api/handovers";
 import { ownerUid } from "@/app/utils/sharedHelpers";
 import { buildStream, groupByDay } from "@/app/utils/stream";
 import { agoText, dutyTonight, nextUp, todaySummary } from "@/app/utils/homeSummary";
 import { formatMinutes, formatTime as clockTime } from "@/app/utils/entryHelpers";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
-import { useHandovers, HANDOVERS_KEY } from "@/app/composables/useHandovers";
 import { usePrefs } from "@/app/composables/usePrefs";
 import { useShared, SHARED_KEY } from "@/app/composables/useShared";
 import { ROUTES } from "@/app/routes";
 
 defineOptions({ name: "HomePage" });
 
-// The layout loads the household, the care log, the handovers and the shared stores once and
+// The layout loads the household, the care log and the shared stores once and
 // provides them. Fall back to loading here so the page also works when rendered on its own.
 const home = inject(HOME_KEY, null) ?? useHome();
 const { loading, error, reload, me, partner, inviteCode, householdId } = home;
 const myUid = computed(() => me.value.uid);
 const partnerUid = computed(() => partner.value?.uid ?? "");
 const entriesShared = inject(ENTRIES_KEY, null) ?? useEntries(householdId);
-const handoversShared = inject(HANDOVERS_KEY, null) ?? useHandovers(householdId, myUid);
 const shared = inject(SHARED_KEY, null) ?? useShared(householdId, myUid, partnerUid);
 const posts = shared.posts;
 const rtw = shared.rtw;
@@ -71,7 +68,6 @@ const items = computed(() =>
   buildStream({
     posts: posts.posts,
     entries: entriesShared.entries.value,
-    handovers: handoversShared.handovers.value,
     tasks: rtw.tasks,
     uid: myUid.value,
     members: members.value,
@@ -142,7 +138,6 @@ const MENU = [
   { key: "nappy", label: "Log nappy" },
   { key: "medication", label: "Medicine" },
   { key: "task", label: "Add a task" },
-  { key: "handover", label: "Send handover" },
 ];
 
 function announce(message) {
@@ -223,8 +218,6 @@ function choose(key) {
   closeMenu();
   if (key === "task") {
     openTask();
-  } else if (key === "handover") {
-    router.push(ROUTES.HANDOVER);
   } else {
     router.push({ path: ROUTES.CARE_LOG, query: { log: key } });
   }
@@ -278,15 +271,6 @@ async function saveTask() {
 const actionError = ref("");
 async function gotIt(item) {
   actionError.value = "";
-  if (item.kind === "handover") {
-    try {
-      await acceptHandover(householdId.value, item.rawId, myUid.value);
-    } catch (cause) {
-      console.error("[app handover]", cause?.code, cause);
-      actionError.value = "We could not save that. Check your connection and try again.";
-    }
-    return;
-  }
   if (!(await posts.ack(item.rawId))) actionError.value = posts.writeError;
 }
 async function markDone(item) {
@@ -466,15 +450,9 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
             <li v-for="item in group.items" :key="item.id" class="hp__item">
               <p class="hp__meta">{{ metaLine(item) }}</p>
               <p class="hp__text">{{ item.text }}</p>
-              <template v-if="item.kind === 'handover'">
-                <p v-if="item.meta.counts" class="hp__meta">{{ item.meta.counts }}</p>
-                <p v-if="item.meta.needsAttention" class="hp__attention">
-                  Needs attention{{ item.meta.attentionNote ? `: ${item.meta.attentionNote}` : "" }}
-                </p>
-              </template>
 
               <div class="hp__actions">
-                <template v-if="item.kind === 'message' || item.kind === 'handover'">
+                <template v-if="item.kind === 'message'">
                   <button v-if="item.needsAck && !item.acked" type="button" class="hp__text-btn" @click="gotIt(item)">Got it</button>
                   <span v-else-if="seenLine(item)" class="hp__seen">{{ seenLine(item) }}</span>
                 </template>
@@ -594,7 +572,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__item { padding: 14px 0; border-top: 1px solid var(--nt-line); }
 .hp__meta { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
 .hp__text { margin: 2px 0 0; font-size: 1rem; line-height: 1.5; color: var(--nt-ink); overflow-wrap: anywhere; }
-.hp__attention { margin: 2px 0 0; font-size: 0.875rem; color: var(--nt-coral); }
 .hp__actions { display: flex; align-items: center; gap: 16px; margin-top: 6px; }
 .hp__actions:empty { display: none; }
 .hp__seen { font-size: 0.875rem; color: var(--nt-muted); }

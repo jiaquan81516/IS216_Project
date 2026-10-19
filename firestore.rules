@@ -110,39 +110,6 @@ service cloud.firestore {
           && request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds;
       }
 
-      // Handovers. One document per handover, so the history is kept. Either parent reads
-      // them. You may only send in your own name, to the other member of the household. The
-      // sender may fix a handover while it is still unaccepted; the reader may only set
-      // acceptedAt and acceptedBy, and only to their own uid. Nothing is ever deleted.
-      match /handovers/{handoverId} {
-        allow read: if sharedMember();
-
-        allow create: if sharedMember()
-          && request.resource.data.from == request.auth.uid
-          && request.resource.data.to != request.auth.uid
-          && request.resource.data.to in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds
-          && request.resource.data.sentAt is timestamp
-          && request.resource.data.acceptedAt == null
-          && request.resource.data.acceptedBy == null
-          && (!('tasks' in request.resource.data) || request.resource.data.tasks.size() <= 6);
-
-        allow update: if sharedMember()
-          && resource.data.acceptedAt == null
-          && (
-            (resource.data.from == request.auth.uid
-              && request.resource.data.from == resource.data.from
-              && request.resource.data.to == resource.data.to
-              && request.resource.data.acceptedAt == null
-              && request.resource.data.acceptedBy == null)
-            || (resource.data.to == request.auth.uid
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['acceptedAt', 'acceptedBy'])
-              && request.resource.data.acceptedBy == request.auth.uid
-              && request.resource.data.acceptedAt is timestamp)
-          );
-
-        allow delete: if false;
-      }
-
       // The sleep rota plan. One document, "settings". Either parent may save it, and every
       // write says who did it.
       match /rota/{docId} {

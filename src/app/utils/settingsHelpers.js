@@ -6,7 +6,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
     push: false,
     feedsDue: true,
     partnerLogs: true,
-    handovers: true,
     swapRequests: true,
     checkInReminder: { on: false, time: "21:30" },
     quietHours: { on: false, start: "23:00", end: "05:00" },
@@ -54,7 +53,6 @@ export function normaliseSettings(raw) {
       push: bool(n.push, d.notifications.push),
       feedsDue: bool(n.feedsDue, d.notifications.feedsDue),
       partnerLogs: bool(n.partnerLogs, d.notifications.partnerLogs),
-      handovers: bool(n.handovers, d.notifications.handovers),
       swapRequests: bool(n.swapRequests, d.notifications.swapRequests),
       checkInReminder: {
         on: bool(n.checkInReminder?.on, d.notifications.checkInReminder.on),
