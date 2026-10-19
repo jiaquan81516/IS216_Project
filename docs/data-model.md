@@ -11,7 +11,6 @@ users/{uid}
 households/{householdId}
   members/{uid}
   entries/{entryId}
-  handovers/{handoverId}
   rota/settings
   nights/{yyyy-mm-dd}
   swaps/{swapId}
@@ -38,7 +37,7 @@ Profile
 Settings
 - notifications
   - push (boolean): master switch
-  - feedsDue, partnerLogs, handovers, swapRequests (boolean)
+  - feedsDue, partnerLogs, swapRequests (boolean)
   - checkInReminder: { on: boolean, time: "21:30" }
   - quietHours: { on: boolean, start: "23:00", end: "05:00" }
 - calendar
@@ -70,7 +69,7 @@ Settings
 - inviteCode (string): the code that is live now. Its expiry lives on the invite document,
   not here, so one place owns it.
 - nights: { start: "21:00", end: "07:00", mode: "alternate" | "manual", first: uid }
-- alerts: { feeds, partnerLogs, handovers, checkIn } (boolean defaults for new members)
+- alerts: { feeds, partnerLogs, checkIn } (boolean defaults for new members)
 - returnToWorkDate (timestamp)
 - createdAt (timestamp)
 
@@ -91,28 +90,6 @@ Settings
 - App care log: `byName` (string) is the author's first name at the time of logging, and `details.text` is an optional note on any type (the whole body of a `note`). `details.nappyType` is wet | dirty | both; `details.method` is breast | bottle | expressed.
 - A subcollection, not an array, so two parents logging at once do not collide and the document size limit is never hit.
 
-### households/{id}/handovers/{handoverId}
-- from, to (uid): the sender and the only person who may accept it
-- sentAt (timestamp): the end of the shift. Written from the sending device's clock, not
-  `serverTimestamp()`, so the window the sender just read on screen is exactly what is stored
-  and the newest-first list is ordered the moment the write is made locally
-- periodStart (timestamp): the start of the shift, which is the previous handover's `sentAt`,
-  or the start of the current day when there is none. The pair is the "since the last
-  handover" window Home and the care log refer to
-- note (string, 400 characters): what the other parent should know
-- needsAttention (boolean), attentionNote (string, 140 characters): shown with the words
-  "Needs attention", never colour alone
-- summary: { feeds, sleepMinutes, nappies }: a snapshot of the care log between periodStart
-  and sentAt, worked out at send time (`summariseWindow` in
-  `src/app/utils/handoverHelpers.js`) and then frozen, so editing an entry later never rewrites
-  a handover that has already been sent
-- nextUp (array of string, at most 3): short lines, offered from real data by
-  `suggestedNextUp` or typed by hand
-- acceptedAt (timestamp or null), acceptedBy (uid or null): null until the reader accepts it
-- createdAt (timestamp), updatedAt (timestamp, only when the sender fixed it before it was
-  accepted)
-- One document per handover, never deleted, so the history is the record of the shifts.
-
 ### households/{id}/posts/{postId}  (the Home stream's plain messages)
 - text (string, 1 to 500 characters), authorUid (uid), createdAt (server timestamp)
 - ackedBy (array of uid): empty on create. The reader adds their own uid with one update
@@ -122,7 +99,7 @@ Settings
   only for a member who is not the author
 - Index: none. The query orders by `createdAt` only (newest 50)
 - The Home stream is not a collection. It is built in the browser by `buildStream` in
-  `src/app/utils/stream.js` from posts, care log entries, handovers and tasks, so no existing
+  `src/app/utils/stream.js` from posts, care log entries and tasks, so no existing
   collection changed. Push alerts for new posts are not built; the stream relies on future
   push (FCM) to tell a parent something arrived.
 
@@ -262,10 +239,6 @@ room for everyone. While the collection is empty the Support page shows the two 
   delete (clearing a night is how you go back to the pattern).
 - swaps: members read; `from` must be the caller on create and the status must be pending;
   only `to` may accept or decline; only `from` may cancel; no deletes, so the history stays.
-- handovers: members read; `from` must be the caller on create and `to` must be another
-  member, with `acceptedAt` and `acceptedBy` null; only `from` may edit, and only while
-  `acceptedAt` is still null; only `to` may accept, and that write may touch nothing but
-  `acceptedAt` and `acceptedBy`, with `acceptedBy` equal to their own uid; no deletes.
 - posts: members read; create in your own name with 1 to 500 characters, `createdAt ==
   request.time` and `ackedBy` empty; only a member who is not the author may update, and only
   to add their own uid to `ackedBy` and set `ackedAt`; only the author may delete.
@@ -283,7 +256,6 @@ room for everyone. While the collection is empty the Support page shows the two 
 - events: date ascending
 - tasks: due ascending
 - swaps: createdAt descending
-- handovers: sentAt descending
 - pumpingRooms: name ascending (one field, so Firestore's single field indexes are enough)
 - No composite index is needed for App: every shared query orders by, and ranges over, the
   same single field, which is why `firestore.indexes.json` is still empty. Status is
@@ -292,7 +264,7 @@ room for everyone. While the collection is empty the Support page shows the two 
 
 ## 7. Server side needed
 
-- Cloud Function or Vercel endpoint to send FCM pushes (handover sent, swap requested, entry
+- Cloud Function or Vercel endpoint to send FCM pushes (swap requested, entry
   logged). Read the recipient's quietHours and notification settings first. The preferences in
   `users/{uid}.settings.notifications` are saved and waiting; no token is registered yet.
 - Invite code redeem function. The client checks `expiresAt`, `usedAt` and `revokedAt` itself

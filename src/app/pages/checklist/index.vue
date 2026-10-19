@@ -2,7 +2,7 @@
 import "@/app/app.css";
 import { computed, inject, onBeforeUnmount, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { checklistView, dueLabel, myOpenTasks, ownerChip, queuedTasks, taskOwner, TITLE_MAX } from "@/app/utils/checklistHelpers";
+import { checklistView, dueLabel, ownerChip, taskOwner, TITLE_MAX } from "@/app/utils/checklistHelpers";
 import { dayLabel } from "@/app/utils/entryHelpers";
 import { describeSharedError } from "@/app/utils/sharedHelpers";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
@@ -31,7 +31,6 @@ onBeforeUnmount(() => clearInterval(clock));
 
 const myName = computed(() => displayName(me.value.firstName) || "Me");
 const partnerFirst = computed(() => (partner.value ? displayName(partner.value.firstName) : ""));
-const partnerLabel = computed(() => partnerFirst.value || "your partner");
 const hasPartner = computed(() => Boolean(partnerUid.value));
 
 const tasks = computed(() => rtw.tasks ?? []);
@@ -71,7 +70,7 @@ async function add() {
   showDate.value = false;
 }
 
-// Ticking, and marking my own tasks to pass on at the next handover.
+// Ticking a task done or undone.
 const busy = ref("");
 async function toggle(task) {
   if (busy.value) return;
@@ -82,22 +81,10 @@ async function toggle(task) {
     busy.value = "";
   }
 }
-async function setQueued(task, on) {
-  if (busy.value) return;
-  busy.value = task.id;
-  try {
-    await rtw.updateTask(task.id, { queued: on });
-  } finally {
-    busy.value = "";
-  }
-}
 
-const canPass = (task) => hasPartner.value && !task.done && taskOwner(task, myUid.value) === "me";
 const chip = (task) => ownerChip(task, { meUid: myUid.value, meName: myName.value, partnerName: partnerFirst.value || "Your partner" });
 const dueOf = (task) => dueLabel(task, now.value);
 
-const queuedCount = computed(() => queuedTasks(tasks.value, myUid.value).length);
-const hasOwnOpen = computed(() => myOpenTasks(tasks.value, myUid.value).length > 0);
 
 // The Done section stays folded until asked for.
 const showDone = ref(false);
@@ -125,9 +112,6 @@ function doneMeta(task) {
           <h1 class="nt-title ck__title">Our checklist</h1>
           <p class="ck__sub">Who is doing what, in one place.</p>
         </div>
-        <RouterLink v-if="hasPartner && hasOwnOpen" :to="ROUTES.HANDOVER" class="app-link ck__handover">
-          Hand over to {{ partnerLabel }}
-        </RouterLink>
       </header>
 
       <p v-if="listLoading" class="ck__status">Loading the checklist...</p>
@@ -209,15 +193,6 @@ function doneMeta(task) {
               </label>
               <div class="ck__side">
                 <span class="ck__chip"><span class="ck__initial" aria-hidden="true">{{ chip(task).initial }}</span>{{ chip(task).name }}</span>
-                <template v-if="canPass(task)">
-                  <span v-if="task.queued" class="ck__queued">
-                    Queued for handover
-                    <button type="button" class="app-textbtn" :disabled="busy === task.id" @click="setQueued(task, false)">Undo</button>
-                  </span>
-                  <button v-else type="button" class="app-textbtn" :disabled="busy === task.id" @click="setQueued(task, true)">
-                    Give to {{ partnerLabel }}
-                  </button>
-                </template>
               </div>
             </li>
           </ul>
@@ -247,11 +222,6 @@ function doneMeta(task) {
             </li>
           </ul>
         </section>
-
-        <p v-if="queuedCount" class="ck__queue">
-          <span>{{ queuedCount === 1 ? "1 task is ready to pass on." : `${queuedCount} tasks are ready to pass on.` }}</span>
-          <RouterLink :to="ROUTES.HANDOVER" class="app-link">Go to handover</RouterLink>
-        </p>
       </section>
     </template>
   </div>
@@ -266,7 +236,6 @@ function doneMeta(task) {
 .ck__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .ck__title { font-size: 2.5rem; line-height: 1.2; margin: 0 0 8px; }
 .ck__sub { margin: 0; font-size: 1rem; color: var(--nt-muted); }
-.ck__handover { margin-top: 12px; }
 
 .ck__card { display: flex; flex-direction: column; gap: 20px; max-width: 760px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; padding: 24px; }
 
@@ -308,9 +277,7 @@ function doneMeta(task) {
 .ck__side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 0.875rem; }
 .ck__chip { display: inline-flex; align-items: center; gap: 8px; color: var(--nt-ink); }
 .ck__initial { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; font-size: 0.75rem; border: 1px solid var(--nt-ink); border-radius: 50%; }
-.ck__queued { display: inline-flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-end; gap: 8px; color: var(--nt-muted); }
 
-.ck__queue { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 0; padding-top: 16px; border-top: 1px solid var(--nt-line); font-size: 0.875rem; color: var(--nt-ink); }
 
 @media (max-width: 575px) {
   .ck__card { padding: 20px 16px; }

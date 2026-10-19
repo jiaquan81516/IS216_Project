@@ -578,13 +578,6 @@ async function confirmDelete() {
             @update:model-value="set('notifications.partnerLogs', $event)"
           />
           <Toggle
-            id="st-handovers"
-            label="Handovers"
-            :disabled="!form.notifications.push"
-            :model-value="form.notifications.handovers"
-            @update:model-value="set('notifications.handovers', $event)"
-          />
-          <Toggle
             id="st-swaps"
             label="Swap requests"
             :disabled="!form.notifications.push"
@@ -706,7 +699,7 @@ async function confirmDelete() {
               :options="timeFormatOptions"
               @update:model-value="set('display.timeFormat', $event)"
             />
-            <p class="st__muted">How times read in the care log and the handover.</p>
+            <p class="st__muted">How times read in the care log.</p>
           </div>
           <div class="st__field">
             <ChipGroup

@@ -8,7 +8,6 @@ export const ROUTES = Object.freeze({
   HOME: "/home",
   CARE_LOG: "/care-log",
   CHECKLIST: "/checklist",
-  HANDOVER: "/handover",
   ROTA: "/rota",
   WELLNESS: "/wellness",
   SUPPORT: "/support",

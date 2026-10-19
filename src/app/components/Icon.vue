@@ -51,13 +51,6 @@ const PATHS = {
   edit: ["M17 3a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"],
   trash: ["M3 6h18", "M8 6V4h8v2", "M6 6l1 14h10l1-14", "M10 11v6M14 11v6"],
   plus: ["M12 5v14M5 12h14"],
-  // An arrow passing between two points: the end of one shift, the start of the next.
-  handover: [
-    "M4 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
-    "M16 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
-    "M9 12h5.5",
-    "M12 9.5 14.5 12 12 14.5",
-  ],
   sliders: ["M4 7h9M17 7h3M4 17h3M11 17h9", "M13 7a2 2 0 1 0 4 0a2 2 0 1 0-4 0", "M7 17a2 2 0 1 0 4 0a2 2 0 1 0-4 0"],
   locate: ["M8 12a4 4 0 1 0 8 0a4 4 0 1 0-8 0", "M12 2v3M12 19v3M2 12h3M19 12h3"],
   minus: ["M5 12h14"],
