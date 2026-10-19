@@ -7,7 +7,6 @@ import { ROUTES } from "@/app/routes";
 const GUARDED_APP_PATHS = new Set([
   ROUTES.HOME,
   ROUTES.CARE_LOG,
-  ROUTES.HANDOVER,
   ROUTES.ROTA,
   ROUTES.WELLNESS,
   ROUTES.SUPPORT,

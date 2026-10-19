@@ -1,8 +1,7 @@
 // Firestore for the shared return to work plan. Pure helpers stay in rtwHelpers.js.
 //
 // households/{hid}/tasks/{taskId}
-//   { title, group, due, owner, queued, done, doneAt, doneBy, notes, createdBy, createdAt, updatedAt }
-//   queued: the owner has marked it to pass on at the next handover
+//   { title, group, due, owner, done, doneAt, doneBy, notes, createdBy, createdAt, updatedAt }
 // households/{hid}/rtw/plan
 //   { returnDate, responsibilities: { areaKey: uid|"both"|null },
 //     pumping: { items: { key: bool }, sessions, times }, updatedAt, updatedBy }
@@ -57,13 +56,12 @@ export function subscribeRtwPlan(hid, onData, onError) {
   );
 }
 
-export async function addTask(hid, uid, { title, group = "home", owner = "both", due = null, notes = "", queued = false, done = false }) {
+export async function addTask(hid, uid, { title, group = "home", owner = "both", due = null, notes = "", done = false }) {
   const ref = await addDoc(tasksRef(hid), {
     title,
     group,
     due,
     owner,
-    queued: Boolean(queued),
     done,
     doneAt: done ? serverTimestamp() : null,
     doneBy: done ? uid : null,
