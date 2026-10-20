@@ -17,6 +17,8 @@ import { buildStream, unreadCount } from "@/app/utils/stream";
 import { resetLimits } from "@/app/utils/limits";
 import { NAV } from "@/app/data/nav";
 import { ROUTES } from "@/app/routes";
+import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
+import { babySummary } from "@/api/profile";
 
 defineOptions({ name: "AppShell" });
 
@@ -32,6 +34,19 @@ const tone = computed(() => {
 // Load the household once here; the sidebar and the page share it.
 const home = useHome();
 provide(HOME_KEY, home);
+
+// Which baby this dashboard shows. Loaded once the household id is known.
+const { babies, selectedBaby, selectBaby, loadBabies } = useSelectedBaby();
+watch(home.householdId, (id) => id && loadBabies(id), { immediate: true });
+
+// The switcher only appears on pages that belong to one baby.
+const PER_BABY = [ROUTES.HOME, ROUTES.CARE_LOG, ROUTES.CHECKLIST, ROUTES.ROTA, ROUTES.CALENDAR];
+const showSwitcher = computed(
+  () =>
+    babies.value.length > 1 &&
+    PER_BABY.some((p) => route.path === p || route.path.startsWith(p + "/")),
+);
+
 // One live entries listener, shared by Home and the care log. It waits for the household id.
 const entriesShared = useEntries(home.householdId);
 provide(ENTRIES_KEY, entriesShared);
@@ -85,8 +100,13 @@ const names = computed(() => {
   const mine = displayName(home.me.value.firstName);
   return home.partner.value ? `${mine} & ${displayName(home.partner.value.firstName)}` : mine;
 });
-const babyName = computed(() => (home.baby.value.name ? `Baby ${home.baby.value.name}` : ""));
-const babyAge = computed(() => home.baby.value.line || "");
+const babyName = computed(() => {
+  const name = selectedBaby.value?.babyName ?? home.baby.value.name;
+  return name ? `Baby ${name}` : "";
+});
+const babyAge = computed(() =>
+  selectedBaby.value ? babySummary(selectedBaby.value).line : home.baby.value.line || "",
+);
 const userName = computed(() => displayName(home.me.value.displayName || home.me.value.firstName));
 // A small dot on Home while there are posts from your partner you have not
 // acknowledged. The stream on Home is where you clear them.
@@ -152,6 +172,12 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           <p class="side__chip-names">{{ names }}</p>
           <p v-if="babyName" class="side__chip-baby">{{ babyName }}</p>
           <p v-if="babyAge" class="side__chip-age">{{ babyAge }}</p>
+          <select v-if="showSwitcher" class="side__switch" :value="selectedBaby?.id" aria-label="Switch baby" @change="selectBaby($event.target.value)">
+            <option v-for="(b, i) in babies" :key="b.id" :value="b.id">
+              {{ b.babyName || `Baby ${i + 1}` }}
+            </option>
+          </select>
+          <RouterLink class="side__add" :to="{ path: ROUTES.PROFILE, query: { addBaby: '1' } }" @click="menuOpen = false">Add a baby</RouterLink>
         </div>
 
         <nav aria-label="Main">
@@ -285,6 +311,30 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   line-height: 1.4;
   color: var(--nt-muted);
 }
+
+.side__add {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--nt-plum);
+  text-decoration: none;
+}
+.side__add:hover { text-decoration: underline; }
+.side__add:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
+
+.side__switch {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--nt-line);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--nt-ink);
+}
+
 .side__nav {
   display: flex;
   flex-direction: column;

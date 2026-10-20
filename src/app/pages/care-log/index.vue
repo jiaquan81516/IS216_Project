@@ -22,6 +22,8 @@ import {
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { ENTRIES_PAGE_SIZE, useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { usePrefs } from "@/app/composables/usePrefs";
+import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
+const { selectedBabyId } = useSelectedBaby();
 
 defineOptions({ name: "CareLogPage" });
 
@@ -44,17 +46,24 @@ const shared = inject(ENTRIES_KEY, null) ?? useEntries(householdId);
 const live = shared.entries;
 const entriesLoading = computed(() => !householdId.value || shared.loading.value);
 const entriesErrorInfo = computed(() => (shared.error.value ? describeEntriesError(shared.error.value.code) : null));
+const { selectedBaby } = useSelectedBaby();
+const babyId = computed(() => selectedBaby.value?.id ?? "primary");
+
+// `older` keeps every baby's older entries, so the "load older" position stays correct.
+// Only the selected baby's are shown.
 const older = ref([]);
+const olderForBaby = computed(() => older.value.filter((e) => (e.babyId ?? "primary") === babyId.value));
 const exhausted = ref(false);
 const loadingMore = ref(false);
 const moreError = ref("");
 
 const allEntries = computed(() => {
   const ids = new Set(live.value.map((e) => e.id));
-  const merged = [...live.value, ...older.value.filter((e) => !ids.has(e.id))];
+  const merged = [...live.value, ...olderForBaby.value.filter((e) => !ids.has(e.id))];
   return merged.sort((a, b) => (toDate(b.at)?.getTime() ?? 0) - (toDate(a.at)?.getTime() ?? 0));
 });
-const hasMore = computed(() => !exhausted.value && live.value.length >= PAGE_SIZE);
+// Based on the unfiltered list, so the button doesn't depend on how many belong to this baby.
+const hasMore = computed(() => !exhausted.value && shared.raw.value.length >= PAGE_SIZE);
 
 const newIds = ref(new Set());
 const requested = new Set();
@@ -108,7 +117,10 @@ function retry() {
 }
 
 async function more() {
-  const last = allEntries.value[allEntries.value.length - 1];
+  const pool = [...shared.raw.value, ...older.value].sort(
+  (a, b) => (toDate(b.at)?.getTime() ?? 0) - (toDate(a.at)?.getTime() ?? 0),
+  );
+  const last = pool[pool.length - 1];
   if (!last || loadingMore.value) return;
   loadingMore.value = true;
   moreError.value = "";
@@ -189,8 +201,9 @@ async function onSave(payload) {
       });
     } else {
       const id = await addEntry({ uid: myUid.value }, householdId.value, {
-        ...payload,
-        byName: displayName(me.value.firstName),
+      ...payload,
+      byName: displayName(me.value.firstName),
+      babyId: babyId.value,
       });
       // A third night log tells the partner. The server counts the night and sends it once.
       const when = new Date(payload.at);
