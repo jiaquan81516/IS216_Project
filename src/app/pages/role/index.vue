@@ -1,5 +1,5 @@
 <script setup>
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import Header from "@/app/components/Header.vue";
 import StepHeader from "@/app/components/StepHeader.vue";
 import OptionCard from "@/app/components/OptionCard.vue";
@@ -11,23 +11,23 @@ import "@/app/app.css";
 defineOptions({ name: "RolePage" });
 
 const router = useRouter();
+const route = useRoute();
 const draft = useOnboarding();
 
 const OPTIONS = [
   { value: ROLES[0], title: "Parent", description: "I am one of the baby's parents." },
-  { value: ROLES[1], title: "Partner", description: "I am supporting the primary caregiver." },
-  { value: ROLES[2], title: "Family caregiver", description: "I help with the baby's everyday care." },
+  { value: ROLES[1], title: "Caregiver", description: "I help care for the baby and have been invited by a parent." },
 ];
 
 function choose(value) {
   draft.setRole(value);
-  router.push(ROUTES.ACCOUNT);
+  router.push(route.query.code ? { path: ROUTES.ACCOUNT, query: { code: route.query.code } } : ROUTES.ACCOUNT);
 }
 </script>
 
 <template>
   <Header>
-    <AppLink :to="ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
+    <AppLink :to="route.query.code ? { path: ROUTES.SIGN_IN, query: { code: route.query.code } } : ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
   </Header>
   <main class="app-container app-body">
     <div class="app-stack">
@@ -47,13 +47,13 @@ function choose(value) {
           @select="choose(o.value)"
         />
       </div>
-      <AppLink :to="ROUTES.JOURNEY" class="app-text-link">Back</AppLink>
+      <AppLink :to="route.query.code ? { path: ROUTES.JOURNEY, query: { code: route.query.code } } : ROUTES.JOURNEY" class="app-text-link">Back</AppLink>
     </div>
   </main>
 </template>
 
 <style scoped>
-.options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; width: 100%; }
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; width: 100%; }
 .options :deep(.option) { min-height: 168px; padding: 28px; }
 .options :deep(.option__title) { font-size: 1.125rem; }
 .options :deep(.option__desc) { font-size: 0.9375rem; }
