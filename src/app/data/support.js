@@ -12,14 +12,22 @@ export const SUPPORT_GUIDES = Object.freeze(
   })),
 );
 
-// Contacts copied from the V2 Help side panel. The team has not verified these numbers or hours.
+// Contacts copied from the V2 Help side panel, plus Singapore's 995 and 999. The team has not
+// verified the helpline numbers or hours.
 export const TRUSTED_RESOURCES = Object.freeze([
   {
     id: "emergency",
-    name: "Local emergency number",
-    purpose: "If you or your partner feel unsafe, or are thinking about self-harm, call straight away.",
-    tel: null,
-    telLabel: "",
+    name: "Emergency ambulance",
+    purpose: "If anyone is in danger, has been hurt, or might harm themselves or the baby. Or go to the nearest A&E.",
+    tel: "tel:995",
+    telLabel: "995",
+  },
+  {
+    id: "police",
+    name: "Police",
+    purpose: "If you feel unsafe at home.",
+    tel: "tel:999",
+    telLabel: "999",
   },
   {
     id: "doctor",
