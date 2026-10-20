@@ -7,12 +7,12 @@ import OptionCard from "@/app/components/OptionCard.vue";
 import Field from "@/app/components/Field.vue";
 import BabyFields from "@/app/components/BabyFields.vue";
 import AddBabyForm from "@/app/components/AddBabyForm.vue";
+import BabyCard from "@/app/components/BabyCard.vue";
 import AppLink from "@/components/ui/AppLink.vue";
 import { SAMPLE } from "@/shared/constants/appConstants";
 import { ROUTES } from "@/app/routes";
 import { useAuth } from "@/app/composables/useAuth";
 import {
-  babySummary,
   createHousehold,
   getHouseholdBabies,
   getHouseholdInviteCode,
@@ -203,7 +203,10 @@ async function copyCode() {
               />
             </div>
             <div v-if="mode === 'create'" class="app-stack app-stack--24 w-100">
-              <BabyFields v-model="baby" id-prefix="app-baby" hint="You can change this later." :disabled="busy" />
+              <div class="hh__baby app-stack app-stack--24">
+                <h3 class="hh__baby-title">Baby 1</h3>
+                <BabyFields v-model="baby" id-prefix="app-baby" hint="You can change this later." :disabled="busy" />
+              </div>
               <p class="hh__hint">Twins or more? You can add each baby on the next step.</p>
             </div>
             <Field
@@ -226,14 +229,9 @@ async function copyCode() {
         </template>
 
         <template v-else>
-                    <div v-if="babies.length" class="hh__babies">
+          <div v-if="babies.length" class="hh__babies">
             <h3 class="hh__babies-title">Your babies</h3>
-            <ul class="hh__babies-list">
-              <li v-for="(baby, i) in babies" :key="baby.id">
-                <strong>{{ baby.babyName || `Baby ${i + 1}` }}</strong>
-                <span v-if="babySummary(baby).line"> · {{ babySummary(baby).line }}</span>
-              </li>
-            </ul>
+            <BabyCard v-for="(baby, i) in babies" :key="baby.id" :baby="baby" :number="i + 1" />
           </div>
 
           <p v-if="babyAdded" class="app-text-link" role="status">{{ babyAdded }} was added.</p>
@@ -241,7 +239,7 @@ async function copyCode() {
           <button v-if="!showAddBaby" type="button" class="app-btn app-btn--outline" @click="showAddBaby = true">
             Add another baby
           </button>
-          <AddBabyForm v-else :household-id="householdId" @added="onBabyAdded" @cancel="showAddBaby = false" />
+          <AddBabyForm v-else :household-id="householdId" :number="babies.length + 1" @added="onBabyAdded" @cancel="showAddBaby = false" />
           <div v-if="!joined && inviteCode" class="hh__code" aria-label="Invitation code">
             <p class="hh__code-text">{{ inviteCode }}</p>
           </div>
@@ -293,10 +291,12 @@ async function copyCode() {
 .hh__private { display: flex; flex-direction: column; gap: 6px; padding: 16px 16px 18px; background: var(--nt-butter); border: 1.5px dashed var(--nt-butter-d); border-radius: 8px; font-size: 0.875rem; }
 .hh__private-label { margin: 0; font-weight: 600; color: var(--nt-butter-d); }
 .hh__private-text { margin: 0; line-height: 21px; color: var(--nt-ink); }
+.hh__baby { width: 100%; padding: 20px 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.hh__baby-title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.4; color: var(--nt-ink); }
+@media (max-width: 575px) { .hh__baby { padding: 16px; } }
 .hh__hint { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
-.hh__babies { width: 100%; padding: 16px; background: var(--nt-gray); border-radius: 8px; }
-.hh__babies-title { margin: 0 0 8px; font-size: 1rem; font-weight: 600; color: var(--nt-ink); }
-.hh__babies-list { margin: 0; padding-left: 20px; font-size: 0.875rem; line-height: 24px; color: var(--nt-ink); }
+.hh__babies { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.hh__babies-title { margin: 0; font-size: 1rem; font-weight: 600; color: var(--nt-ink); }
 
 @media (max-width: 1099px) {
   .hh { grid-template-columns: minmax(0, 1fr); gap: 32px; }

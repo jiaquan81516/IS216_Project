@@ -9,6 +9,7 @@ import "@/app/app.css";
 const props = defineProps({
   householdId: { type: String, required: true },
   idPrefix: { type: String, default: "app-add-baby" },
+  number: { type: Number, required: true }, // this baby's place in the list, shown as "Baby 2"
   solid: { type: Boolean, default: true }, // false when another solid button is already on the page
 });
 const emit = defineEmits(["added", "cancel"]);
@@ -42,7 +43,8 @@ async function submit() {
 </script>
 
 <template>
-  <form class="app-stack app-stack--24 w-100" novalidate :aria-busy="busy" @submit.prevent="submit">
+  <form class="abf app-stack app-stack--24 w-100" novalidate :aria-busy="busy" @submit.prevent="submit">
+    <h3 class="abf__title">Baby {{ number }}</h3>
     <BabyFields v-model="fields" :id-prefix="idPrefix" :disabled="busy" />
     <div v-if="error" class="alert alert-danger app-alert" role="alert">{{ error }}</div>
     <div class="abf__actions">
@@ -53,5 +55,8 @@ async function submit() {
 </template>
 
 <style scoped>
+.abf { padding: 20px 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.abf__title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.4; color: var(--nt-ink); }
+@media (max-width: 575px) { .abf { padding: 16px; } }
 .abf__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 </style>
