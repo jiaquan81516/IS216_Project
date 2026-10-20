@@ -10,6 +10,23 @@ export function dateKey(date = new Date()) {
 }
 
 const clamp = (v) => (Number.isInteger(v) && v >= 1 && v <= 5 ? v : null);
+// Short keys such as "exhausted". Older check-ins have none of the optional fields.
+const cleanList = (list, max) =>
+  Array.isArray(list) ? [...new Set(list.filter((c) => typeof c === "string" && c.length <= 40))].slice(0, max) : [];
+
+function clean(date, value) {
+  return {
+    date,
+    mood: clamp(value.mood),
+    stress: clamp(value.stress),
+    energy: clamp(value.energy),
+    closeness: clamp(value.closeness),
+    concerns: cleanList(value.concerns, 3),
+    body: cleanList(value.body, 8),
+    lifts: cleanList(value.lifts, 8),
+    savedAt: String(value.savedAt ?? ""),
+  };
+}
 
 function load() {
   try {
@@ -19,7 +36,7 @@ function load() {
     for (const [key, value] of Object.entries(data)) {
       const mood = clamp(value?.mood);
       const stress = clamp(value?.stress);
-      if (mood && stress) out[key] = { date: key, mood, stress, savedAt: String(value.savedAt ?? "") };
+      if (mood && stress) out[key] = clean(key, value);
     }
     return out;
   } catch {
@@ -43,9 +60,10 @@ export const useCheckinsStore = defineStore("app-checkins", () => {
     { deep: true, flush: "sync" },
   );
 
-  function save({ mood, stress }, now = new Date()) {
+  // Mood and stress are required; energy, closeness, concerns, body and lifts are optional.
+  function save(answers, now = new Date()) {
     const date = dateKey(now);
-    state.items[date] = { date, mood, stress, savedAt: now.toISOString() };
+    state.items[date] = clean(date, { ...answers, savedAt: now.toISOString() });
     return state.items[date];
   }
 

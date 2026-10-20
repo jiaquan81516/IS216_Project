@@ -153,15 +153,17 @@ watch(formOpen, (open) => {
 onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
 const router = useRouter();
+// Mirrors the Support page tabs; every tab but this one opens /support.
 const SUPPORT_TABS = [
-  { id: "guides", label: "Guides" },
+  { id: "guides", label: "For you" },
+  { id: "baby", label: "Baby care" },
   { id: "rooms", label: "Pumping rooms" },
-  { id: "resources", label: "Trusted resources" },
+  { id: "resources", label: "Who to call" },
 ];
 const supportTab = ref("rooms");
 watch(supportTab, (id) => {
   if (id === "guides") router.push("/support");
-  else if (id === "resources") router.push("/support?tab=resources");
+  else if (id !== "rooms") router.push(`/support?tab=${id}`);
 });
 </script>
 
