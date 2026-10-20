@@ -168,10 +168,14 @@ service cloud.firestore {
       }
 
       // Babies. One document per extra baby in the household (the first baby stays on the
-      // household document). Parents read and write them, in the same shape the household
-      // document uses for its own baby. Nothing is deleted.
+      // household document). Caregivers who can read or add care logs, see appointments,
+      // or view the care brief may read baby details to identify the child. Only parents edit.
       match /babies/{babyId} {
-        allow read: if isPrimaryParent();
+        allow read: if isPrimaryParent()
+          || hasPermission('careBrief')
+          || hasPermission('careLogRead')
+          || hasPermission('careLogAdd')
+          || hasPermission('appointments');
         allow create, update: if isPrimaryParent()
           && request.resource.data.keys().hasOnly(['babyName', 'babyStatus', 'babyDate', 'createdAt'])
           && (request.resource.data.babyName == null

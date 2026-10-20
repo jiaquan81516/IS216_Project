@@ -9,6 +9,7 @@ import { addEntry } from "@/api/entries";
 import { checkInviteCode, getCareBrief, getCaregiverHouseholds, getMember, getRecentCareEntries, getUpcomingCareAppointments, getUserProfile, joinHousehold, setActiveCaregiverHousehold, setCaregiverHouseholdLabel, subscribeCareBrief } from "@/api/profile";
 import { leaveHousehold } from "@/api/account";
 import { ROUTES } from "@/app/routes";
+import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 
 defineOptions({ name: "CareBriefPage" });
 
@@ -32,9 +33,16 @@ const householdInviteLabel = ref("");
 const householdLabelDrafts = ref({});
 const householdManagerBusy = ref(false);
 const householdManagerError = ref("");
+const { babies, selectedBaby, selectedBabyId, babyLoadError, loadBabies, selectBaby } = useSelectedBaby();
 let stopCareBriefSubscription = null;
 
-const babyName = computed(() => household.value?.careBrief?.babyName || "your baby");
+const babyName = computed(() => {
+  if (!selectedBaby.value || selectedBaby.value.id === "primary") {
+    return selectedBaby.value?.babyName || household.value?.careBrief?.babyName || "your baby";
+  }
+  const index = babies.value.findIndex((baby) => baby.id === selectedBaby.value.id);
+  return selectedBaby.value.babyName || `baby ${index + 1}`;
+});
 const caregiverName = computed(() => profile.value?.displayName ? ` for ${profile.value.displayName}` : "");
 const permissions = computed(() => member.value?.permissions ?? {});
 function asDate(value) {
@@ -46,8 +54,10 @@ function timeOf(entry) {
   const date = asDate(entry?.at);
   return date ? new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date) : "Time unavailable";
 }
-const latestFeed = computed(() => entries.value.find((entry) => entry.type === "feed") ?? null);
-const latestNappy = computed(() => entries.value.find((entry) => entry.type === "nappy") ?? null);
+const selectedEntries = computed(() => entries.value.filter((entry) => (entry.babyId ?? "primary") === (selectedBaby.value?.id ?? "primary")));
+const selectedAppointments = computed(() => appointments.value.filter((appointment) => !appointment.babyIds?.length || appointment.babyIds.includes(selectedBaby.value?.id ?? "primary")));
+const latestFeed = computed(() => selectedEntries.value.find((entry) => entry.type === "feed") ?? null);
+const latestNappy = computed(() => selectedEntries.value.find((entry) => entry.type === "nappy") ?? null);
 const careLogTypes = computed(() => ["feed", "sleep", "nappy", "note", ...(permissions.value.careLogMedication ? ["medication"] : [])]);
 
 async function load() {
@@ -64,6 +74,7 @@ async function load() {
     const activeHousehold = caregiverHouseholds.value.find((item) => item.active) ?? caregiverHouseholds.value[0];
     if (!activeHousehold) throw new Error("This account is not currently a member of any caregiver household. Ask a parent to invite you again.");
     const activeHouseholdId = activeHousehold.householdId;
+    await loadBabies(activeHouseholdId);
     const loadedMember = await getMember(activeHouseholdId, uid);
     const careBrief = await getCareBrief(activeHouseholdId, {
       routine: loadedMember?.permissions?.napRoutine === true,
@@ -119,6 +130,11 @@ async function switchHousehold(nextHouseholdId) {
   } finally {
     householdManagerBusy.value = false;
   }
+}
+
+function switchBaby(nextBabyId) {
+  if (!nextBabyId || !babies.value.some((baby) => baby.id === nextBabyId)) return;
+  selectBaby(nextBabyId);
 }
 
 async function addCaregiverHousehold() {
@@ -217,8 +233,15 @@ async function saveCareEntry(payload) {
             <option v-for="item in caregiverHouseholds" :key="item.householdId" :value="item.householdId">{{ item.label }}</option>
           </select>
         </label>
+        <label v-if="babies.length > 1" class="brief__household-select">
+          <span>Baby</span>
+          <select class="app-control" :value="selectedBabyId" aria-label="Switch baby" @change="switchBaby($event.target.value)">
+            <option v-for="(baby, index) in babies" :key="baby.id" :value="baby.id">{{ baby.babyName || `Baby ${index + 1}` }}</option>
+          </select>
+        </label>
         <AppButton variant="outline" size="sm" :disabled="householdManagerBusy" @click="householdManagerOpen = !householdManagerOpen">Manage households</AppButton>
       </div>
+      <p v-if="babyLoadError" class="brief__muted" role="status">We couldn’t load all baby details. Ask a parent to check that your caregiver access includes baby details and that the latest Firestore rules are published.</p>
     </header>
     <section v-if="householdManagerOpen" class="brief__card brief__household-manager" aria-labelledby="brief-households-title">
       <h2 id="brief-households-title">Your caregiving households</h2>
@@ -294,7 +317,7 @@ async function saveCareEntry(payload) {
       </section>
       <section v-if="permissions.appointments" class="brief__card" aria-labelledby="brief-appointments">
         <h2 id="brief-appointments">Upcoming appointments</h2>
-        <div v-if="appointments.length" class="brief__contacts"><p v-for="appointment in appointments" :key="appointment.id"><strong>{{ appointment.title || "Appointment" }}</strong><span> · {{ appointment.date }}<template v-if="appointment.start"> at {{ appointment.start }}</template></span></p></div>
+        <div v-if="selectedAppointments.length" class="brief__contacts"><p v-for="appointment in selectedAppointments" :key="appointment.id"><strong>{{ appointment.title || "Appointment" }}</strong><span> · {{ appointment.date }}<template v-if="appointment.start"> at {{ appointment.start }}</template></span></p></div>
         <p v-else class="brief__muted">No upcoming appointments.</p>
       </section>
       <p class="brief__foot">This brief shows only the information shared with you. The child’s parents can change or remove your access at any time.</p>

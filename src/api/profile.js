@@ -527,8 +527,21 @@ export async function addBaby(householdId, baby = {}) {
 
 export async function getHouseholdBabies(householdId) {
   if (!householdId) return [];
-  const household = await getHousehold(householdId);
-  if (!household) return [];
+  let household = null;
+  try {
+    household = await getHousehold(householdId);
+  } catch {
+    // Caregivers cannot read the household document. Their shared child section carries
+    // the primary baby's name, while the babies collection contains the additional children.
+    try {
+      household = await getCareBrief(householdId, {
+        routine: false, feeding: false, contacts: false, child: true, allergies: false, medications: false,
+      });
+    } catch {
+      household = {};
+    }
+  }
+  if (!household) household = {};
   const primary = {
     id: "primary",
     ...cleanBaby({
