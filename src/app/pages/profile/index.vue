@@ -1,15 +1,53 @@
 <script setup>
 import "@/app/app.css";
-import { computed, inject, ref, watch } from "vue";
+import { computed, inject, nextTick, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import AppButton from "@/components/ui/AppButton.vue";
 import { auth } from "@/api/firebase";
 import { cleanDisplayName, DISPLAY_NAME_MAX, PROFILE_ROLES, saveProfile } from "@/api/account";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
+import AddBabyForm from "@/app/components/AddBabyForm.vue";
+import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
+import BabyCard from "@/app/components/BabyCard.vue";
 
 defineOptions({ name: "ProfilePage" });
 
 const home = inject(HOME_KEY, null) ?? useHome();
 const { loading, error, reload, me, profile, householdId } = home;
+
+const route = useRoute();
+const router = useRouter();
+const { babies, loadBabies } = useSelectedBaby();
+const showAddBaby = ref(false);
+const babyAdded = ref("");
+const babiesEl = ref(null);
+
+async function openAddBaby() {
+  showAddBaby.value = true;
+  await nextTick();
+  babiesEl.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function onBabyAdded(added) {
+  babyAdded.value = added;
+  showAddBaby.value = false;
+  await loadBabies(householdId.value);
+}
+
+// The sidebar "Add a baby" link lands here with ?addBaby=1.
+onMounted(async () => {
+  if (route.query.addBaby !== "1") return;
+  router.replace({ query: {} });
+  const stop = watch(
+    () => loading.value || !householdId.value,
+    async (waiting) => {
+      if (waiting) return;
+      stop();
+      await openAddBaby();
+    },
+    { immediate: true },
+  );
+});
 
 const name = ref("");
 const role = ref(null);
@@ -157,6 +195,21 @@ async function save() {
         </p>
       </div>
     </form>
+
+    <section v-if="!loading && !error && householdId" id="pf-babies" ref="babiesEl" class="pf__row" aria-labelledby="pf-babies-h">
+      <div class="pf__side">
+        <h2 id="pf-babies-h" class="pf__h">Babies</h2>
+        <p class="pf__muted">Twins or a new arrival? Add each baby here.</p>
+      </div>
+      <div class="pf__stack">
+        <BabyCard v-for="(b, i) in babies" :key="b.id" :baby="b" :number="i + 1" />
+        <p v-if="babyAdded" class="pf__status" role="status">{{ babyAdded }} was added.</p>
+        <AddBabyForm v-if="showAddBaby" :household-id="householdId" :number="babies.length + 1" :solid="false" id-prefix="pf-add-baby" @added="onBabyAdded" @cancel="showAddBaby = false" />
+        <div v-else class="pf__actions">
+          <AppButton variant="outline" size="sm" @click="openAddBaby">Add a baby</AppButton>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -180,6 +233,7 @@ async function save() {
 .pf__chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .pf__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
 .pf__status { margin: 0; font-size: 0.875rem; line-height: 20px; color: var(--nt-muted); }
+.pf__stack { display: flex; flex-direction: column; gap: 12px; }
 .pf__alert { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 @media (max-width: 991px) {
   .pf__title { font-size: 2rem; }

@@ -11,12 +11,18 @@ import { isClientModeAvailable } from "@/api/googleCalendarClient";
 import {
   deleteAccountFallback,
   leaveHousehold,
-  saveHouseholdBaby,
   saveSettingsPatch,
 } from "@/api/account";
 import { expiresInText, inviteState } from "@/app/utils/inviteHelpers";
 import { takeLimit } from "@/app/utils/limits";
-import { checkInviteCode, getInvite, joinHousehold, regenerateInviteCode } from "@/api/profile";
+import {
+  checkInviteCode,
+  getHouseholdBabies,
+  getInvite,
+  joinHousehold,
+  regenerateInviteCode,
+  updateBaby,
+} from "@/api/profile";
 import {
   debounce,
   normaliseSettings,
@@ -36,6 +42,7 @@ import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { setDisplay } from "@/app/composables/usePrefs";
 import { usePush } from "@/app/composables/usePush";
 import { ROUTES } from "@/app/routes";
+import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 
 defineOptions({ name: "SettingsPage" });
 
@@ -412,46 +419,63 @@ async function submitJoin() {
   }
 }
 
-// Household baby details
-const baby = ref({ babyName: "", babyStatus: "born", babyDate: "" });
+// Household babies: one editable entry per baby.
+const { loadBabies: refreshSidebarBabies } = useSelectedBaby();
+const babyList = ref([]);
 const babySaved = ref("");
 const babyError = ref("");
+const babyTimers = new Map(); // one debounced save per baby
 
 watch(
-  () => household?.value,
-  (value) => {
-    baby.value = {
-      babyName: value?.babyName ?? "",
-      babyStatus: value?.babyStatus === "expected" ? "expected" : "born",
-      babyDate: value?.babyDate ?? "",
-    };
+  () => householdId.value,
+  async (id) => {
+    if (!id) {
+      babyList.value = [];
+      return;
+    }
+    try {
+      const list = await getHouseholdBabies(id);
+      babyList.value = list.map((b) => ({
+        id: b.id,
+        babyName: b.babyName ?? "",
+        babyStatus: b.babyStatus === "expected" ? "expected" : "born",
+        babyDate: b.babyDate ?? "",
+      }));
+    } catch {
+      babyList.value = [];
+    }
   },
   { immediate: true },
 );
 
-async function writeBaby() {
+async function writeBaby(id) {
+  const target = babyList.value.find((b) => b.id === id);
+  if (!target) return;
   babyError.value = "";
   try {
-    await saveHouseholdBaby(householdId.value, baby.value);
+    await updateBaby(householdId.value, id, target);
     babySaved.value = "Saved";
+    await refreshSidebarBabies(householdId.value);
   } catch (cause) {
     console.error("[app settings household]", cause?.code, cause);
     babySaved.value = "";
     babyError.value =
       cause?.code === "permission-denied"
-        ? "Your database rules do not allow saving the household yet. Publish the latest firestore.rules, then try again."
-        : "We could not save the household. Check your connection and try again.";
+        ? "Your database rules do not allow saving the baby yet. Ask jq to publish the latest firestore.rules, then try again."
+        : "We could not save the baby. Check your connection and try again.";
   }
 }
-const flushBaby = debounce(writeBaby, 600);
-function setBaby(key, value) {
-  baby.value[key] = value;
+function setBaby(id, key, value) {
+  const target = babyList.value.find((b) => b.id === id);
+  if (!target) return;
+  target[key] = value;
   babySaved.value = "";
-  flushBaby();
+  if (!babyTimers.has(id)) babyTimers.set(id, debounce(() => writeBaby(id), 600));
+  babyTimers.get(id)();
 }
-onBeforeUnmount(() => flushBaby.flush());
+onBeforeUnmount(() => babyTimers.forEach((t) => t.flush()));
 
-const babyDateLabel = computed(() => (baby.value.babyStatus === "expected" ? "Due date" : "Date of birth"));
+const babyDateLabel = (b) => (b.babyStatus === "expected" ? "Due date" : "Date of birth");
 const babyStatusOptions = [
   { value: "born", label: "Baby is here" },
   { value: "expected", label: "Baby is on the way" },
@@ -791,35 +815,38 @@ async function confirmDelete() {
       <section class="st__card" aria-labelledby="st-house">
         <h2 id="st-house" class="st__h">Household</h2>
         <div class="st__rows">
-          <div class="st__field">
-            <label class="st__label" for="st-baby-name">Baby's name</label>
-            <input
-              id="st-baby-name"
-              class="app-control st__input"
-              type="text"
-              maxlength="40"
-              autocomplete="off"
-              :value="baby.babyName"
-              @input="setBaby('babyName', $event.target.value)"
-            />
-          </div>
-          <div class="st__field">
-            <ChipGroup
-              label="Baby status"
-              :model-value="baby.babyStatus"
-              :options="babyStatusOptions"
-              @update:model-value="setBaby('babyStatus', $event)"
-            />
-          </div>
-          <div class="st__field">
-            <label class="st__label" for="st-baby-date">{{ babyDateLabel }}</label>
-            <input
-              id="st-baby-date"
-              class="app-control st__time"
-              type="date"
-              :value="baby.babyDate"
-              @change="setBaby('babyDate', $event.target.value)"
-            />
+          <div v-for="(b, i) in babyList" :key="b.id" class="st__baby">
+            <h3 v-if="babyList.length > 1" class="st__baby-h">Baby {{ i + 1 }}</h3>
+            <div class="st__field">
+              <label class="st__label" :for="`st-baby-name-${i}`">Baby's name</label>
+              <input
+                :id="`st-baby-name-${i}`"
+                class="app-control st__input"
+                type="text"
+                maxlength="40"
+                autocomplete="off"
+                :value="b.babyName"
+                @input="setBaby(b.id, 'babyName', $event.target.value)"
+              />
+            </div>
+            <div class="st__field">
+              <ChipGroup
+                :label="`Baby status${babyList.length > 1 ? ' ' + (i + 1) : ''}`"
+                :model-value="b.babyStatus"
+                :options="babyStatusOptions"
+                @update:model-value="setBaby(b.id, 'babyStatus', $event)"
+              />
+            </div>
+            <div class="st__field">
+              <label class="st__label" :for="`st-baby-date-${i}`">{{ babyDateLabel(b) }}</label>
+              <input
+                :id="`st-baby-date-${i}`"
+                class="app-control st__time"
+                type="date"
+                :value="b.babyDate"
+                @change="setBaby(b.id, 'babyDate', $event.target.value)"
+              />
+            </div>
           </div>
           <p class="st__save" role="status" aria-live="polite">{{ babySaved }}</p>
           <p v-if="babyError" class="app-error-text" role="alert">{{ babyError }}</p>
@@ -918,6 +945,10 @@ async function confirmDelete() {
 .st__points { margin: 0; padding-left: 20px; font-size: 0.875rem; line-height: 1.5; color: var(--nt-ink); }
 .st__kept { display: flex; flex-direction: column; gap: 8px; }
 .st__retry { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.st__baby { display: flex; flex-direction: column; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--nt-line); }
+.st__baby:last-of-type { border-bottom: 0; }
+.st__baby-h { margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--nt-ink); }
+
 @media (max-width: 991px) {
   .st__title { font-size: 2rem; }
   .st__layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
