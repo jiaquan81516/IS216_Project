@@ -8,7 +8,7 @@ import { cleanDisplayName, DISPLAY_NAME_MAX, PROFILE_ROLES, saveProfile } from "
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import AddBabyForm from "@/app/components/AddBabyForm.vue";
 import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
-import { babySummary } from "@/api/profile";
+import BabyCard from "@/app/components/BabyCard.vue";
 
 defineOptions({ name: "ProfilePage" });
 
@@ -201,15 +201,10 @@ async function save() {
         <h2 id="pf-babies-h" class="pf__h">Babies</h2>
         <p class="pf__muted">Twins or a new arrival? Add each baby here.</p>
       </div>
-      <div class="pf__card">
-        <ul v-if="babies.length" class="pf__babies">
-          <li v-for="(b, i) in babies" :key="b.id">
-            <strong>{{ b.babyName || `Baby ${i + 1}` }}</strong>
-            <span v-if="babySummary(b).line" class="pf__muted">{{ babySummary(b).line }}</span>
-          </li>
-        </ul>
+      <div class="pf__stack">
+        <BabyCard v-for="(b, i) in babies" :key="b.id" :baby="b" :number="i + 1" />
         <p v-if="babyAdded" class="pf__status" role="status">{{ babyAdded }} was added.</p>
-        <AddBabyForm v-if="showAddBaby" :household-id="householdId" :solid="false" id-prefix="pf-add-baby" @added="onBabyAdded" @cancel="showAddBaby = false" />
+        <AddBabyForm v-if="showAddBaby" :household-id="householdId" :number="babies.length + 1" :solid="false" id-prefix="pf-add-baby" @added="onBabyAdded" @cancel="showAddBaby = false" />
         <div v-else class="pf__actions">
           <AppButton variant="outline" size="sm" @click="openAddBaby">Add a baby</AppButton>
         </div>
@@ -238,8 +233,7 @@ async function save() {
 .pf__chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .pf__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
 .pf__status { margin: 0; font-size: 0.875rem; line-height: 20px; color: var(--nt-muted); }
-.pf__babies { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.pf__babies li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 0.9375rem; color: var(--nt-ink); }
+.pf__stack { display: flex; flex-direction: column; gap: 12px; }
 .pf__alert { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 @media (max-width: 991px) {
   .pf__title { font-size: 2rem; }
