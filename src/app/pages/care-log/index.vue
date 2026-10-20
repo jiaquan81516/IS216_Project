@@ -22,7 +22,6 @@ import {
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { ENTRIES_PAGE_SIZE, useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { usePrefs } from "@/app/composables/usePrefs";
-import { handoverRows } from "@/app/utils/handoverHelpers";
 import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 const { selectedBabyId } = useSelectedBaby();
 
