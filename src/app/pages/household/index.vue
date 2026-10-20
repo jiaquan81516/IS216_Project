@@ -131,6 +131,7 @@ async function submit() {
     }
     if (authProfile.value) authProfile.value = { ...authProfile.value, onboarded: true };
   } catch (cause) {
+    console.error("[app household]", cause?.code, cause);
     // Invite errors already carry a sentence for the user (see inviteHelpers.js).
     error.value = String(cause?.code ?? "").startsWith("invite/")
       ? cause.message
