@@ -1,5 +1,5 @@
 <script setup>
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import Header from "@/app/components/Header.vue";
 import StepHeader from "@/app/components/StepHeader.vue";
 import OptionCard from "@/app/components/OptionCard.vue";
@@ -11,6 +11,7 @@ import "@/app/app.css";
 defineOptions({ name: "JourneyPage" });
 
 const router = useRouter();
+const route = useRoute();
 const draft = useOnboarding();
 
 const OPTIONS = [
@@ -21,13 +22,13 @@ const OPTIONS = [
 
 function choose(value) {
   draft.setJourney(value);
-  router.push(ROUTES.ROLE);
+  router.push(route.query.code ? { path: ROUTES.ROLE, query: { code: route.query.code } } : ROUTES.ROLE);
 }
 </script>
 
 <template>
   <Header>
-    <AppLink :to="ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
+    <AppLink :to="route.query.code ? { path: ROUTES.SIGN_IN, query: { code: route.query.code } } : ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
   </Header>
   <main class="app-container app-body">
     <div class="app-stack">

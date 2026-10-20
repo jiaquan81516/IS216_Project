@@ -220,6 +220,13 @@ service cloud.firestore {
         allow delete: if hasPermission('careLogEdit') && resource.data.by == request.auth.uid;
       }
 
+      // Shared membership check for the collections below. The care log keeps its own copy
+      // so that rule stays exactly as it was.
+      function sharedMember() {
+        return signedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds;
+      }
+
       // The sleep rota plan. One document, "settings". Either parent may save it, and every
       // write says who did it.
       match /rota/{docId} {

@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import Header from "@/app/components/Header.vue";
 import StepHeader from "@/app/components/StepHeader.vue";
 import Field from "@/app/components/Field.vue";
@@ -15,6 +15,7 @@ import "@/app/app.css";
 defineOptions({ name: "AccountPage" });
 
 const router = useRouter();
+const route = useRoute();
 const draft = useOnboarding();
 const { busy, error, signUp, continueWithGoogle } = useAuth();
 
@@ -36,27 +37,27 @@ async function submit() {
   if (!validate()) return;
   draft.name = name.value.trim();
   const to = await signUp({ name: draft.name, email: email.value.trim(), password: password.value });
-  if (to) router.push(to);
+  if (to) router.push(route.query.code && to === ROUTES.HOUSEHOLD ? { path: to, query: { code: route.query.code } } : to);
 }
 
 async function google() {
   if (busy.value) return;
   error.value = "";
   const to = await continueWithGoogle();
-  if (to) router.push(to);
+  if (to) router.push(route.query.code && to === ROUTES.HOUSEHOLD ? { path: to, query: { code: route.query.code } } : to);
 }
 </script>
 
 <template>
   <Header>
-    <AppLink :to="ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
+    <AppLink :to="route.query.code ? { path: ROUTES.SIGN_IN, query: { code: route.query.code } } : ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
   </Header>
   <main class="app-container app-body">
     <div class="account">
       <div class="app-stack app-stack--24 account__intro">
         <StepHeader :step="3" title="Create your account" lead="Use an email you can access on your phone." />
         <p class="app-note">Your wellness responses are private by default. You decide what to share with your partner.</p>
-        <AppLink :to="ROUTES.ROLE" class="app-text-link">Back</AppLink>
+        <AppLink :to="route.query.code ? { path: ROUTES.ROLE, query: { code: route.query.code } } : ROUTES.ROLE" class="app-text-link">Back</AppLink>
       </div>
       <div class="app-stack app-stack--24 account__card">
         <form class="app-stack app-stack--24 w-100" novalidate :aria-busy="busy" @submit.prevent="submit">
@@ -100,7 +101,7 @@ async function google() {
         <GoogleButton :disabled="busy" @click="google" />
         <p class="account__signin">
           <span>Already have an account?</span>
-          <AppLink :to="ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
+          <AppLink :to="route.query.code ? { path: ROUTES.SIGN_IN, query: { code: route.query.code } } : ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
         </p>
       </div>
     </div>

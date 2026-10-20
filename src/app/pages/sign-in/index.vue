@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import Header from "@/app/components/Header.vue";
 import Field from "@/app/components/Field.vue";
 import GoogleButton from "@/app/components/GoogleButton.vue";
@@ -13,6 +13,7 @@ import "@/app/app.css";
 defineOptions({ name: "SignInPage" });
 
 const router = useRouter();
+const route = useRoute();
 const { busy, error, signIn, continueWithGoogle } = useAuth();
 
 const email = ref("");
@@ -30,14 +31,14 @@ async function submit() {
   error.value = "";
   if (!validate()) return;
   const to = await signIn({ email: email.value.trim(), password: password.value });
-  if (to) router.push(to);
+  if (to) router.push(route.query.code && to === ROUTES.HOUSEHOLD ? { path: to, query: { code: route.query.code } } : to);
 }
 
 async function google() {
   if (busy.value) return;
   error.value = "";
   const to = await continueWithGoogle();
-  if (to) router.push(to);
+  if (to) router.push(route.query.code && to === ROUTES.HOUSEHOLD ? { path: to, query: { code: route.query.code } } : to);
 }
 </script>
 
@@ -79,7 +80,7 @@ async function google() {
       <GoogleButton :disabled="busy" @click="google" />
       <p class="signin__new">
         <span>New here?</span>
-        <AppLink :to="ROUTES.JOURNEY" class="app-text-link--sm">Create your household</AppLink>
+        <AppLink :to="route.query.code ? { path: ROUTES.JOURNEY, query: { code: route.query.code } } : ROUTES.JOURNEY" class="app-text-link--sm">Create your household</AppLink>
       </p>
       <AppLink :to="ROUTES.LANDING" class="app-text-link">Back</AppLink>
     </div>

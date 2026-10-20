@@ -17,6 +17,7 @@ import {
   getHouseholdBabies,
   getHouseholdInviteCode,
   joinHousehold,
+  getMember,
 } from "@/api/profile";
 import "@/app/app.css";
 import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
@@ -33,6 +34,7 @@ const loaded = ref(false);
 const linkCode = typeof route?.query?.code === "string" ? route.query.code : "";
 const mode = ref(linkCode ? "join" : "create"); // create | join
 const code = ref(linkCode);
+const householdLabel = ref("");
 const codeError = ref("");
 const error = ref("");
 const busy = ref(false);
@@ -73,7 +75,7 @@ const lead = computed(() => {
   if (!ready.value) {
     return `A household connects care logs, tasks and appointments for the people supporting ${baby.value.name.trim() || "your baby"}.`;
   }
-  if (joined.value) return "You can now see what your partner shares.";
+  if (joined.value) return "You can now see what the household’s parents share.";
   return inviteCode.value
     ? "Share this code with your partner. They enter it after creating their account."
     : "Your household is set up.";
@@ -83,11 +85,18 @@ onMounted(async () => {
   try {
     const profile = await loadProfile();
     if (profile?.householdId) {
-      let existing = null;
-      try {
-        existing = await getHouseholdInviteCode(profile.householdId);
-      } catch {
-        existing = null;
+      const membership = await getMember(profile.householdId, currentUser.value?.uid);
+      if (membership?.accessLevel === "caregiver" && linkCode) {
+        // Existing caregivers can accept additional caregiver invitations from their link.
+        mode.value = "join";
+      } else if (membership) {
+        let existing = null;
+        try {
+          existing = await getHouseholdInviteCode(profile.householdId);
+        } catch {
+          existing = null;
+        }
+        result.value = { kind: "created", inviteCode: existing };
       }
       result.value = { kind: "created", inviteCode: existing };
       householdId.value = profile.householdId;
@@ -127,7 +136,7 @@ async function submit() {
     return;
   }
   if (mode.value === "join" && !code.value.trim()) {
-    codeError.value = "Enter the invitation code from your partner.";
+    codeError.value = "Enter an invitation code from a parent in that household.";
     return;
   }
   busy.value = true;
@@ -141,7 +150,7 @@ async function submit() {
       result.value = { kind: "created", inviteCode: created.inviteCode };
       householdId.value = created.householdId;
     } else {
-      const joinedHousehold = await joinHousehold(user, code.value);
+      await joinHousehold(user, code.value, { householdLabel: householdLabel.value });
       result.value = { kind: "joined", inviteCode: null };
       householdId.value = joinedHousehold.householdId;
     }
@@ -197,7 +206,7 @@ async function copyCode() {
                 variant="radio"
                 data-mode="join"
                 title="Join a household"
-                description="Enter the invitation code from your partner."
+                description="Join a household with an invitation code."
                 :selected="mode === 'join'"
                 :tabindex="mode === 'join' ? 0 : -1"
                 @select="selectMode('join')"
@@ -217,8 +226,17 @@ async function copyCode() {
               label="Invitation code"
               :placeholder="SAMPLE.inviteCode"
               autocomplete="off"
-              hint="Ask your partner for the code on their screen."
+              hint="Ask a parent in that household for an invitation code."
               :error="codeError"
+              :disabled="busy"
+            />
+            <Field
+              v-if="mode === 'join'"
+              id="app-household-label"
+              v-model="householdLabel"
+              label="Name this household (optional)"
+              placeholder="e.g. Lee Family"
+              hint="Only you can see this name."
               :disabled="busy"
             />
             <div v-if="error" class="alert alert-danger app-alert" role="alert">{{ error }}</div>
