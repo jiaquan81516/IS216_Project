@@ -40,7 +40,7 @@ const { babies, selectedBaby, selectBaby, loadBabies } = useSelectedBaby();
 watch(home.householdId, (id) => id && loadBabies(id), { immediate: true });
 
 // The switcher only appears on pages that belong to one baby.
-const PER_BABY = [ROUTES.HOME, ROUTES.CARE_LOG, ROUTES.CHECKLIST, ROUTES.HANDOVER, ROUTES.ROTA, ROUTES.CALENDAR];
+const PER_BABY = [ROUTES.HOME, ROUTES.CARE_LOG, ROUTES.CHECKLIST, ROUTES.ROTA, ROUTES.CALENDAR];
 const showSwitcher = computed(
   () =>
     babies.value.length > 1 &&
@@ -177,6 +177,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
               {{ b.babyName || `Baby ${i + 1}` }}
             </option>
           </select>
+          <RouterLink class="side__add" :to="{ path: ROUTES.PROFILE, query: { addBaby: '1' } }" @click="menuOpen = false">Add a baby</RouterLink>
         </div>
 
         <nav aria-label="Main">
@@ -310,6 +311,17 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   line-height: 1.4;
   color: var(--nt-muted);
 }
+
+.side__add {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--nt-plum);
+  text-decoration: none;
+}
+.side__add:hover { text-decoration: underline; }
+.side__add:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
 
 .side__switch {
   width: 100%;
