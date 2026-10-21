@@ -16,21 +16,30 @@ import {
 } from "@/api/profile";
 import { CAREGIVER_PERMISSIONS, CAREGIVER_ROLES, caregiverPermissions } from "@/app/utils/caregiverHelpers";
 import { expiresInText, inviteState } from "@/app/utils/inviteHelpers";
+import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 
 const props = defineProps({ householdId: { type: String, required: true }, uid: { type: String, required: true } });
 const loading = ref(true);
 const busy = ref(false);
+const briefLoading = ref(false);
 const error = ref("");
 const status = ref("");
 const briefStatus = ref("");
 const briefError = ref("");
 const members = ref([]);
 const invites = ref([]);
+const { babies, loadBabies } = useSelectedBaby();
+const briefBabyId = ref("primary");
 const form = ref({ name: "", role: "grandparent", permissions: caregiverPermissions("grandparent") });
 const brief = ref({ feeding: "", napRoutine: "", allergies: "", medications: "", parentContacts: "" });
 const copiedCode = ref("");
 const lastCreatedInvite = ref(null);
 const caregiverMembers = computed(() => members.value.filter((member) => member.accessLevel !== "parent"));
+const briefBabyLabel = computed(() => {
+  const index = babies.value.findIndex((baby) => baby.id === briefBabyId.value);
+  const baby = babies.value[index];
+  return baby?.babyName || `Baby ${index + 1 || 1}`;
+});
 const pendingInvites = computed(() => {
   if (!lastCreatedInvite.value || invites.value.some((invite) => invite.code === lastCreatedInvite.value.code)) return invites.value;
   return [...invites.value, {
@@ -52,6 +61,38 @@ function editRole(member, role) {
   member.permissions = caregiverPermissions(role);
 }
 
+async function loadBriefForBaby(babyId = briefBabyId.value) {
+  if (!props.householdId || !babyId) return;
+  briefLoading.value = true;
+  brief.value = { feeding: "", napRoutine: "", allergies: "", medications: "", parentContacts: "" };
+  try {
+    const loaded = await getCareBrief(props.householdId, { babyId, child: false });
+    if (babyId !== briefBabyId.value) return;
+    brief.value = {
+      feeding: loaded.feeding ?? "",
+      napRoutine: loaded.napRoutine ?? "",
+      allergies: loaded.allergies ?? "",
+      medications: loaded.medications ?? "",
+      parentContacts: loaded.parentContacts ?? "",
+    };
+    briefError.value = "";
+  } catch (cause) {
+    if (babyId !== briefBabyId.value) return;
+    console.error("[app caregiver brief load]", cause?.code, cause);
+    briefError.value = "We couldn’t load this baby’s care brief. Check your connection and try again.";
+  } finally {
+    if (babyId === briefBabyId.value) briefLoading.value = false;
+  }
+}
+
+function selectBriefBaby(babyId) {
+  if (!babies.value.some((baby) => baby.id === babyId)) return;
+  briefBabyId.value = babyId;
+  briefError.value = "";
+  briefStatus.value = "";
+  void loadBriefForBaby(babyId);
+}
+
 async function refresh() {
   loading.value = true;
   error.value = "";
@@ -61,7 +102,10 @@ async function refresh() {
       listCaregiverInvites(props.householdId),
       getHousehold(props.householdId),
     ]);
-    const childName = await syncCareBriefChildName(props.householdId, household?.babyName);
+    await syncCareBriefChildName(props.householdId, household?.babyName);
+    await loadBabies(props.householdId);
+    if (!babies.value.some((baby) => baby.id === briefBabyId.value)) briefBabyId.value = "primary";
+    await loadBriefForBaby(briefBabyId.value);
     if (lastCreatedInvite.value && loadedInvites.some((invite) => invite.code === lastCreatedInvite.value.code)) {
       lastCreatedInvite.value = null;
     }
@@ -73,7 +117,6 @@ async function refresh() {
       saving: false,
     }));
     invites.value = loadedInvites.filter((invite) => inviteState(invite) === "valid");
-    brief.value = { feeding: "", napRoutine: "", allergies: "", medications: "", parentContacts: "", babyName: childName };
   } catch (cause) {
     console.error("[app caregivers]", cause?.code, cause);
     error.value = cause?.code === "permission-denied"
@@ -165,27 +208,19 @@ async function saveBrief() {
   busy.value = true;
   briefError.value = "";
   briefStatus.value = "Saving care brief…";
+  const babyId = briefBabyId.value;
   try {
-    const savedBrief = await saveCareBrief(props.householdId, brief.value);
-    const confirmedBrief = await getCareBrief(props.householdId);
+    const savedBrief = await saveCareBrief(props.householdId, brief.value, babyId);
+    const confirmedBrief = await getCareBrief(props.householdId, { babyId, child: false });
     const fields = ["feeding", "napRoutine", "allergies", "medications", "parentContacts"];
     const verified = fields.every((field) => (confirmedBrief[field] ?? "") === (savedBrief[field] ?? ""));
     if (!verified) throw new Error("The saved care brief could not be read back from this household.");
-    brief.value = {
-      ...brief.value,
-      feeding: "",
-      napRoutine: "",
-      allergies: "",
-      medications: "",
-      parentContacts: "",
-    };
-    briefStatus.value = "Care brief saved successfully.";
+    brief.value = { ...savedBrief };
+    briefStatus.value = `Care brief for ${briefBabyLabel.value} saved successfully.`;
   } catch (cause) {
     console.error("[app caregiver brief]", cause?.code, cause);
     briefStatus.value = "";
-    briefError.value = cause?.code === "permission-denied"
-      ? "Firebase denied this save (permission-denied). The deployed Firestore rules may not include the care brief permissions yet."
-      : `Could not save the care brief${cause?.code ? ` (${cause.code})` : ""}. Check your connection and try again.`;
+    briefError.value = "We couldn’t save this baby’s care brief. Check your connection and try again.";
   } finally {
     busy.value = false;
   }
@@ -231,16 +266,18 @@ onMounted(refresh);
       </div>
 
       <form class="cg__card" @submit.prevent="saveBrief">
-        <h3>Today’s care brief</h3>
-        <p class="cg__muted">Add the routine and contact details caregivers should see. Health instructions appear only for caregivers with health access.</p>
+        <h3>Care brief for {{ briefBabyLabel }}</h3>
+        <p class="cg__muted">Each baby has their own care instructions and contact details. Health instructions appear only for caregivers with health access.</p>
+        <label class="cg__field"><span>Baby</span><select class="app-control" :value="briefBabyId" :disabled="busy || briefLoading" @change="selectBriefBaby($event.target.value)"><option v-for="(baby, index) in babies" :key="baby.id" :value="baby.id">{{ baby.babyName || `Baby ${index + 1}` }}</option></select></label>
+        <p v-if="briefLoading" class="cg__muted" aria-live="polite">Loading this baby’s care brief…</p>
         <label v-for="item in [
   { key: 'feeding', label: 'Usual feeding method' },
           { key: 'napRoutine', label: 'Nap routine' },
           { key: 'allergies', label: 'Allergies' },
           { key: 'medications', label: 'Medication instructions' },
-          { key: 'parentContacts', label: 'Parent contact details' },
-        ]" :key="item.key" class="cg__field"><span>{{ item.label }}</span><textarea v-model="brief[item.key]" class="app-control" rows="2" maxlength="500" :placeholder="({ feeding: 'e.g. bottle feed, breastfeeding', napRoutine: 'e.g. nap at 3pm', allergies: 'e.g. peanut allergy, or none', medications: 'e.g. medicine name and dosage', parentContacts: 'e.g. phone numbers to call' })[item.key]" /></label>
-        <AppButton type="button" variant="outline" :disabled="busy" @click="saveBrief">{{ busy ? "Saving…" : "Save care brief" }}</AppButton>
+          { key: 'parentContacts', label: 'Parent contact details for this baby' },
+        ]" :key="item.key" class="cg__field"><span>{{ item.label }}</span><textarea v-model="brief[item.key]" class="app-control" rows="2" maxlength="500" :disabled="busy || briefLoading" :placeholder="({ feeding: 'e.g. bottle feed, breastfeeding', napRoutine: 'e.g. nap at 3pm', allergies: 'e.g. peanut allergy, or none', medications: 'e.g. medicine name and dosage', parentContacts: 'e.g. phone numbers to call' })[item.key]" /></label>
+        <AppButton type="button" variant="outline" :disabled="busy || briefLoading" @click="saveBrief">{{ busy ? "Saving…" : "Save care brief" }}</AppButton>
         <p v-if="briefStatus" class="cg__muted" role="status" aria-live="polite">{{ briefStatus }}</p>
         <p v-if="briefError" class="app-error-text" role="alert">{{ briefError }}</p>
       </form>

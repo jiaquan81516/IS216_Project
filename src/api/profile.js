@@ -429,54 +429,98 @@ export async function revokeCaregiverInvite(code) {
   await updateDoc(doc(db, "invites", normaliseInviteCode(code)), { revokedAt: serverTimestamp() });
 }
 
-export async function saveCareBrief(householdId, brief) {
+const CARE_BRIEF_SECTIONS = ["feeding", "routine", "contacts", "allergies", "medications"];
+
+function babyCareBriefRef(householdId, babyId, section) {
+  return doc(db, "households", householdId, "careBrief", babyId, "sections", section);
+}
+
+export async function saveCareBrief(householdId, brief, babyId = "primary") {
+  if (!householdId || !babyId) return {};
   const feeding = { feeding: String(brief?.feeding ?? "").trim().slice(0, 500) };
   const routine = { napRoutine: String(brief?.napRoutine ?? "").trim().slice(0, 500) };
   const contacts = { parentContacts: String(brief?.parentContacts ?? "").trim().slice(0, 500) };
   const allergies = { allergies: String(brief?.allergies ?? "").trim().slice(0, 500) };
   const medications = { medications: String(brief?.medications ?? "").trim().slice(0, 500) };
-  const child = { babyName: String(brief?.babyName ?? "").trim().slice(0, 80) };
-  await Promise.all([
-    setDoc(doc(db, "households", householdId, "careBrief", "feeding"), feeding, { merge: true }),
-    setDoc(doc(db, "households", householdId, "careBrief", "routine"), routine, { merge: true }),
-    setDoc(doc(db, "households", householdId, "careBrief", "contacts"), contacts, { merge: true }),
-    setDoc(doc(db, "households", householdId, "careBrief", "child"), child, { merge: true }),
-    setDoc(doc(db, "households", householdId, "careBrief", "allergies"), allergies, { merge: true }),
-    setDoc(doc(db, "households", householdId, "careBrief", "medications"), medications, { merge: true }),
-  ]);
-  const clean = { ...feeding, ...routine, ...contacts, ...child, ...allergies, ...medications };
+  const batch = writeBatch(db);
+  batch.set(babyCareBriefRef(householdId, babyId, "feeding"), feeding, { merge: true });
+  batch.set(babyCareBriefRef(householdId, babyId, "routine"), routine, { merge: true });
+  batch.set(babyCareBriefRef(householdId, babyId, "contacts"), contacts, { merge: true });
+  batch.set(babyCareBriefRef(householdId, babyId, "allergies"), allergies, { merge: true });
+  batch.set(babyCareBriefRef(householdId, babyId, "medications"), medications, { merge: true });
+  await batch.commit();
+  const clean = { ...feeding, ...routine, ...contacts, ...allergies, ...medications };
   return clean;
 }
 
-export async function getCareBrief(householdId, { routine = true, feeding = true, contacts = true, child = true, allergies = true, medications = true } = {}) {
-  const sections = ["routine", "feeding", "contacts", "child", "allergies", "medications"];
-  const enabled = { routine, feeding, contacts, child, allergies, medications };
-  const snaps = await Promise.all(sections.map((section) => enabled[section]
-    ? getDocFromServer(doc(db, "households", householdId, "careBrief", section))
-    : Promise.resolve(null)));
-  return Object.assign({}, ...snaps.map((snap) => snap?.exists() ? snap.data() : {}));
+export async function getCareBrief(householdId, {
+  babyId = "primary",
+  routine = true,
+  feeding = true,
+  contacts = true,
+  child = true,
+  allergies = true,
+  medications = true,
+} = {}) {
+  if (!householdId || !babyId) return {};
+  const enabled = { routine, feeding, contacts, allergies, medications };
+  const sections = CARE_BRIEF_SECTIONS.filter((section) => enabled[section]);
+  const [legacySnaps, babySnaps, childSnap] = await Promise.all([
+    babyId === "primary"
+      ? Promise.all(sections.map((section) => getDocFromServer(doc(db, "households", householdId, "careBrief", section))))
+      : Promise.resolve([]),
+    Promise.all(sections.map((section) => getDocFromServer(babyCareBriefRef(householdId, babyId, section)))),
+    child ? getDocFromServer(doc(db, "households", householdId, "careBrief", "child")) : Promise.resolve(null),
+  ]);
+  const values = {};
+  for (let index = 0; index < sections.length; index += 1) {
+    const legacy = legacySnaps[index];
+    const baby = babySnaps[index];
+    Object.assign(values, legacy?.exists() ? legacy.data() : {}, baby?.exists() ? baby.data() : {});
+  }
+  if (childSnap?.exists()) Object.assign(values, childSnap.data());
+  return values;
 }
 
 export function subscribeCareBrief(householdId, options, onData, onError) {
-  const { routine = true, feeding = true, contacts = true, child = true, allergies = true, medications = true } = options ?? {};
-  const enabled = { routine, feeding, contacts, child, allergies, medications };
-  const sections = ["routine", "feeding", "contacts", "child", "allergies", "medications"];
-  const enabledSections = sections.filter((section) => enabled[section]);
-  const values = Object.fromEntries(sections.map((section) => [section, {}]));
+  const { babyId = "primary", routine = true, feeding = true, contacts = true, child = true, allergies = true, medications = true } = options ?? {};
+  const enabled = { routine, feeding, contacts, allergies, medications };
+  const sections = CARE_BRIEF_SECTIONS.filter((section) => enabled[section]);
+  const values = Object.fromEntries(sections.map((section) => [section, { legacy: {}, baby: {} }]));
+  if (child) values.child = { legacy: {}, baby: {} };
   const received = new Set();
   let active = true;
-  const unsubscribes = enabledSections.map((section) => onSnapshot(
-    doc(db, "households", householdId, "careBrief", section),
-    (snap) => {
-      values[section] = snap.exists() ? snap.data() : {};
+  const publish = () => {
+    if (!active || received.size !== sections.length + (child ? 1 : 0)) return;
+    const merged = {};
+    for (const section of sections) Object.assign(merged, values[section].legacy, values[section].baby);
+    if (child) Object.assign(merged, values.child.legacy);
+    onData(merged);
+  };
+  const watchDoc = (ref, section, source) => onSnapshot(ref, (snap) => {
+    values[section][source] = snap.exists() ? snap.data() : {};
+    if (source === "baby") values[section].babyReady = true;
+    if (source === "legacy") values[section].legacyReady = true;
+    if (section === "child" && source === "legacy") {
       received.add(section);
-      if (active && received.size === enabledSections.length) onData(Object.assign({}, ...Object.values(values)));
-    },
-    (cause) => {
-      if (active) onError?.(cause);
-    },
-  ));
-  if (active && enabledSections.length === 0) onData({});
+    } else if (section !== "child" && values[section].babyReady
+      && (!values[section].legacyNeeded || values[section].legacyReady)) {
+      received.add(section);
+    }
+    publish();
+  }, (cause) => {
+    if (active) onError?.(cause);
+  });
+  const unsubscribes = sections.flatMap((section) => {
+    values[section].legacyNeeded = babyId === "primary";
+    const subscriptions = [watchDoc(babyCareBriefRef(householdId, babyId, section), section, "baby")];
+    if (babyId === "primary") subscriptions.push(watchDoc(doc(db, "households", householdId, "careBrief", section), section, "legacy"));
+    return subscriptions;
+  });
+  if (child) {
+    unsubscribes.push(watchDoc(doc(db, "households", householdId, "careBrief", "child"), "child", "legacy"));
+  }
+  if (sections.length + (child ? 1 : 0) === 0) onData({});
   return () => {
     active = false;
     unsubscribes.forEach((unsubscribe) => unsubscribe());

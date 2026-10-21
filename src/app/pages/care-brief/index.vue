@@ -34,7 +34,10 @@ const householdLabelDrafts = ref({});
 const householdManagerBusy = ref(false);
 const householdManagerError = ref("");
 const { babies, selectedBaby, selectedBabyId, babyLoadError, loadBabies, selectBaby } = useSelectedBaby();
+const briefLoading = ref(false);
+const briefError = ref("");
 let stopCareBriefSubscription = null;
+let briefLoadRun = 0;
 
 const babyName = computed(() => {
   if (!selectedBaby.value || selectedBaby.value.id === "primary") {
@@ -60,7 +63,51 @@ const latestFeed = computed(() => selectedEntries.value.find((entry) => entry.ty
 const latestNappy = computed(() => selectedEntries.value.find((entry) => entry.type === "nappy") ?? null);
 const careLogTypes = computed(() => ["feed", "sleep", "nappy", "note", ...(permissions.value.careLogMedication ? ["medication"] : [])]);
 
+function careBriefOptions(babyId) {
+  return {
+    babyId,
+    routine: member.value?.permissions?.napRoutine === true,
+    feeding: member.value?.permissions?.feedingInstructions === true,
+    contacts: member.value?.permissions?.careBrief === true,
+    child: member.value?.permissions?.careBrief === true,
+    allergies: member.value?.permissions?.allergyInfo === true,
+    medications: member.value?.permissions?.medicationInfo === true,
+  };
+}
+
+async function loadSelectedCareBrief() {
+  if (!householdId.value || !member.value) return;
+  const run = ++briefLoadRun;
+  const activeHouseholdId = householdId.value;
+  const options = careBriefOptions(selectedBabyId.value);
+  stopCareBriefSubscription?.();
+  stopCareBriefSubscription = null;
+  briefLoading.value = true;
+  briefError.value = "";
+  household.value = { careBrief: {} };
+  try {
+    const careBrief = await getCareBrief(activeHouseholdId, options);
+    if (run !== briefLoadRun) return;
+    household.value = { careBrief };
+    stopCareBriefSubscription = subscribeCareBrief(activeHouseholdId, options, (latestCareBrief) => {
+      if (run === briefLoadRun) household.value = { careBrief: latestCareBrief };
+    }, (cause) => {
+      if (run === briefLoadRun) {
+        console.error("[app care brief updates]", cause?.code, cause);
+        briefError.value = "Care instructions could not be updated. Try refreshing the page.";
+      }
+    });
+  } catch (cause) {
+    if (run !== briefLoadRun) return;
+    console.error("[app care brief]", cause?.code, cause);
+    briefError.value = "We couldn’t load this baby’s care brief. Check your connection and try again.";
+  } finally {
+    if (run === briefLoadRun) briefLoading.value = false;
+  }
+}
+
 async function load() {
+  briefLoadRun += 1;
   stopCareBriefSubscription?.();
   stopCareBriefSubscription = null;
   loading.value = true;
@@ -76,30 +123,10 @@ async function load() {
     const activeHouseholdId = activeHousehold.householdId;
     await loadBabies(activeHouseholdId);
     const loadedMember = await getMember(activeHouseholdId, uid);
-    const careBrief = await getCareBrief(activeHouseholdId, {
-      routine: loadedMember?.permissions?.napRoutine === true,
-      feeding: loadedMember?.permissions?.feedingInstructions === true,
-      contacts: loadedMember?.permissions?.careBrief === true,
-      child: loadedMember?.permissions?.careBrief === true,
-      allergies: loadedMember?.permissions?.allergyInfo === true,
-      medications: loadedMember?.permissions?.medicationInfo === true,
-    });
     member.value = loadedMember;
     profile.value = { ...loadedProfile, householdId: activeHouseholdId };
     householdId.value = activeHouseholdId;
-    household.value = { careBrief };
-    stopCareBriefSubscription = subscribeCareBrief(activeHouseholdId, {
-      routine: loadedMember?.permissions?.napRoutine === true,
-      feeding: loadedMember?.permissions?.feedingInstructions === true,
-      contacts: loadedMember?.permissions?.careBrief === true,
-      child: loadedMember?.permissions?.careBrief === true,
-      allergies: loadedMember?.permissions?.allergyInfo === true,
-      medications: loadedMember?.permissions?.medicationInfo === true,
-    }, (latestCareBrief) => {
-      household.value = { careBrief: latestCareBrief };
-    }, (cause) => {
-      console.error("[app care brief updates]", cause?.code, cause);
-    });
+    await loadSelectedCareBrief();
     if (member.value?.permissions?.careLogRead) entries.value = await getRecentCareEntries(activeHouseholdId);
     else entries.value = [];
     if (member.value?.permissions?.appointments) appointments.value = await getUpcomingCareAppointments(activeHouseholdId);
@@ -115,7 +142,10 @@ async function load() {
 }
 
 onMounted(load);
-onUnmounted(() => stopCareBriefSubscription?.());
+onUnmounted(() => {
+  briefLoadRun += 1;
+  stopCareBriefSubscription?.();
+});
 
 async function switchHousehold(nextHouseholdId) {
   if (!nextHouseholdId || nextHouseholdId === householdId.value || householdManagerBusy.value) return;
@@ -132,9 +162,10 @@ async function switchHousehold(nextHouseholdId) {
   }
 }
 
-function switchBaby(nextBabyId) {
+async function switchBaby(nextBabyId) {
   if (!nextBabyId || !babies.value.some((baby) => baby.id === nextBabyId)) return;
   selectBaby(nextBabyId);
+  await loadSelectedCareBrief();
 }
 
 async function addCaregiverHousehold() {
@@ -235,13 +266,15 @@ async function saveCareEntry(payload) {
         </label>
         <label v-if="babies.length > 1" class="brief__household-select">
           <span>Baby</span>
-          <select class="app-control" :value="selectedBabyId" aria-label="Switch baby" @change="switchBaby($event.target.value)">
+          <select class="app-control" :value="selectedBabyId" aria-label="Switch baby" :disabled="loading || briefLoading" @change="switchBaby($event.target.value)">
             <option v-for="(baby, index) in babies" :key="baby.id" :value="baby.id">{{ baby.babyName || `Baby ${index + 1}` }}</option>
           </select>
         </label>
         <AppButton variant="outline" size="sm" :disabled="householdManagerBusy" @click="householdManagerOpen = !householdManagerOpen">Manage households</AppButton>
       </div>
-      <p v-if="babyLoadError" class="brief__muted" role="status">We couldn’t load all baby details. Ask a parent to check that your caregiver access includes baby details and that the latest Firestore rules are published.</p>
+      <p v-if="babyLoadError" class="brief__muted" role="status">We couldn’t load all baby details. Try refreshing the page or ask a parent to check your caregiver access.</p>
+      <p v-if="briefLoading" class="brief__muted" aria-live="polite">Loading {{ babyName }}’s care instructions…</p>
+      <p v-if="briefError" class="brief__muted" role="alert">{{ briefError }}</p>
     </header>
     <section v-if="householdManagerOpen" class="brief__card brief__household-manager" aria-labelledby="brief-households-title">
       <h2 id="brief-households-title">Your caregiving households</h2>
