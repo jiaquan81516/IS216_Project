@@ -220,9 +220,10 @@ separated by a 1px line:
 - Caregivers: create multiple one-use invite links for a grandparent, domestic helper,
   babysitter, childcare provider or another trusted caregiver. Each role starts with a suggested
   permission set; parents can customize it later or remove a caregiver. The separate
-  `/care-brief` route shows only shared routine and health information, the last feed/diaper
-  change when care-log read is allowed, and appointments when enabled. Feeding and health notes
-  live in separate `careBrief` documents so Firestore can gate each category independently.
+  `/care-brief` route shows the selected baby's shared routine and health information, the last
+  feed/diaper change when care-log read is allowed, and appointments when enabled. Parents edit
+  a separate care brief for each baby. Feeding and health notes live in separate Firestore
+  documents so access is gated by category and baby.
   Invite links carry their code through account creation; the invite supplies the caregiver's
   membership role and permissions when they join.
 - Household: baby name, status and date, saved to `households/{hid}` by a primary parent on the same
