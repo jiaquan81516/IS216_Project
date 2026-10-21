@@ -10,7 +10,8 @@ users/{uid}
   checkins/{yyyy-mm-dd}          PRIVATE
 households/{householdId}
   members/{uid}
-  careBrief/{feeding|routine|contacts|child|allergies|medications}
+  careBrief/{feeding|routine|contacts|child|allergies|medications}  legacy/primary name
+  careBrief/{babyId}/sections/{feeding|routine|contacts|allergies|medications}
   entries/{entryId}
   rota/settings
   nights/{yyyy-mm-dd}
@@ -84,12 +85,15 @@ Settings
   the member themselves may change their profile fields. Primary parents manage caregiver
   roles and permissions; caregivers cannot grant themselves access.
 
-### households/{id}/careBrief/{feeding|routine|contacts|child|allergies|medications}
-- `feeding`: the feeding method; `routine`: napRoutine; `contacts`: parentContacts; `child`:
-  babyName (at most 80 characters); `allergies`: allergy information; `medications`: medication
-  instructions. Every field except babyName is at most 500 characters.
+### households/{id}/careBrief/{babyId}/sections/{feeding|routine|contacts|allergies|medications}
+- Each baby's care instructions are separate. `feeding`: feeding method; `routine`: napRoutine;
+  `contacts`: parentContacts; `allergies`: allergy information; `medications`: medication
+  instructions. Each field is at most 500 characters.
 - Only parents can write these documents. Rules independently gate each document with
   `feedingInstructions`, `napRoutine`, `careBrief`, `allergyInfo` and `medicationInfo`.
+- Existing `households/{id}/careBrief/{feeding|routine|contacts|allergies|medications}` documents
+  remain as the primary baby's read fallback until that baby is saved from the updated editor.
+- `households/{id}/careBrief/child` retains the primary baby's name for caregiver household labels.
 - Caregiver permission keys: `careBrief`, `careLogRead`, `careLogAdd`, `careLogEdit`,
   `careLogMedication`, `feedingInstructions`, `napRoutine`, `allergyInfo`, `medicationInfo`
   and `appointments`. Parent membership has

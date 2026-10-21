@@ -45,14 +45,18 @@ let copiedTimer = null;
 
 const householdId = ref("");
 const babies = ref([]);
+const babyListError = ref(false);
+const canManageBabies = ref(false);
 const showAddBaby = ref(false);
 const babyAdded = ref("");
 
 async function loadBabies() {
   try {
     babies.value = await getHouseholdBabies(householdId.value);
+    babyListError.value = false;
   } catch {
     babies.value = [];
+    babyListError.value = true;
   }
 }
 
@@ -90,17 +94,19 @@ onMounted(async () => {
         // Existing caregivers can accept additional caregiver invitations from their link.
         mode.value = "join";
       } else if (membership) {
-        let existing = null;
-        try {
-          existing = await getHouseholdInviteCode(profile.householdId);
-        } catch {
-          existing = null;
+        canManageBabies.value = membership.accessLevel === "parent";
+        let existingInviteCode = null;
+        if (canManageBabies.value) {
+          try {
+            existingInviteCode = await getHouseholdInviteCode(profile.householdId);
+          } catch {
+            existingInviteCode = null;
+          }
         }
-        result.value = { kind: "created", inviteCode: existing };
+        result.value = { kind: "created", inviteCode: existingInviteCode };
+        householdId.value = profile.householdId;
+        await loadBabies();
       }
-      result.value = { kind: "created", inviteCode: existing };
-      householdId.value = profile.householdId;
-      await loadBabies();
     }
   } catch {
     // If the profile cannot be read, fall back to the choice screen.
@@ -149,10 +155,13 @@ async function submit() {
       });
       result.value = { kind: "created", inviteCode: created.inviteCode };
       householdId.value = created.householdId;
+      canManageBabies.value = true;
     } else {
-      await joinHousehold(user, code.value, { householdLabel: householdLabel.value });
-      result.value = { kind: "joined", inviteCode: null };
+      const joinedHousehold = await joinHousehold(user, code.value, { householdLabel: householdLabel.value });
       householdId.value = joinedHousehold.householdId;
+      const membership = await getMember(joinedHousehold.householdId, user.uid);
+      canManageBabies.value = membership?.accessLevel === "parent";
+      result.value = { kind: "joined", inviteCode: null };
     }
     await loadBabies();
     if (authProfile.value) authProfile.value = { ...authProfile.value, onboarded: true };
@@ -249,16 +258,18 @@ async function copyCode() {
 
         <template v-else>
           <div v-if="babies.length" class="hh__babies">
-            <h3 class="hh__babies-title">Your babies</h3>
+            <h3 class="hh__babies-title">{{ babies.length }} {{ babies.length === 1 ? "baby" : "babies" }} in this household</h3>
             <BabyCard v-for="(baby, i) in babies" :key="baby.id" :baby="baby" :number="i + 1" />
           </div>
+          <p v-else-if="joined && babyListError" class="hh__hint">We couldn’t load the household’s baby details. Ask a parent to check your caregiver access and that the latest Firestore rules are published.</p>
+          <p v-else-if="joined" class="hh__hint">The household’s baby details have not been shared with this caregiver account.</p>
 
           <p v-if="babyAdded" class="app-text-link" role="status">{{ babyAdded }} was added.</p>
 
-          <button v-if="!showAddBaby" type="button" class="app-btn app-btn--outline" @click="showAddBaby = true">
+          <button v-if="canManageBabies && !showAddBaby" type="button" class="app-btn app-btn--outline" @click="showAddBaby = true">
             Add another baby
           </button>
-          <AddBabyForm v-else :household-id="householdId" :number="babies.length + 1" @added="onBabyAdded" @cancel="showAddBaby = false" />
+          <AddBabyForm v-else-if="canManageBabies" :household-id="householdId" :number="babies.length + 1" @added="onBabyAdded" @cancel="showAddBaby = false" />
           <div v-if="!joined && inviteCode" class="hh__code" aria-label="Invitation code">
             <p class="hh__code-text">{{ inviteCode }}</p>
           </div>
