@@ -22,6 +22,7 @@ const { busy, error, signUp, continueWithGoogle } = useAuth();
 const name = ref(draft.name);
 const email = ref("");
 const password = ref("");
+const accountRole = ref("user");
 const errors = reactive({ name: "", email: "", password: "" });
 
 function validate() {
@@ -36,8 +37,12 @@ async function submit() {
   error.value = "";
   if (!validate()) return;
   draft.name = name.value.trim();
-  const to = await signUp({ name: draft.name, email: email.value.trim(), password: password.value });
-  if (to) router.push(route.query.code && to === ROUTES.HOUSEHOLD ? { path: to, query: { code: route.query.code } } : to);
+  const to = await signUp({ 
+    name: draft.name, 
+    email: email.value.trim(), 
+    password: password.value,
+    accountRole: accountRole.value });
+  if (to) router.push(to);
 }
 
 async function google() {
