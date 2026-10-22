@@ -20,6 +20,10 @@ import {
 import { describeSharedError } from "@/app/utils/sharedHelpers";
 import { SEED_COORDS } from "@/app/data/pumpingRooms";
 import { useRoomsStore } from "@/app/stores/rooms";
+import RoomManager from "@/app/components/RoomManager.vue";
+import { useAdmin } from "@/composables/useAdmin";
+import { subscribeRoomOverrides } from "@/api/roomManagement";
+import { applyRoomOverrides } from "@/app/utils/roomManagement";
 
 defineOptions({ name: "PumpingRoomsPage" });
 
@@ -29,6 +33,10 @@ const located = ref(false);
 
 const roomsStore = useRoomsStore();
 const listed = ref([]);
+const overrides = ref([]);
+const { isAdmin } = useAdmin();
+const manager = ref(null);
+let stopOverrides;
 
 // Search, filters and view
 const query = ref("");
@@ -64,7 +72,9 @@ function toggleSaved(room) {
 }
 
 // Rooms: database rooms first, then the BMSG directory rooms, de-duplicated.
-const allRooms = computed(() => mergeRooms(prepareCommunityRooms(roomsStore.rooms, SEED_COORDS), listed.value));
+const allRooms = computed(() => mergeRooms(applyRoomOverrides(
+  [...prepareCommunityRooms(roomsStore.rooms, SEED_COORDS), ...listed.value], overrides.value,
+), []));
 const visible = computed(() => {
   const base = view.value === "saved" ? allRooms.value.filter((r) => savedIds.value.includes(r.id)) : allRooms.value;
   const filtered = applyFilters(base, { text: query.value, ...filters.value });
@@ -96,9 +106,12 @@ function onInput(event) {
 }
 onMounted(async () => {
   roomsStore.bind();
+  stopOverrides = subscribeRoomOverrides((rooms) => { overrides.value = rooms; }, () => {
+    message.value = "Room updates could not be loaded. Please refresh and try again.";
+  });
   listed.value = await loadBmsgRooms();
 });
-onBeforeUnmount(() => roomsStore.unbind());
+onBeforeUnmount(() => { roomsStore.unbind(); stopOverrides?.(); });
 
 // Geolocation
 function locate() {
@@ -135,6 +148,7 @@ const formOpen = ref(false);
 const addButton = ref(null);
 const panel = ref(null);
 function openForm() {
+  if (isAdmin.value) { manager.value?.edit(); return; }
   message.value = "";
   formOpen.value = true;
   nextTick(() => panel.value?.focus?.());
@@ -241,6 +255,9 @@ watch(supportTab, (id) => {
             :selected="room.id === selectedId"
             :saved="savedIds.includes(room.id)"
             :show-distance="located"
+            :can-manage="isAdmin"
+            @edit="manager?.edit($event)"
+            @delete="manager?.remove($event)"
             @select="selectFromList"
             @toggle-save="toggleSaved"
           />
@@ -261,6 +278,7 @@ watch(supportTab, (id) => {
         </div>
       </div>
 
+      <RoomManager v-if="isAdmin" ref="manager" />
       <section v-if="formOpen" ref="panel" class="pr__panel" tabindex="-1" aria-labelledby="pr-add-title">
         <div class="pr__panel-head">
           <h2 id="pr-add-title" class="nt-heading nt-heading--sm">Add a pumping room</h2>

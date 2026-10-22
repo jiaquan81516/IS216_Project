@@ -9,6 +9,46 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Only a trusted server can assign this Firebase custom claim.
+    function roomAdmin() {
+      return signedIn() && request.auth.token.get('admin', false) == true;
+    }
+
+    // Admin additions and overrides of community/bundled rooms. Deletion markers
+    // keep bundled listings from reappearing and preserve community report history.
+    match /pumpingRoomOverrides/{roomId} {
+      allow read: if signedIn();
+      allow create, update: if roomAdmin()
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.updatedAt == request.time
+        && (
+          (request.resource.data.deleted == true
+            && request.resource.data.keys().hasOnly(['deleted', 'updatedBy', 'updatedAt']))
+          || (request.resource.data.deleted == false
+            && request.resource.data.keys().hasOnly(['name', 'address', 'details', 'lat', 'lng', 'features', 'status', 'verifiedAt', 'deleted', 'updatedBy', 'updatedAt'])
+            && request.resource.data.name is string
+            && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80
+            && request.resource.data.address is string
+            && request.resource.data.address.size() > 0 && request.resource.data.address.size() <= 200
+            && request.resource.data.details is string
+            && request.resource.data.details.size() > 0 && request.resource.data.details.size() <= 200
+            && request.resource.data.lat is number
+            && request.resource.data.lat >= -90 && request.resource.data.lat <= 90
+            && request.resource.data.lng is number
+            && request.resource.data.lng >= -180 && request.resource.data.lng <= 180
+            && request.resource.data.features is map
+            && request.resource.data.features.keys().hasOnly(['chair', 'power', 'lockable', 'sink', 'stroller'])
+            && request.resource.data.features.chair is bool
+            && request.resource.data.features.power is bool
+            && request.resource.data.features.lockable is bool
+            && request.resource.data.features.sink is bool
+            && request.resource.data.features.stroller is bool
+            && request.resource.data.status in ['verified', 'unverified']
+            && (request.resource.data.verifiedAt == null || request.resource.data.verifiedAt is timestamp))
+        );
+      allow delete: if false;
+    }
+
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
       match /{document=**} {

@@ -3,7 +3,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { createMemoryHistory, createRouter } from "vue-router";
 
-const api = vi.hoisted(() => ({ rooms: [], addRoom: vi.fn(async () => "room-new"), reportRoom: vi.fn() }));
+const api = vi.hoisted(() => ({ rooms: [], overrides: [], admin: false, saveManagedRoom: vi.fn(async () => "new-admin-room"), addRoom: vi.fn(async () => "room-new"), reportRoom: vi.fn() }));
 
 vi.mock("@/api/firebase", () => ({ default: {}, auth: {} }));
 vi.mock("@/api/db", () => ({ db: {} }));
@@ -17,6 +17,14 @@ vi.mock("@/api/rooms", () => ({
   },
   addRoom: (...a) => api.addRoom(...a),
   reportRoom: (...a) => api.reportRoom(...a),
+}));
+vi.mock("@/composables/useAdmin", async () => {
+  const { ref } = await import("vue");
+  return { useAdmin: () => ({ isAdmin: ref(api.admin) }) };
+});
+vi.mock("@/api/roomManagement", () => ({
+  subscribeRoomOverrides: (onData) => { onData(api.overrides); return () => {}; },
+  saveManagedRoom: (...args) => api.saveManagedRoom(...args),
 }));
 import { BMSG_ROOMS } from "@/app/data/bmsgRooms";
 import PumpingRoomsPage from "@/app/pages/pumping-rooms/index.vue";
@@ -34,6 +42,11 @@ const names = (w) => w.findAll(".rc__name-btn").map((b) => b.text());
 beforeEach(() => {
   localStorage.clear();
   api.rooms = [];
+  api.overrides = [];
+  api.admin = false;
+  api.saveManagedRoom.mockReset().mockResolvedValue("new-admin-room");
+  HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  HTMLDialogElement.prototype.close = function () { this.open = false; };
   api.addRoom.mockClear();
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -162,5 +175,48 @@ describe("pumping rooms page", () => {
     expect(w.get("[aria-live='polite']").text()).toContain("near you");
     expect(w.get("iframe").attributes("title")).toBe("Map of your area");
     delete globalThis.navigator.geolocation;
+  });
+});
+
+
+describe("admin room management", () => {
+  it("hides editing controls from members", async () => {
+    const w = await mountPage();
+    expect(w.find("dialog").exists()).toBe(false);
+    expect(w.findAll(".rc button").some((b) => b.text().startsWith("Edit"))).toBe(false);
+  });
+  it("lets admins add a room with manual coordinates", async () => {
+    api.admin = true;
+    const w = await mountPage();
+    await w.findAll("button").find((b) => b.text() === "Add a room").trigger("click");
+    const fields = w.findAll("dialog input:not([type=checkbox]), dialog textarea");
+    for (const [i, value] of ["New room", "1 Road", "Level 2", "1.3", "103.8"].entries()) await fields[i].setValue(value);
+    await w.get("dialog form").trigger("submit");
+    await flushPromises();
+    expect(api.saveManagedRoom).toHaveBeenCalledWith("u1", expect.objectContaining({ name: "New room", lat: 1.3, lng: 103.8 }), false);
+    expect(w.text()).toContain("Room saved.");
+  });
+  it("edits bundled rooms and keeps failed edits open", async () => {
+    api.admin = true;
+    api.saveManagedRoom.mockRejectedValue({ code: "permission-denied" });
+    const w = await mountPage();
+    await w.findAll(".rc button").find((b) => b.text().startsWith("Edit")).trigger("click");
+    await w.get("dialog form").trigger("submit");
+    await flushPromises();
+    expect(api.saveManagedRoom).toHaveBeenCalledWith("u1", expect.objectContaining({ id: BMSG_ROOMS[0].id }), false);
+    expect(w.get("dialog").element.open).toBe(true);
+    expect(w.text()).toContain("You do not have permission");
+  });
+  it("requires confirmation to delete and hides deleted bundled listings", async () => {
+    api.admin = true;
+    api.overrides = [{ id: BMSG_ROOMS[0].id, deleted: true }];
+    const w = await mountPage();
+    expect(names(w)).not.toContain(BMSG_ROOMS[0].name);
+    await w.findAll(".rc button").find((b) => b.text().startsWith("Delete")).trigger("click");
+    expect(api.saveManagedRoom).not.toHaveBeenCalled();
+    await w.get("dialog form").trigger("submit");
+    await flushPromises();
+    expect(api.saveManagedRoom).toHaveBeenCalledWith("u1", expect.objectContaining({ id: BMSG_ROOMS[1].id }), true);
+    expect(w.text()).toContain("Room deleted.");
   });
 });

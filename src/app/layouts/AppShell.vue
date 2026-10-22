@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import BrandLogo from "@/components/ui/BrandLogo.vue";
 import { useAuth } from "@/composables/useAuth";
+import { useAdmin } from "@/composables/useAdmin";
 import Icon from "@/app/components/Icon.vue";
 import UserMenu from "@/app/components/UserMenu.vue";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
@@ -20,6 +21,8 @@ defineOptions({ name: "AppShell" });
 const route = useRoute();
 const router = useRouter();
 const { logout } = useAuth();
+const { isAdmin } = useAdmin();
+const adminWorkspace = computed(() => isAdmin.value && !home.householdId.value);
 const tone = computed(() => {
   if (route.path === ROUTES.WELLNESS) return "personal";
   if (route.path === ROUTES.SUPPORT || route.path.startsWith(ROUTES.SUPPORT + "/")) return "care";
@@ -62,7 +65,7 @@ const unread = computed(() =>
   ),
 );
 const items = computed(() =>
-  NAV.map((item) => ({
+  (adminWorkspace.value ? [{ key: "rooms", label: "Pumping rooms", to: ROUTES.ROOMS, icon: "pin" }] : NAV).map((item) => ({
     ...item,
     active: item.to === route.path || route.path.startsWith(item.to + "/"),
     count: item.key === "handover" ? waiting.value : 0,
@@ -102,7 +105,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
     <aside class="side" aria-label="Household and navigation">
       <div class="side__bar">
-        <BrandLogo :to="ROUTES.HOME" />
+        <BrandLogo :to="isAdmin ? ROUTES.ROOMS : ROUTES.HOME" />
         <button
           ref="menuButton"
           type="button"
@@ -118,7 +121,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
       <div id="app-side-panel" class="side__panel" :class="{ 'side__panel--open': menuOpen }">
         <div v-if="ready" class="side__chip">
-          <p class="side__chip-names">{{ names }}</p>
+          <p class="side__chip-names">{{ adminWorkspace ? 'Administrator' : names }}</p>
           <p v-if="babyName" class="side__chip-baby">{{ babyName }}</p>
           <p v-if="babyAge" class="side__chip-age">{{ babyAge }}</p>
         </div>
@@ -146,7 +149,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
         </nav>
 
         <div class="side__foot">
-          <p class="side__note">Your care space is shared. Wellness check-ins stay private by default.</p>
+          <p v-if="adminWorkspace" class="side__note">Manage the pumping room directory.</p>
+          <p v-else class="side__note">Your care space is shared. Wellness check-ins stay private by default.</p>
           <div class="side__user">
             <UserMenu :name="userName" @sign-out="signOut" />
           </div>

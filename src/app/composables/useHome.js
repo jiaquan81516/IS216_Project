@@ -4,6 +4,7 @@ import { babySummary, getHousehold, getHouseholdMembers, getUserProfile } from "
 import { normaliseSettings } from "@/app/utils/settingsHelpers";
 import { withTimeout } from "@/app/utils/timeout";
 import { setDisplay } from "@/app/composables/usePrefs";
+import { hasAdminClaim } from "@/api/adminAccess";
 
 // Key used by the layout to share one household load with its child pages.
 export const HOME_KEY = Symbol("app-home");
@@ -48,6 +49,14 @@ export function useHome() {
       const user = currentUser.value;
       if (!user) throw new Error("Not signed in");
       const loadedProfile = await withTimeout(getUserProfile(user.uid));
+      if (!loadedProfile?.householdId && await hasAdminClaim(user)) {
+        if (id !== run) return;
+        profile.value = loadedProfile;
+        householdData.value = null;
+        members.value = [];
+        setDisplay(normaliseSettings(loadedProfile?.settings).display);
+        return;
+      }
       if (!loadedProfile?.householdId) throw new Error("No household");
       const [loadedHousehold, loadedMembers] = await Promise.all([
         withTimeout(getHousehold(loadedProfile.householdId)),

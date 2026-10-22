@@ -9,8 +9,9 @@ const props = defineProps({
   selected: { type: Boolean, default: false },
   saved: { type: Boolean, default: false },
   showDistance: { type: Boolean, default: true },
+  canManage: { type: Boolean, default: false },
 });
-const emit = defineEmits(["select", "toggle-save"]);
+const emit = defineEmits(["select", "toggle-save", "edit", "delete"]);
 
 const distance = computed(() => (props.showDistance ? formatDistance(props.room.distance) : ""));
 const verification = computed(() => verificationText(props.room));
@@ -44,6 +45,8 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
       </a>
     </p>
     <div class="rc__actions">
+      <button v-if="canManage" type="button" class="app-textbtn" @click.stop="emit('edit', room)">Edit<span class="visually-hidden"> {{ room.name }}</span></button>
+      <button v-if="canManage" type="button" class="app-textbtn" @click.stop="emit('delete', room)">Delete<span class="visually-hidden"> {{ room.name }}</span></button>
       <button
         type="button"
         class="app-textbtn"
