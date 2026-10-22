@@ -33,3 +33,6 @@ Thumbs.db
 #remove duplicates
 * 2
 * 2.*
+
+privkey.json
+*-firebase-adminsdk-*.json

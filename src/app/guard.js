@@ -2,6 +2,7 @@ import { useAuth, waitForAuthInitialization } from "@/composables/useAuth";
 import { getCaregiverHouseholds, getMember, getUserProfile } from "@/api/profile";
 import { withTimeout } from "@/app/utils/timeout";
 import { ROUTES } from "@/app/routes";
+import { hasAdminClaim } from "@/api/adminAccess";
 
 // App pages that need sign in and a household (same rules as Home).
 const GUARDED_APP_PATHS = new Set([
@@ -19,9 +20,22 @@ const GUARDED_APP_PATHS = new Set([
   ROUTES.CARE_BRIEF,
 ]);
 
+const SETUP_PATHS = new Set([
+  ROUTES.JOURNEY, ROUTES.ROLE, ROUTES.ACCOUNT, ROUTES.SIGN_IN, ROUTES.HOUSEHOLD,
+]);
+
 // Authentication and household rules for the current app routes.
 export function installGuard(router) {
   router.beforeEach(async (to) => {
+    if (SETUP_PATHS.has(to.path) || GUARDED_APP_PATHS.has(to.path)) {
+      await waitForAuthInitialization();
+      const { isAuthenticated, currentUser } = useAuth();
+      if (isAuthenticated.value && await hasAdminClaim(currentUser.value)) {
+        // Admin work does not require a parent profile or household membership.
+        if (SETUP_PATHS.has(to.path) || to.path === ROUTES.HOME) return ROUTES.ROOMS;
+        return true;
+      }
+    }
     if (to.path === ROUTES.HOUSEHOLD) {
       await waitForAuthInitialization();
       const { isAuthenticated, currentUser } = useAuth();

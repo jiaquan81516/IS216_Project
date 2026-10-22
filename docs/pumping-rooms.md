@@ -1,5 +1,53 @@
 # Pumping rooms map
 
+## Admin room management
+
+Admins can add, edit and delete rooms at `/support/rooms`, including bundled BMSG
+and example listings. The editor accepts name, address, exact location details,
+confirmed coordinates, features and verification status. No Maps API key is needed.
+Deletion requires confirmation. Changes are shared live with signed-in users.
+
+Access requires the Firebase Auth custom claim `admin: true`. User profile fields
+and household roles do not grant this permission. Deploy `firestore.rules` before
+using this feature. With `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` and
+`FIREBASE_PRIVATE_KEY` configured in a trusted terminal, run:
+
+```sh
+node scripts/set-room-admin.mjs <firebase-uid> grant
+# To remove access:
+node scripts/set-room-admin.mjs <firebase-uid> revoke
+```
+
+Alternatively, pass a local service account JSON file as the last argument:
+
+```sh
+node scripts/set-room-admin.mjs <firebase-uid> grant src/api/privkey.json
+```
+
+This file is read only by the Node script. Never import a service account key or
+`firebase-admin` from browser code under `src/`. Ignoring a file in Git does not
+prevent a browser import from including it in the application.
+
+Admins sign in through the normal email/password or Google sign-in page and go
+directly to `/support/rooms`. Sign-in skips normal profile creation for admins;
+the router also redirects them away from journey, role, account and household
+setup. A parent profile and household are not required for admin work. Admins
+without a household see directory navigation in the sidebar. Ordinary accounts
+still follow the existing profile and household setup flow.
+
+The script preserves other custom claims. Sign out and sign in after changing
+access; already-issued tokens retain their claims until refreshed or expired.
+Never put server credentials in browser environment variables.
+
+Admin writes go to `pumpingRoomOverrides/{roomId}`. New rooms use generated IDs;
+edits use the existing listing ID. Deletions store a marker so bundled rooms do
+not reappear on reload. Original community documents and reports remain intact.
+Rules require the admin claim, validate the editable fields, and record the
+administrator UID and server timestamp. Ordinary members retain their existing
+community permissions but cannot write overrides. Source attribution is retained
+when a bundled listing is edited. The older map implementation notes below are
+historical; admin additions now use this editor.
+
 Page: `/support/rooms` (`src/app/pages/pumping-rooms/index.vue`), inside the app shell, guarded like the other app pages. Linked from a "Find a pumping room" card in Support Guides (the old Support pumping rooms tab and its directory UI were removed) and from the Return to work pumping section.
 
 ## Data sources
