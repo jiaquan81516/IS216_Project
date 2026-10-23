@@ -116,8 +116,10 @@ export function babySummary(baby = {}, today = new Date()) {
   return { name: babyName, line };
 }
 
-export async function createHousehold(user, baby = {}) {
-  const { babyName, babyStatus, babyDate } = cleanBaby(baby);
+export async function createHousehold(user, input = {}) {
+  const list = Array.isArray(input.babies) && input.babies.length ? input.babies : [input];
+  const [first, ...rest] = list.map(cleanBaby);
+  const { babyName, babyStatus, babyDate } = first;
   const profile = (await getUserProfile(user.uid)) || {};
 
   const inviteCode = await freshCode();
@@ -147,6 +149,7 @@ export async function createHousehold(user, baby = {}) {
   batch.update(doc(db, "users", user.uid), { householdId, householdIds: [householdId], onboarded: true });
 
   await batch.commit();
+  for (const extra of rest) await addBaby(householdId, extra);
   return { householdId, inviteCode };
 }
 

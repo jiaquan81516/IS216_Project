@@ -6,7 +6,6 @@ import StepHeader from "@/app/components/StepHeader.vue";
 import OptionCard from "@/app/components/OptionCard.vue";
 import Field from "@/app/components/Field.vue";
 import BabyFields from "@/app/components/BabyFields.vue";
-import AddBabyForm from "@/app/components/AddBabyForm.vue";
 import BabyCard from "@/app/components/BabyCard.vue";
 import AppLink from "@/components/ui/AppLink.vue";
 import { SAMPLE } from "@/shared/constants/appConstants";
@@ -40,13 +39,17 @@ const error = ref("");
 const busy = ref(false);
 const result = ref(null); // { kind: "created" | "joined", inviteCode }
 const copied = ref(false);
-const baby = ref({ name: "", status: "born", date: "" }); // the first baby, asked while creating
+const formBabies = ref([{ name: "", status: "born", date: "" }]);
+function addFormBaby() {
+  formBabies.value.push({ name: "", status: "born", date: "" });
+}
+function removeFormBaby(i) {
+  if (formBabies.value.length > 1) formBabies.value.splice(i, 1);
+}
 let copiedTimer = null;
 
 const householdId = ref("");
 const babies = ref([]);
-const showAddBaby = ref(false);
-const babyAdded = ref("");
 
 async function loadBabies() {
   try {
@@ -54,13 +57,6 @@ async function loadBabies() {
   } catch {
     babies.value = [];
   }
-}
-
-async function onBabyAdded(name) {
-  babyAdded.value = name;
-  showAddBaby.value = false;
-  await loadBabies();
-  await refreshSidebarBabies(householdId.value);
 }
 
 const ready = computed(() => result.value !== null);
@@ -73,7 +69,7 @@ const title = computed(() => {
 });
 const lead = computed(() => {
   if (!ready.value) {
-    return `A household connects care logs, tasks and appointments for the people supporting ${baby.value.name.trim() || "your baby"}.`;
+    return `A household connects care logs, tasks and appointments for the people supporting ${formBabies.value[0].name.trim() || "your baby"}.`;
   }
   if (joined.value) return "You can now see what the household’s parents share.";
   return inviteCode.value
@@ -85,23 +81,22 @@ onMounted(async () => {
   try {
     const profile = await loadProfile();
     if (profile?.householdId) {
-      const membership = await getMember(profile.householdId, currentUser.value?.uid);
-      if (membership?.accessLevel === "caregiver" && linkCode) {
-        // Existing caregivers can accept additional caregiver invitations from their link.
-        mode.value = "join";
-      } else if (membership) {
-        let existing = null;
-        try {
-          existing = await getHouseholdInviteCode(profile.householdId);
-        } catch {
-          existing = null;
-        }
-        result.value = { kind: "created", inviteCode: existing };
-      }
-      result.value = { kind: "created", inviteCode: existing };
-      householdId.value = profile.householdId;
-      await loadBabies();
+    const membership = await getMember(profile.householdId, currentUser.value?.uid);
+    if (membership?.accessLevel === "caregiver" && linkCode) {
+    // Existing caregivers can accept additional caregiver invitations from their link.
+      mode.value = "join";
+    } else if (membership) {
+      let existing = null;
+      try {
+      existing = await getHouseholdInviteCode(profile.householdId);
+      } catch {
+      existing = null;
     }
+    result.value = { kind: "created", inviteCode: existing };
+    householdId.value = profile.householdId;
+    await loadBabies();
+  }
+}
   } catch {
     // If the profile cannot be read, fall back to the choice screen.
   } finally {
@@ -143,18 +138,17 @@ async function submit() {
   try {
     if (mode.value === "create") {
       const created = await createHousehold(user, {
-        babyName: baby.value.name,
-        babyStatus: baby.value.status,
-        babyDate: baby.value.date,
+        babies: formBabies.value.map((b) => ({ babyName: b.name, babyStatus: b.status, babyDate: b.date })),
       });
       result.value = { kind: "created", inviteCode: created.inviteCode };
       householdId.value = created.householdId;
     } else {
-      await joinHousehold(user, code.value, { householdLabel: householdLabel.value });
+      const joinedHousehold = await joinHousehold(user, code.value, { householdLabel: householdLabel.value });
       result.value = { kind: "joined", inviteCode: null };
       householdId.value = joinedHousehold.householdId;
     }
     await loadBabies();
+    await refreshSidebarBabies(householdId.value);
     if (authProfile.value) authProfile.value = { ...authProfile.value, onboarded: true };
   } catch (cause) {
     console.error("[app household]", cause?.code, cause);
@@ -213,11 +207,20 @@ async function copyCode() {
               />
             </div>
             <div v-if="mode === 'create'" class="app-stack app-stack--24 w-100">
-              <div class="hh__baby app-stack app-stack--24">
-                <h3 class="hh__baby-title">Baby 1</h3>
-                <BabyFields v-model="baby" id-prefix="app-baby" hint="You can change this later." :disabled="busy" />
+              <div v-for="(b, i) in formBabies" :key="i" class="hh__baby app-stack app-stack--24">
+                <h3 class="hh__baby-title">Baby {{ i + 1 }}</h3>
+                <BabyFields
+                  v-model="formBabies[i]"
+                  :id-prefix="`app-baby-${i}`"
+                  :hint="i === 0 ? 'You can change this later.' : ''"
+                  :disabled="busy"/>
+                <button v-if="formBabies.length > 1" type="button" class="app-btn app-btn--outline" :disabled="busy" @click="removeFormBaby(i)">
+                  Remove baby
+                </button>
               </div>
-              <p class="hh__hint">Twins or more? You can add each baby on the next step.</p>
+                <button type="button" class="app-btn app-btn--outline" :disabled="busy" @click="addFormBaby">
+                  Add another baby
+                </button>
             </div>
             <Field
               v-if="mode === 'join'"
@@ -253,17 +256,11 @@ async function copyCode() {
             <BabyCard v-for="(baby, i) in babies" :key="baby.id" :baby="baby" :number="i + 1" />
           </div>
 
-          <p v-if="babyAdded" class="app-text-link" role="status">{{ babyAdded }} was added.</p>
-
-          <button v-if="!showAddBaby" type="button" class="app-btn app-btn--outline" @click="showAddBaby = true">
-            Add another baby
-          </button>
-          <AddBabyForm v-else :household-id="householdId" :number="babies.length + 1" @added="onBabyAdded" @cancel="showAddBaby = false" />
           <div v-if="!joined && inviteCode" class="hh__code" aria-label="Invitation code">
             <p class="hh__code-text">{{ inviteCode }}</p>
           </div>
           <div class="hh__actions">
-            <RouterLink :to="ROUTES.HOME" class="app-btn" :class="showAddBaby ? 'app-btn--outline' : 'app-btn--primary'">Go to home</RouterLink>
+            <RouterLink :to="ROUTES.HOME" class="app-btn app-btn--primary">Go to home</RouterLink>
             <button
               v-if="!joined && inviteCode"
               type="button"

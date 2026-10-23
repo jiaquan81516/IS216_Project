@@ -44,6 +44,7 @@ import { setDisplay } from "@/app/composables/usePrefs";
 import { usePush } from "@/app/composables/usePush";
 import { ROUTES } from "@/app/routes";
 import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
+import AddBabyForm from "@/app/components/AddBabyForm.vue";
 
 defineOptions({ name: "SettingsPage" });
 
@@ -428,27 +429,34 @@ const babySaved = ref("");
 const babyError = ref("");
 const babyTimers = new Map(); // one debounced save per baby
 
-watch(
-  () => householdId.value,
-  async (id) => {
-    if (!id) {
-      babyList.value = [];
-      return;
-    }
-    try {
-      const list = await getHouseholdBabies(id);
-      babyList.value = list.map((b) => ({
-        id: b.id,
-        babyName: b.babyName ?? "",
-        babyStatus: b.babyStatus === "expected" ? "expected" : "born",
-        babyDate: b.babyDate ?? "",
-      }));
-    } catch {
-      babyList.value = [];
-    }
-  },
-  { immediate: true },
-);
+async function loadBabyList() {
+  const id = householdId.value;
+  if (!id) {
+    babyList.value = [];
+    return;
+  }
+  try {
+    const list = await getHouseholdBabies(id);
+    babyList.value = list.map((b) => ({
+      id: b.id,
+      babyName: b.babyName ?? "",
+      babyStatus: b.babyStatus === "expected" ? "expected" : "born",
+      babyDate: b.babyDate ?? "",
+    }));
+  } catch {
+    babyList.value = [];
+  }
+}
+watch(() => householdId.value, loadBabyList, { immediate: true });
+
+const showAddBaby = ref(false);
+const babyAdded = ref("");
+async function onBabyAdded(name) {
+  babyAdded.value = name || "Your baby";
+  showAddBaby.value = false;
+  await loadBabyList();
+  await refreshSidebarBabies(householdId.value);
+}
 
 async function writeBaby(id) {
   const target = babyList.value.find((b) => b.id === id);
@@ -859,6 +867,18 @@ async function confirmDelete() {
           <p class="st__save" role="status" aria-live="polite">{{ babySaved }}</p>
           <p v-if="babyError" class="app-error-text" role="alert">{{ babyError }}</p>
         </div>
+
+        <p v-if="babyAdded" class="st__text" role="status">{{ babyAdded }} was added.</p>
+        <div v-if="!showAddBaby" class="st__actions">
+          <AppButton variant="outline" size="sm" @click="showAddBaby = true">Add another baby</AppButton>
+        </div>
+        <AddBabyForm
+          v-else
+          :household-id="householdId || ''"
+          :number="babyList.length + 1"
+          @added="onBabyAdded"
+          @cancel="showAddBaby = false"
+        />
 
         <div v-if="!leaveOpen" class="st__actions">
           <AppButton variant="outline" size="sm" @click="leaveOpen = true">Leave household</AppButton>
