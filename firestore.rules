@@ -184,6 +184,26 @@ service cloud.firestore {
         allow delete: if sharedMember() && feelingId == request.auth.uid;
       }
 
+      // Wellness check-ins. Both parents read them, so the week can be shown as a pair. One
+      // document per person per day, named uid_yyyy-mm-dd, and only its owner writes it.
+      match /checkins/{checkinId} {
+        allow read: if sharedMember();
+        allow create, update: if sharedMember()
+          && request.resource.data.keys().hasOnly(['uid', 'date', 'mood', 'stress', 'energy', 'closeness', 'concerns', 'body', 'lifts', 'savedAt', 'updatedAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.date is string
+          && request.resource.data.date.size() == 10
+          && checkinId == request.auth.uid + '_' + request.resource.data.date
+          && request.resource.data.mood is int && request.resource.data.mood >= 1 && request.resource.data.mood <= 5
+          && request.resource.data.stress is int && request.resource.data.stress >= 1 && request.resource.data.stress <= 5
+          && request.resource.data.concerns is list && request.resource.data.concerns.size() <= 3
+          && request.resource.data.body is list && request.resource.data.body.size() <= 8
+          && request.resource.data.lifts is list && request.resource.data.lifts.size() <= 8
+          && request.resource.data.savedAt is string
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if false;
+      }
+
       // The chat between the two parents. Written in your own name, once, and never edited or
       // deleted. "thanks" marks a thank you so the weekly summary can count it.
       match /chat/{messageId} {

@@ -5,6 +5,7 @@ import { tonightDate } from "@/app/utils/homeSummary";
 import { suggestionsFor } from "@/app/utils/chatHelpers";
 import {
   buildNudges,
+  feelingLevel,
   loadSignals,
   needsSupport,
   onDutyRun,
@@ -67,6 +68,8 @@ export function useNudges({ home, entries, shared }) {
     });
   const partnerSignals = computed(() => (partnerUid.value ? signalsFor(partnerUid.value, "partner") : null));
 
+  const partnerToday = computed(() => checkins.partnerItems?.[todayKey.value] ?? null);
+
   // The quiet prompts at the top of the chat.
   const nudges = computed(() =>
     buildNudges({
@@ -76,7 +79,10 @@ export function useNudges({ home, entries, shared }) {
       partner: partnerSignals.value,
       recentLog: partnerRecentLog({ entries: entries.entries.value, partnerUid: partnerUid.value, now: now.value }),
       checkedInToday: Boolean(checkins.forDate(todayKey.value)),
-      partnerFeeling: team.partnerFeeling,
+      // Your partner's check-in today is shared, so it speaks for itself.
+      partnerFeeling: partnerToday.value
+        ? { level: feelingLevel(partnerToday.value), date: todayKey.value }
+        : team.partnerFeeling,
       supportNeeded: needsSupport(checkins.lastSeven(now.value), now.value),
       settings: home.settings?.value ?? null,
       dismissed: team.dismissed,

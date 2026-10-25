@@ -217,32 +217,104 @@ export function readingFor(answers, { partner = "your partner", earlier = [] } =
   else if (took.length) story.push(`${capital(joinAnd(took))} took the most out of you, and nothing has given back yet.`);
   else if (gave.length) story.push(`${capital(joinAnd(gave))} gave a little back.`);
 
-  // What it might mean
+  // What it might mean. Each one says what in the answers led to it ("from"), what it may mean
+  // ("body") and one small thing to try ("tip"). At most four, the most pressing first.
   const insights = [];
+  const moodWord = labelFor(MOODS, mood).toLowerCase();
+  const tankWord = energy ? labelFor(ENERGY, energy).toLowerCase() : "";
+  const stressWord = labelFor(STRESS, stress).toLowerCase();
   if (mood <= 2 && energy && energy <= 2) {
-    insights.push({ title: "This looks like depletion", body: "Low mood and an empty tank often travel together. The first fix is usually rest, food and help, not trying harder." });
+    insights.push({
+      title: "This looks like depletion",
+      from: `Mood ${moodWord} and tank ${tankWord}`,
+      body: "Low mood and an empty tank often travel together in the early months. Broken sleep, feeds around the clock and little time to eat properly drain both at once, so it is not a sign that you are failing or not coping.",
+      tip: "Start with the basics before anything else: a proper meal, water, and one stretch of sleep that nobody interrupts. Ask for that stretch out loud.",
+    });
   } else if (mood <= 2) {
-    insights.push({ title: "Low, and not only tired", body: "Your mood is lower than your energy explains. If days like this keep coming, that is worth paying attention to." });
+    insights.push({
+      title: "Low, and not only tired",
+      from: `Mood ${moodWord}${energy ? ` while your tank is ${tankWord}` : ""}`,
+      body: "Your mood is lower than tiredness alone explains. That can happen after birth, and it is common. One low day is normal. A run of them is worth paying attention to, and it is not something to push through alone.",
+      tip: "Tell one person today how you actually feel, even in a single sentence. If it carries on, the Support page has a short check to help you decide what next.",
+    });
+  } else if (energy && energy <= 2 && mood >= 3) {
+    insights.push({
+      title: "Running on fumes",
+      from: `Tank ${tankWord}, mood ${moodWord}`,
+      body: "You are holding up emotionally, but your energy is nearly gone. That is the point where small things start to feel big. Being cheerful on top of an empty tank is expensive, and it tends to catch up in a day or two.",
+      tip: "Protect one rest block tonight, before the evening gets busy. Rest now costs less than recovering later.",
+    });
   }
   if (stress >= 4 && areas.length) {
-    insights.push({ title: "Stress is showing up in your body", body: `Tension in your ${joinAnd(areas)} is often where stress lands first. The two minute release in your plan can take the edge off.` });
+    insights.push({
+      title: "Stress is showing up in your body",
+      from: `Carrying ${stressWord}, tension in your ${joinAnd(areas)}`,
+      body: `Your body is keeping score. Tight ${joinAnd(areas)} is often where stress lands first, and it usually builds quietly through the day. Feeding, carrying and lifting a baby adds strain to the same places.`,
+      tip: "The two minute release in your plan below takes the edge off. A warm shower or a short walk outside works too.",
+    });
   } else if (stress >= 4) {
-    insights.push({ title: "A heavy load", body: "The aim is not to carry it better. It is to put one piece down, or hand it to someone else for a while." });
+    insights.push({
+      title: "A heavy load",
+      from: `Carrying ${stressWord}`,
+      body: "When it feels like too much, the problem is rarely that you carry it badly. It is that everything sits on one pair of shoulders. The aim is to put one piece down, not to carry all of it better.",
+      tip: "Pick the one stone that is not yours to hold alone, and hand it to your partner or someone you trust until tomorrow.",
+    });
+  } else if (stress <= 2 && mood >= 3) {
+    insights.push({
+      title: "A light load today",
+      from: `Carrying ${stressWord}`,
+      body: "You are not weighed down right now. That is useful to notice, because the days that go well are the ones with something to learn from.",
+      tip: "Ask yourself what made the load lighter today: a task someone took, a nap, a calm feed. Say it to your partner so it can happen again.",
+    });
+  }
+  if (took.length && !gave.length) {
+    insights.push({
+      title: `${capital(joinAnd(took.slice(0, 2)))} took the most`,
+      from: `You picked ${joinAnd(took)}`,
+      body: "Naming what drains you is the first step to changing it. It also helps to remember that nothing has given back yet today, which is why the day feels one-sided.",
+      tip: "Plan one small thing that puts something back, on purpose, before you go to bed. Ten minutes is enough.",
+    });
   }
   if (closeness && closeness <= 2) {
-    insights.push({ title: "Some distance between you", body: "Feeling apart is common when you are both stretched. It usually needs a small moment together, not a big conversation." });
+    insights.push({
+      title: "Some distance between you",
+      from: `You feel ${CLOSE_PHRASE[closeness]} ${partner}`,
+      body: "Feeling apart is very common when you are both stretched. You are both running on little sleep and handing the baby back and forth, so the time you have for each other shrinks. It usually does not mean something is wrong. It means there has been no room.",
+      tip: `Aim for a small moment, not a big conversation. Ten minutes with ${partner} that is not about the baby or logistics.`,
+    });
   } else if (closeness >= 4 && (mood <= 2 || stress >= 4)) {
-    insights.push({ title: `${capital(partner)} is on your side`, body: "You feel close even on a hard day. Leaning on that is allowed." });
+    insights.push({
+      title: `${capital(partner)} is on your side`,
+      from: `You feel ${CLOSE_PHRASE[closeness]} ${partner}, even on a hard day`,
+      body: "Feeling close while things are tough is a real strength. Leaning on that is allowed, and it is often the quickest way to feel lighter.",
+      tip: `Tell ${partner} one thing they could take off your plate today. People usually want to help and do not know where to start.`,
+    });
   }
   if (gave.length) {
-    insights.push({ title: "You know what helps", body: `${capital(joinAnd(gave))} gave something back. What helped once usually helps again, so plan it in.` });
+    insights.push({
+      title: "You know what helps",
+      from: `${capital(joinAnd(gave))} gave something back`,
+      body: "What helped once usually helps again. Most parents only find out what works for them by noticing days like this one.",
+      tip: `Put ${gave[0]} into tomorrow at a set time, rather than waiting for it to happen.`,
+    });
   }
-  if (mood >= 4 && stress <= 2 && insights.length < 3) {
-    insights.push({ title: "A steadier day", body: "Notice what made today work. It is useful to know on the harder days." });
+  if (mood >= 4 && stress <= 3 && insights.length < 3) {
+    insights.push({
+      title: "A steadier day",
+      from: `Mood ${moodWord}, carrying ${stressWord}`,
+      body: "Good days do not need to be explained, but they are worth noticing. They show you what a workable day looks like, and you can lean on that memory on the harder ones.",
+      tip: "Write down one thing that made today work. Your future self will be glad you did.",
+    });
   }
   if (!insights.length) {
-    insights.push({ title: "A middle kind of day", body: "Nothing here stands out as a warning. Keep checking in, and patterns will start to show." });
+    insights.push({
+      title: "A middle kind of day",
+      from: `Mood ${moodWord}${energy ? `, tank ${tankWord}` : ""}, carrying ${stressWord}`,
+      body: "Nothing here stands out as a warning, and that is a fine place to be in the early months. Most days are like this. Patterns only show up over a week or two.",
+      tip: "Keep checking in around the same time each day. After a few days, the week chart below will start to show you what is normal for you.",
+    });
   }
+  insights.splice(4);
 
   // Your next 24 hours
   const plan = [];
