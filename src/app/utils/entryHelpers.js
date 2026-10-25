@@ -178,7 +178,7 @@ export function describeEntriesError(code) {
   const c = String(code ?? "");
   if (c === "permission-denied") {
     return {
-      text: "Your database rules do not allow reading the care log yet. Publish the latest firestore.rules in the Firebase console, then try again.",
+      text: "Firebase denied access to the care log. Check that this account is a household parent or, for a caregiver, that “View care logs” is enabled. If access should be allowed, ask the administrator to verify the latest firestore.rules are published to the app’s Firebase project.",
       detail: "",
     };
   }

@@ -16,6 +16,8 @@ import {
 } from "firebase/firestore";
 import { db } from "./db";
 import { withTimeout } from "@/app/utils/timeout";
+import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
+const { selectedBabyId } = useSelectedBaby();
 
 export { ENTRY_TYPES, groupByDay, lastOfType, summariseEntry, todayStats } from "@/app/utils/entryHelpers";
 
@@ -32,9 +34,10 @@ function fromSnap(snap) {
   return { id: snap.id, ...snap.data() };
 }
 
-export async function addEntry(user, householdId, { type, at, endedAt = null, details = {}, byName = "" }) {
+export async function addEntry(user, householdId, { type, at, endedAt = null, details = {}, byName = "", babyId = "primary" }) {
   const ref = await addDoc(entriesRef(householdId), {
     type,
+    babyId,
     at: stamp(at),
     endedAt: stamp(endedAt),
     by: user.uid,
@@ -42,6 +45,7 @@ export async function addEntry(user, householdId, { type, at, endedAt = null, de
     details,
     seenBy: { [user.uid]: serverTimestamp() },
     createdAt: serverTimestamp(),
+    babyId: selectedBabyId.value,
   });
   return ref.id;
 }

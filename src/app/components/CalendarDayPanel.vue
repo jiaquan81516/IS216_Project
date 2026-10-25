@@ -12,6 +12,7 @@ import {
   validateEvent,
 } from "@/app/utils/calendarHelpers";
 import { ownerKey, ownerLabel } from "@/app/utils/sharedHelpers";
+import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 
 defineOptions({ name: "CalendarDayPanel" });
 
@@ -26,6 +27,8 @@ const props = defineProps({
   startEditId: { type: String, default: "" }, // open straight into the edit form for this event
 });
 const emit = defineEmits(["close", "save", "delete"]);
+const { babies } = useSelectedBaby();
+const babyLabel = (b, i) => b.babyName || `Baby ${i + 1}`;
 
 const titleId = `cdp-title-${Math.random().toString(36).slice(2, 8)}`;
 const dialog = ref(null);
@@ -47,7 +50,8 @@ const form = reactive({
   owner: "both",
   type: "family",
   notes: "",
-});
+  babyIds: [],
+}); 
 
 const ownerOptions = computed(() => [
   { value: "me", label: "Me" },
@@ -101,7 +105,14 @@ function submit() {
   if (problem) {
     error.value = problem;
     return;
+  } 
+  if (babies.value.length > 1 && !form.babyIds.length) {
+    error.value = "Pick at least one baby.";
+    return;
   }
+  // All ticked (or only one baby) is saved as [], so a baby added later is included.
+  const babyIds =
+    babies.value.length > 1 && form.babyIds.length < babies.value.length ? [...form.babyIds] : [];
   const payload = {
     id: editId.value || undefined,
     title: draft.title,
@@ -113,6 +124,7 @@ function submit() {
     owner: draft.owner,
     type: draft.type,
     notes: draft.notes.trim(),
+    babyIds: []
   };
   emit("save", payload);
   cancelForm();
@@ -208,6 +220,7 @@ onBeforeUnmount(() => {
                   <span class="cdp__owner" :data-owner="ownerTone(event.owner)">{{ ownerName(event.owner) }}</span>
                   <span>{{ typeLabel(event.type) }}</span>
                   <span v-if="event.endDate !== event.date">{{ dateRangeLabel(event.date, event.endDate) }}</span>
+                  <span v-if="event.babyIds?.length">{{ event.babyIds.map((id) => { const i = babies.findIndex((b) => b.id === id); return i < 0 ? '' : babyLabel(babies[i], i); }).filter(Boolean).join(', ') }}</span>
                 </p>
                 <p v-if="event.notes" class="cdp__notes">{{ event.notes }}</p>
               </div>
@@ -289,6 +302,14 @@ onBeforeUnmount(() => {
             <ChipGroup v-model="form.type" :options="typeOptions" label="Type" />
           </div>
 
+          <fieldset v-if="babies.length > 1" class="cdp__field cdp__babies">
+            <legend class="cdp__label">Which baby?</legend>
+            <label v-for="(b, i) in babies" :key="b.id" class="cdp__check">
+              <input v-model="form.babyIds" type="checkbox" :value="b.id" />
+              <span>{{ babyLabel(b, i) }}</span>
+            </label>
+          </fieldset>
+
           <div class="cdp__field">
             <label class="cdp__label" for="cdp-notes">Notes (optional)</label>
             <textarea id="cdp-notes" v-model="form.notes" class="app-control" rows="2" :maxlength="NOTES_MAX" />
@@ -348,6 +369,9 @@ onBeforeUnmount(() => {
 .cdp__switch .form-check-label { font-size: 0.9375rem; font-weight: 500; }
 .cdp__count { margin: 0; font-size: 0.875rem; text-align: right; color: var(--nt-muted); }
 .cdp__form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cdp__babies { margin: 0; padding: 0; border: 0; }
+.cdp__babies .cdp__label { float: none; width: auto; padding: 0; margin: 0; }
+.cdp__check { display: flex; align-items: center; gap: 8px; font-size: 0.9375rem; color: var(--nt-ink); cursor: pointer; }
 
 @media (max-width: 767px) {
   .cdp__panel { top: auto; left: 0; width: 100%; max-height: 92vh; border-left: 0; border-top: 1px solid var(--nt-line); border-radius: 12px 12px 0 0; }

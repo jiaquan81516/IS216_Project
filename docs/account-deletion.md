@@ -50,10 +50,10 @@ rather than breaking either reader.
 Run with the Firebase Admin SDK, which is not bound by `firestore.rules`.
 
 1. Verify the ID token. Take `uid` from the verified token only.
-2. Read `users/{uid}` and keep `householdId`.
+2. Read `users/{uid}` and keep `householdId` plus `householdIds` (the active and all caregiver households).
 3. Revoke the refresh tokens (`auth.revokeRefreshTokens(uid)`) so other devices cannot keep
    writing while the deletion runs.
-4. Anonymise the shared household data, if there is a household. For every document under
+4. For every household membership, anonymise that household's shared data. For every document under
    `households/{hid}` that names the user, keep the document and replace the name, never the
    row:
    - `entries/*` where `by == uid`: set `byName` to `"A parent"`. Leave `by` as the uid, so

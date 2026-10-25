@@ -38,13 +38,15 @@ All eight sidebar items link to the current pages (`src/app/data/nav.js`). The H
 
 ## Firestore collections
 
-- `users/{uid}`: displayName, email, photoURL, journey, role, householdId, onboarded, createdAt, lastSeenAt
+- `users/{uid}`: displayName, email, photoURL, journey, role, householdId (active), householdIds, householdLabels (private household names), onboarded, createdAt, lastSeenAt
 - `households/{id}`: memberIds, inviteCode, journey, createdBy, createdAt, babyName (string or null), babyStatus (`born` or `expected`, default `born`), babyDate (`YYYY-MM-DD` or null; date of birth or due date)
 - `households/{id}/members/{uid}`: displayName, photoURL, role, joinedAt
 - `invites/{code}` (code looks like `NT-XXXX`): householdId, createdBy, createdAt, expiresAt, usedAt, usedBy, revokedAt
 - `pumpingRooms/{roomId}` and `pumpingRooms/{roomId}/reports/{reportId}`: the shared pumping room directory (fields in `docs/data-model.md`)
 - `households/{id}/rota/settings`, `households/{id}/nights/{yyyy-mm-dd}`, `households/{id}/swaps/{swapId}`, `households/{id}/events/{eventId}`, `households/{id}/tasks/{taskId}`, `households/{id}/rtw/plan`: the shared sleep rota, calendar and return to work plan (fields in `docs/data-model.md`)
 - `googleTokens/{uid}`, `googleSync/{uid}`, `oauthStates/{nonce}`, `serverLimits/{uid}`: server only, written by the Firebase Admin SDK in the Vercel functions and denied to every client in `firestore.rules` (fields in `docs/data-model.md`, section 7b)
+
+Caregivers can accept multiple caregiver invitations. Their active household is stored in `users/{uid}.householdId`; `householdIds` stores all caregiver memberships. The Care Brief provides a household switcher and lets caregivers join or leave households. Parent accounts continue to use one active household.
 
 ## Owner setup in the Firebase console
 
@@ -215,7 +217,15 @@ separated by a 1px line:
 - Privacy: "Show my partner when I was last active" (`privacy.shareLastSeen`).
 - Partner: the partner's name and role when somebody has joined, otherwise the invitation
   code with Copy, how long it lasts ("Expires in 6 days") and an outline "Generate a new code".
-- Household: baby name, status and date, saved to `households/{hid}` by any member on the same
+- Caregivers: create multiple one-use invite links for a grandparent, domestic helper,
+  babysitter, childcare provider or another trusted caregiver. Each role starts with a suggested
+  permission set; parents can customize it later or remove a caregiver. The separate
+  `/care-brief` route shows only shared routine and health information, the last feed/diaper
+  change when care-log read is allowed, and appointments when enabled. Feeding and health notes
+  live in separate `careBrief` documents so Firestore can gate each category independently.
+  Invite links carry their code through account creation; the invite supplies the caregiver's
+  membership role and permissions when they join.
+- Household: baby name, status and date, saved to `households/{hid}` by a primary parent on the same
   600 ms debounce, then "Leave household" behind a typed LEAVE.
 - Danger zone: "Delete my account" behind a typed DELETE.
 
