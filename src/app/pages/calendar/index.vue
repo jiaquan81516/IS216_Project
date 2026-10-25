@@ -29,6 +29,7 @@ import { setGoogleToggle, useGoogleCalendarClient } from "@/app/composables/useG
 import { SHARED_KEY } from "@/app/composables/useShared";
 import { useCalendarStore } from "@/app/stores/calendar";
 import { useRotaStore } from "@/app/stores/rota";
+import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 
 defineOptions({ name: "CalendarPage" });
 
@@ -38,6 +39,11 @@ const home = inject(HOME_KEY, null);
 const shared = inject(SHARED_KEY, null);
 const store = useCalendarStore();
 const rota = useRotaStore();
+const { selectedBaby } = useSelectedBaby();
+// An event shows for this baby if it has no babyIds (older events, or "all babies")
+// or if the selected baby is in its list.
+const forSelectedBaby = (e) =>
+  !e.babyIds?.length || e.babyIds.includes(selectedBaby.value?.id ?? "primary");
 
 const names = computed(() => {
   const mine = home?.me?.value?.firstName;
@@ -113,7 +119,9 @@ async function toggleSearch() {
 
 const visibleEvents = computed(() => {
   const q = query.value.trim().toLowerCase();
-  const own = store.events.filter((e) => layers[ownerTone(e.owner)] !== false && (!q || String(e.title).toLowerCase().includes(q)));
+  const own = store.events.filter(
+  (e) => forSelectedBaby(e) && layers[ownerTone(e.owner)] !== false && (!q || String(e.title).toLowerCase().includes(q)),
+  );
   const google = gcal.layerEvents.value.filter((e) => !q || String(e.title).toLowerCase().includes(q));
   return [...own, ...google];
 });
@@ -233,7 +241,9 @@ const panelDate = ref(todayIso);
 const panelAdding = ref(false);
 const panelEditId = ref("");
 const selectedDay = ref(null);
-const panelEvents = computed(() => sortDayEvents(eventsOnDay(store.events, panelDate.value)));
+const panelEvents = computed(() =>
+  sortDayEvents(eventsOnDay(store.events.filter(forSelectedBaby), panelDate.value)),
+);
 const panelNight = computed(() => nightOwner(rota.view, panelDate.value));
 
 function openDay(iso, trigger = null, adding = false, editId = "") {

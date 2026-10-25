@@ -5,40 +5,63 @@ import Header from "@/app/components/Header.vue";
 import StepHeader from "@/app/components/StepHeader.vue";
 import OptionCard from "@/app/components/OptionCard.vue";
 import Field from "@/app/components/Field.vue";
+import BabyFields from "@/app/components/BabyFields.vue";
+import AddBabyForm from "@/app/components/AddBabyForm.vue";
+import BabyCard from "@/app/components/BabyCard.vue";
 import AppLink from "@/components/ui/AppLink.vue";
 import { SAMPLE } from "@/shared/constants/appConstants";
 import { ROUTES } from "@/app/routes";
 import { useAuth } from "@/app/composables/useAuth";
-import { createHousehold, getHouseholdInviteCode, joinHousehold } from "@/api/profile";
+import {
+  createHousehold,
+  getHouseholdBabies,
+  getHouseholdInviteCode,
+  joinHousehold,
+  getMember,
+} from "@/api/profile";
 import "@/app/app.css";
+import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 
 defineOptions({ name: "HouseholdPage" });
 
 const { currentUser, authProfile, loadProfile } = useAuth();
 const route = useRoute();
 
+const { loadBabies: refreshSidebarBabies } = useSelectedBaby();
+
 const loaded = ref(false);
 // An invite link (/join/NT-XXXX) lands here with ?code= and opens the join form.
 const linkCode = typeof route?.query?.code === "string" ? route.query.code : "";
 const mode = ref(linkCode ? "join" : "create"); // create | join
 const code = ref(linkCode);
+const householdLabel = ref("");
 const codeError = ref("");
 const error = ref("");
 const busy = ref(false);
 const result = ref(null); // { kind: "created" | "joined", inviteCode }
 const copied = ref(false);
-const babyName = ref("");
-const babyStatus = ref("born"); // born | expected
-const babyDate = ref("");
-const todayIso = (() => {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-})();
-const dateLabel = computed(() => (babyStatus.value === "born" ? "Date of birth" : "Due date"));
-const dateMax = computed(() => (babyStatus.value === "born" ? todayIso : undefined));
-const dateMin = computed(() => (babyStatus.value === "expected" ? todayIso : undefined));
+const baby = ref({ name: "", status: "born", date: "" }); // the first baby, asked while creating
 let copiedTimer = null;
+
+const householdId = ref("");
+const babies = ref([]);
+const showAddBaby = ref(false);
+const babyAdded = ref("");
+
+async function loadBabies() {
+  try {
+    babies.value = await getHouseholdBabies(householdId.value);
+  } catch {
+    babies.value = [];
+  }
+}
+
+async function onBabyAdded(name) {
+  babyAdded.value = name;
+  showAddBaby.value = false;
+  await loadBabies();
+  await refreshSidebarBabies(householdId.value);
+}
 
 const ready = computed(() => result.value !== null);
 const joined = computed(() => result.value?.kind === "joined");
@@ -50,9 +73,9 @@ const title = computed(() => {
 });
 const lead = computed(() => {
   if (!ready.value) {
-    return `A household connects care logs, tasks and appointments for the people supporting ${babyName.value.trim() || "your baby"}.`;
+    return `A household connects care logs, tasks and appointments for the people supporting ${baby.value.name.trim() || "your baby"}.`;
   }
-  if (joined.value) return "You can now see what your partner shares.";
+  if (joined.value) return "You can now see what the household’s parents share.";
   return inviteCode.value
     ? "Share this code with your partner. They enter it after creating their account."
     : "Your household is set up.";
@@ -62,13 +85,22 @@ onMounted(async () => {
   try {
     const profile = await loadProfile();
     if (profile?.householdId) {
-      let existing = null;
-      try {
-        existing = await getHouseholdInviteCode(profile.householdId);
-      } catch {
-        existing = null;
+      const membership = await getMember(profile.householdId, currentUser.value?.uid);
+      if (membership?.accessLevel === "caregiver" && linkCode) {
+        // Existing caregivers can accept additional caregiver invitations from their link.
+        mode.value = "join";
+      } else if (membership) {
+        let existing = null;
+        try {
+          existing = await getHouseholdInviteCode(profile.householdId);
+        } catch {
+          existing = null;
+        }
+        result.value = { kind: "created", inviteCode: existing };
       }
       result.value = { kind: "created", inviteCode: existing };
+      householdId.value = profile.householdId;
+      await loadBabies();
     }
   } catch {
     // If the profile cannot be read, fall back to the choice screen.
@@ -83,15 +115,6 @@ function selectMode(value) {
   mode.value = value;
   error.value = "";
   codeError.value = "";
-}
-
-function onStatusKeydown(event) {
-  const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"];
-  if (!keys.includes(event.key)) return;
-  event.preventDefault();
-  const next = babyStatus.value === "born" ? "expected" : "born";
-  babyStatus.value = next;
-  event.currentTarget.querySelector(`[data-status="${next}"]`)?.focus();
 }
 
 function onKeydown(event) {
@@ -113,24 +136,28 @@ async function submit() {
     return;
   }
   if (mode.value === "join" && !code.value.trim()) {
-    codeError.value = "Enter the invitation code from your partner.";
+    codeError.value = "Enter an invitation code from a parent in that household.";
     return;
   }
   busy.value = true;
   try {
     if (mode.value === "create") {
       const created = await createHousehold(user, {
-        babyName: babyName.value,
-        babyStatus: babyStatus.value,
-        babyDate: babyDate.value,
+        babyName: baby.value.name,
+        babyStatus: baby.value.status,
+        babyDate: baby.value.date,
       });
       result.value = { kind: "created", inviteCode: created.inviteCode };
+      householdId.value = created.householdId;
     } else {
-      await joinHousehold(user, code.value);
+      await joinHousehold(user, code.value, { householdLabel: householdLabel.value });
       result.value = { kind: "joined", inviteCode: null };
+      householdId.value = joinedHousehold.householdId;
     }
+    await loadBabies();
     if (authProfile.value) authProfile.value = { ...authProfile.value, onboarded: true };
   } catch (cause) {
+    console.error("[app household]", cause?.code, cause);
     // Invite errors already carry a sentence for the user (see inviteHelpers.js).
     error.value = String(cause?.code ?? "").startsWith("invite/")
       ? cause.message
@@ -179,50 +206,18 @@ async function copyCode() {
                 variant="radio"
                 data-mode="join"
                 title="Join a household"
-                description="Enter the invitation code from your partner."
+                description="Join a household with an invitation code."
                 :selected="mode === 'join'"
                 :tabindex="mode === 'join' ? 0 : -1"
                 @select="selectMode('join')"
               />
             </div>
             <div v-if="mode === 'create'" class="app-stack app-stack--24 w-100">
-              <Field
-                id="app-baby-name"
-                v-model="babyName"
-                label="Baby's name (optional)"
-                autocomplete="off"
-                hint="You can change this later."
-                :disabled="busy"
-              />
-              <div class="hh__status" role="radiogroup" aria-label="Baby status" @keydown="onStatusKeydown">
-                <button
-                  v-for="opt in [{ value: 'born', label: 'Baby is here' }, { value: 'expected', label: 'Baby is on the way' }]"
-                  :key="opt.value"
-                  type="button"
-                  role="radio"
-                  class="hh__seg"
-                  :class="{ 'hh__seg--on': babyStatus === opt.value }"
-                  :data-status="opt.value"
-                  :aria-checked="babyStatus === opt.value"
-                  :tabindex="babyStatus === opt.value ? 0 : -1"
-                  :disabled="busy"
-                  @click="babyStatus = opt.value"
-                >
-                  {{ opt.label }}
-                </button>
+              <div class="hh__baby app-stack app-stack--24">
+                <h3 class="hh__baby-title">Baby 1</h3>
+                <BabyFields v-model="baby" id-prefix="app-baby" hint="You can change this later." :disabled="busy" />
               </div>
-              <div class="app-field">
-                <label class="app-field__label" for="app-baby-date">{{ dateLabel }} (optional)</label>
-                <input
-                  id="app-baby-date"
-                  v-model="babyDate"
-                  class="app-input"
-                  type="date"
-                  :min="dateMin"
-                  :max="dateMax"
-                  :disabled="busy"
-                />
-              </div>
+              <p class="hh__hint">Twins or more? You can add each baby on the next step.</p>
             </div>
             <Field
               v-if="mode === 'join'"
@@ -231,8 +226,17 @@ async function copyCode() {
               label="Invitation code"
               :placeholder="SAMPLE.inviteCode"
               autocomplete="off"
-              hint="Ask your partner for the code on their screen."
+              hint="Ask a parent in that household for an invitation code."
               :error="codeError"
+              :disabled="busy"
+            />
+            <Field
+              v-if="mode === 'join'"
+              id="app-household-label"
+              v-model="householdLabel"
+              label="Name this household (optional)"
+              placeholder="e.g. Lee Family"
+              hint="Only you can see this name."
               :disabled="busy"
             />
             <div v-if="error" class="alert alert-danger app-alert" role="alert">{{ error }}</div>
@@ -244,11 +248,22 @@ async function copyCode() {
         </template>
 
         <template v-else>
+          <div v-if="babies.length" class="hh__babies">
+            <h3 class="hh__babies-title">Your babies</h3>
+            <BabyCard v-for="(baby, i) in babies" :key="baby.id" :baby="baby" :number="i + 1" />
+          </div>
+
+          <p v-if="babyAdded" class="app-text-link" role="status">{{ babyAdded }} was added.</p>
+
+          <button v-if="!showAddBaby" type="button" class="app-btn app-btn--outline" @click="showAddBaby = true">
+            Add another baby
+          </button>
+          <AddBabyForm v-else :household-id="householdId" :number="babies.length + 1" @added="onBabyAdded" @cancel="showAddBaby = false" />
           <div v-if="!joined && inviteCode" class="hh__code" aria-label="Invitation code">
             <p class="hh__code-text">{{ inviteCode }}</p>
           </div>
           <div class="hh__actions">
-            <RouterLink :to="ROUTES.HOME" class="app-btn app-btn--primary">Go to home</RouterLink>
+            <RouterLink :to="ROUTES.HOME" class="app-btn" :class="showAddBaby ? 'app-btn--outline' : 'app-btn--primary'">Go to home</RouterLink>
             <button
               v-if="!joined && inviteCode"
               type="button"
@@ -283,11 +298,6 @@ async function copyCode() {
 .hh__card { width: 100%; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
 .hh__main { min-width: 0; }
 .hh__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: 100%; }
-.hh__status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
-.hh__seg { padding: 12px 16px; background: #fff; border: 1px solid var(--nt-line); border-radius: 8px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-ink); cursor: pointer; }
-.hh__seg:hover { border-color: var(--nt-muted); }
-.hh__seg--on, .hh__seg--on:hover { border-color: var(--nt-plum); box-shadow: 0 0 0 1px var(--nt-plum); }
-.hh__seg:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 .hh__code { display: flex; align-items: center; justify-content: center; width: 100%; padding: 32px 48px; background: var(--nt-gray); border-radius: 12px; }
 .hh__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .hh__code-text { margin: 0; font-family: var(--nt-serif); font-size: 40px; line-height: normal; letter-spacing: 0.8px; color: var(--nt-plum); }
@@ -300,6 +310,12 @@ async function copyCode() {
 .hh__private { display: flex; flex-direction: column; gap: 6px; padding: 16px 16px 18px; background: var(--nt-butter); border: 1.5px dashed var(--nt-butter-d); border-radius: 8px; font-size: 0.875rem; }
 .hh__private-label { margin: 0; font-weight: 600; color: var(--nt-butter-d); }
 .hh__private-text { margin: 0; line-height: 21px; color: var(--nt-ink); }
+.hh__baby { width: 100%; padding: 20px 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.hh__baby-title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.4; color: var(--nt-ink); }
+@media (max-width: 575px) { .hh__baby { padding: 16px; } }
+.hh__hint { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
+.hh__babies { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.hh__babies-title { margin: 0; font-size: 1rem; font-weight: 600; color: var(--nt-ink); }
 
 @media (max-width: 1099px) {
   .hh { grid-template-columns: minmax(0, 1fr); gap: 32px; }

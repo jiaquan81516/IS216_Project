@@ -3,15 +3,23 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   getDocs,
+  onSnapshot,
   serverTimestamp,
   setDoc,
   Timestamp,
   updateDoc,
+  where,
+  query,
+  arrayRemove,
   writeBatch,
+  limit,
+  orderBy,
 } from "firebase/firestore";
 import { db } from "./db";
 import { describeInviteState, INVITE_ERROR_CODES, inviteExpiryMs, inviteState } from "@/app/utils/inviteHelpers";
+import { CAREGIVER_ROLES, caregiverPermissions, isPrimaryParent } from "@/app/utils/caregiverHelpers";
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_PREFIX = "NT-";
@@ -132,10 +140,11 @@ export async function createHousehold(user, baby = {}) {
     displayName: profile.displayName || user.displayName || "",
     photoURL: profile.photoURL ?? user.photoURL ?? null,
     role: profile.role ?? null,
+    accessLevel: "parent",
     joinedAt: serverTimestamp(),
   });
   batch.set(doc(db, "invites", inviteCode), inviteDoc(householdId, user.uid));
-  batch.update(doc(db, "users", user.uid), { householdId, onboarded: true });
+  batch.update(doc(db, "users", user.uid), { householdId, householdIds: [householdId], onboarded: true });
 
   await batch.commit();
   return { householdId, inviteCode };
@@ -149,10 +158,10 @@ export async function checkInviteCode(code) {
   const invite = inviteSnap?.exists() ? inviteSnap.data() : null;
   const state = inviteState(invite);
   if (state !== "valid") return { ok: false, householdId: null, message: describeInviteState(state) };
-  return { ok: true, householdId: invite.householdId ?? null, message: "" };
+  return { ok: true, householdId: invite.householdId ?? null, kind: invite.kind ?? "parent", message: "" };
 }
 
-export async function joinHousehold(user, code) {
+export async function joinHousehold(user, code, { householdLabel = "" } = {}) {
   const inviteCode = normaliseInviteCode(code);
   const inviteSnap = inviteCode ? await getDoc(doc(db, "invites", inviteCode)) : null;
   const invite = inviteSnap?.exists() ? inviteSnap.data() : null;
@@ -164,16 +173,37 @@ export async function joinHousehold(user, code) {
   }
   const { householdId } = invite;
   const profile = (await getUserProfile(user.uid)) || {};
+  const currentMember = profile.householdId ? await getMember(profile.householdId, user.uid) : null;
+  if (currentMember?.accessLevel === "caregiver" && invite.kind !== "caregiver") {
+    const error = new Error("Caregiver accounts can only join households through a caregiver invitation.");
+    error.code = "invite/caregiver-required";
+    throw error;
+  }
 
   const batch = writeBatch(db);
   batch.update(doc(db, "households", householdId), { memberIds: arrayUnion(user.uid) });
   batch.set(doc(db, "households", householdId, "members", user.uid), {
     displayName: profile.displayName || user.displayName || "",
     photoURL: profile.photoURL ?? user.photoURL ?? null,
-    role: profile.role ?? null,
+    role: invite.kind === "caregiver" ? invite.caregiverRole : (profile.role ?? null),
+    accessLevel: invite.kind === "caregiver" ? "caregiver" : "parent",
+    inviteCode,
+    ...(invite.kind === "caregiver" ? { permissions: caregiverPermissions(invite.caregiverRole, invite.permissions) } : {}),
     joinedAt: serverTimestamp(),
   });
-  batch.update(doc(db, "users", user.uid), { householdId, onboarded: true });
+  const userUpdates = {
+    householdId,
+    // arrayUnion keeps memberships already saved on the profile. Add the previous active
+    // household too, so older caregiver accounts are upgraded as they join another one.
+    householdIds: invite.kind === "caregiver"
+      ? arrayUnion(...[profile.householdId, householdId].filter(Boolean))
+      : [householdId],
+    onboarded: true,
+    ...(invite.kind === "caregiver" ? { role: invite.caregiverRole } : {}),
+  };
+  const cleanHouseholdLabel = String(householdLabel ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+  if (cleanHouseholdLabel) userUpdates[`householdLabels.${householdId}`] = cleanHouseholdLabel;
+  batch.update(doc(db, "users", user.uid), userUpdates);
   // Mark the code used so it cannot be shared on to a third person.
   batch.update(doc(db, "invites", inviteCode), { usedAt: serverTimestamp(), usedBy: user.uid });
   await batch.commit();
@@ -186,6 +216,7 @@ function inviteDoc(householdId, uid, now = Date.now()) {
   return {
     householdId,
     createdBy: uid,
+    kind: "parent",
     createdAt: serverTimestamp(),
     expiresAt: Timestamp.fromMillis(inviteExpiryMs(now)),
     usedAt: null,
@@ -263,5 +294,264 @@ export async function getHouseholdMembers(householdId) {
   return snap.docs
     .map((d) => ({ data: d.data(), uid: d.id }))
     .sort((a, b) => joined(a.data) - joined(b.data))
-    .map(({ data, uid }) => ({ uid, displayName: data.displayName ?? "", role: data.role ?? null }));
+    .map(({ data, uid }) => ({
+      uid,
+      displayName: data.displayName ?? "",
+      role: data.role ?? null,
+      accessLevel: data.accessLevel ?? (isPrimaryParent(data) ? "parent" : "caregiver"),
+      permissions: data.permissions ?? {},
+      joinedAt: data.joinedAt ?? null,
+    }));
+}
+
+export async function getMember(householdId, uid) {
+  if (!householdId || !uid) return null;
+  const snap = await getDoc(doc(db, "households", householdId, "members", uid));
+  if (!snap.exists()) return null;
+  const data = snap.data();
+  return { uid, ...data, accessLevel: data.accessLevel ?? (isPrimaryParent(data) ? "parent" : "caregiver") };
+}
+
+export async function getCaregiverHouseholds(uid) {
+  const profile = await getUserProfile(uid);
+  const ids = [...new Set([...(profile?.householdIds ?? []), profile?.householdId].filter(Boolean))];
+  const memberships = await Promise.all(ids.map(async (householdId) => {
+    const member = await getMember(householdId, uid);
+    if (member?.accessLevel !== "caregiver") return null;
+    let babyName = "";
+    if (member.permissions?.careBrief === true) {
+      try {
+        const brief = await getCareBrief(householdId, { routine: false, feeding: false, contacts: false, child: true, allergies: false, medications: false });
+        babyName = String(brief.babyName ?? "").trim();
+      } catch {
+        // The household remains switchable when the parent has hidden the child's name.
+      }
+    }
+    const customLabel = String(profile?.householdLabels?.[householdId] ?? "").trim();
+    return {
+      householdId,
+      member,
+      babyName,
+      customLabel,
+      editableLabel: customLabel || babyName,
+      label: customLabel || babyName || "Caregiving household",
+    };
+  }));
+  const activeHouseholds = memberships.filter(Boolean);
+  const activeId = activeHouseholds.some((item) => item.householdId === profile?.householdId)
+    ? profile.householdId
+    : activeHouseholds[0]?.householdId ?? null;
+  const validIds = activeHouseholds.map((item) => item.householdId);
+  const activeRole = activeHouseholds.find((item) => item.householdId === activeId)?.member.role ?? profile?.role ?? null;
+  if (profile && (JSON.stringify(profile.householdIds ?? []) !== JSON.stringify(validIds) || profile.householdId !== activeId || profile.role !== activeRole)) {
+    await updateDoc(doc(db, "users", uid), { householdIds: validIds, householdId: activeId, role: activeRole });
+  }
+  const labelCounts = new Map();
+  const labelOccurrences = new Map();
+  activeHouseholds.forEach((item) => labelCounts.set(item.label, (labelCounts.get(item.label) ?? 0) + 1));
+  return activeHouseholds.map((item) => {
+    const duplicate = labelCounts.get(item.label) > 1;
+    const occurrence = (labelOccurrences.get(item.label) ?? 0) + 1;
+    labelOccurrences.set(item.label, occurrence);
+    const label = duplicate ? `${item.label} ${occurrence}` : item.label;
+    return { ...item, label, active: item.householdId === activeId };
+  });
+}
+
+export async function setActiveCaregiverHousehold(uid, householdId) {
+  const member = await getMember(householdId, uid);
+  if (member?.accessLevel !== "caregiver") {
+    const error = new Error("You no longer have access to that caregiving household.");
+    error.code = "household/not-caregiver-member";
+    throw error;
+  }
+  await updateDoc(doc(db, "users", uid), { householdId, role: member.role ?? null });
+}
+
+export async function setCaregiverHouseholdLabel(uid, householdId, label) {
+  const member = await getMember(householdId, uid);
+  if (member?.accessLevel !== "caregiver") {
+    const error = new Error("You no longer have access to that caregiving household.");
+    error.code = "household/not-caregiver-member";
+    throw error;
+  }
+  const cleanLabel = String(label ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+  if (!cleanLabel) {
+    const error = new Error("Enter a household name, such as Lee Family.");
+    error.code = "household/empty-label";
+    throw error;
+  }
+  await updateDoc(doc(db, "users", uid), { [`householdLabels.${householdId}`]: cleanLabel });
+}
+
+export async function createCaregiverInvite(uid, householdId, { name, role, permissions }) {
+  if (!CAREGIVER_ROLES.some((item) => item.value === role)) {
+    const error = new Error("Choose a caregiver role.");
+    error.code = "caregiver/bad-role";
+    throw error;
+  }
+  const display = String(name ?? "").trim().slice(0, 40);
+  const code = await freshCode();
+  const normalizedPermissions = caregiverPermissions(role, permissions);
+  await setDoc(doc(db, "invites", code), {
+    ...inviteDoc(householdId, uid),
+    kind: "caregiver",
+    caregiverName: display,
+    caregiverRole: role,
+    permissions: normalizedPermissions,
+  });
+  return { code, name: display, role, permissions: normalizedPermissions };
+}
+
+export async function listCaregiverInvites(householdId) {
+  const q = query(collection(db, "invites"), where("householdId", "==", householdId), where("kind", "==", "caregiver"));
+  const snap = await getDocs(q);
+  return snap.docs.map((item) => ({ code: item.id, ...item.data() }));
+}
+
+export async function updateCaregiverPermissions(householdId, uid, role, permissions) {
+  if (!CAREGIVER_ROLES.some((item) => item.value === role)) throw new Error("Choose a caregiver role.");
+  await updateDoc(doc(db, "households", householdId, "members", uid), {
+    role,
+    accessLevel: "caregiver",
+    permissions: caregiverPermissions(role, permissions),
+  });
+}
+
+export async function removeCaregiver(householdId, uid) {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, "households", householdId, "members", uid));
+  batch.update(doc(db, "households", householdId), { memberIds: arrayRemove(uid) });
+  await batch.commit();
+}
+
+export async function revokeCaregiverInvite(code) {
+  await updateDoc(doc(db, "invites", normaliseInviteCode(code)), { revokedAt: serverTimestamp() });
+}
+
+export async function saveCareBrief(householdId, brief) {
+  const feeding = { feeding: String(brief?.feeding ?? "").trim().slice(0, 500) };
+  const routine = { napRoutine: String(brief?.napRoutine ?? "").trim().slice(0, 500) };
+  const contacts = { parentContacts: String(brief?.parentContacts ?? "").trim().slice(0, 500) };
+  const allergies = { allergies: String(brief?.allergies ?? "").trim().slice(0, 500) };
+  const medications = { medications: String(brief?.medications ?? "").trim().slice(0, 500) };
+  const child = { babyName: String(brief?.babyName ?? "").trim().slice(0, 80) };
+  await Promise.all([
+    setDoc(doc(db, "households", householdId, "careBrief", "feeding"), feeding, { merge: true }),
+    setDoc(doc(db, "households", householdId, "careBrief", "routine"), routine, { merge: true }),
+    setDoc(doc(db, "households", householdId, "careBrief", "contacts"), contacts, { merge: true }),
+    setDoc(doc(db, "households", householdId, "careBrief", "child"), child, { merge: true }),
+    setDoc(doc(db, "households", householdId, "careBrief", "allergies"), allergies, { merge: true }),
+    setDoc(doc(db, "households", householdId, "careBrief", "medications"), medications, { merge: true }),
+  ]);
+  const clean = { ...feeding, ...routine, ...contacts, ...child, ...allergies, ...medications };
+  return clean;
+}
+
+export async function getCareBrief(householdId, { routine = true, feeding = true, contacts = true, child = true, allergies = true, medications = true } = {}) {
+  const sections = ["routine", "feeding", "contacts", "child", "allergies", "medications"];
+  const enabled = { routine, feeding, contacts, child, allergies, medications };
+  const snaps = await Promise.all(sections.map((section) => enabled[section]
+    ? getDocFromServer(doc(db, "households", householdId, "careBrief", section))
+    : Promise.resolve(null)));
+  return Object.assign({}, ...snaps.map((snap) => snap?.exists() ? snap.data() : {}));
+}
+
+export function subscribeCareBrief(householdId, options, onData, onError) {
+  const { routine = true, feeding = true, contacts = true, child = true, allergies = true, medications = true } = options ?? {};
+  const enabled = { routine, feeding, contacts, child, allergies, medications };
+  const sections = ["routine", "feeding", "contacts", "child", "allergies", "medications"];
+  const enabledSections = sections.filter((section) => enabled[section]);
+  const values = Object.fromEntries(sections.map((section) => [section, {}]));
+  const received = new Set();
+  let active = true;
+  const unsubscribes = enabledSections.map((section) => onSnapshot(
+    doc(db, "households", householdId, "careBrief", section),
+    (snap) => {
+      values[section] = snap.exists() ? snap.data() : {};
+      received.add(section);
+      if (active && received.size === enabledSections.length) onData(Object.assign({}, ...Object.values(values)));
+    },
+    (cause) => {
+      if (active) onError?.(cause);
+    },
+  ));
+  if (active && enabledSections.length === 0) onData({});
+  return () => {
+    active = false;
+    unsubscribes.forEach((unsubscribe) => unsubscribe());
+  };
+}
+
+export async function syncCareBriefChildName(householdId, babyName) {
+  const name = String(babyName ?? "").trim().slice(0, 80);
+  const ref = doc(db, "households", householdId, "careBrief", "child");
+  const snap = await getDoc(ref);
+  if (snap.data()?.babyName !== name) await setDoc(ref, { babyName: name }, { merge: true });
+  return name;
+}
+
+export async function getRecentCareEntries(householdId, max = 100) {
+  const q = query(collection(db, "households", householdId, "entries"), orderBy("at", "desc"), limit(max));
+  const snap = await getDocs(q);
+  return snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+}
+
+export async function getUpcomingCareAppointments(householdId, max = 10) {
+  const now = new Date();
+  const fromIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const q = query(
+    collection(db, "households", householdId, "events"),
+    where("date", ">=", fromIso),
+    orderBy("date"),
+    limit(max),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+}
+
+export async function addBaby(householdId, baby = {}) {
+  if (!householdId) {
+    const error = new Error("You need a household before you can add a baby.");
+    error.code = "baby/no-household";
+    throw error;
+  }
+  const clean = cleanBaby(baby);
+  const babyId = crypto.randomUUID();
+  await setDoc(doc(db, "households", householdId, "babies", babyId), {
+    ...clean,
+    createdAt: serverTimestamp(),
+  });
+  return { babyId };
+}
+
+export async function getHouseholdBabies(householdId) {
+  if (!householdId) return [];
+  const household = await getHousehold(householdId);
+  if (!household) return [];
+  const primary = {
+    id: "primary",
+    ...cleanBaby({
+      babyName: household.babyName,
+      babyStatus: household.babyStatus,
+      babyDate: household.babyDate,
+    }),
+  };
+  const snap = await getDocs(collection(db, "households", householdId, "babies"));
+  const created = (data) => data.createdAt?.toMillis?.() ?? 0;
+  const extra = snap.docs
+    .map((d) => ({ id: d.id, ...cleanBaby(d.data()), createdAt: created(d.data()) }))
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map(({ createdAt, ...rest }) => rest);
+  return [primary, ...extra];
+}
+
+export async function updateBaby(householdId, babyId, baby = {}) {
+  if (!householdId || !babyId) return;
+  const { babyName, babyStatus, babyDate } = cleanBaby(baby);
+  if (babyId === "primary") {
+    await updateDoc(doc(db, "households", householdId), { babyName, babyStatus, babyDate });
+  } else {
+    await updateDoc(doc(db, "households", householdId, "babies", babyId), { babyName, babyStatus, babyDate });
+  }
 }

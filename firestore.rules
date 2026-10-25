@@ -9,6 +9,24 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isParentFor(householdId) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/households/$(householdId))
+        && request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds
+        && exists(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid))
+        && (get(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid)).data.get('accessLevel', '') == 'parent'
+          || get(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid)).data.get('role', '') in ['mum', 'dad', 'carer', 'parent', 'partner']);
+    }
+
+    function isCreatorOfNewHousehold(householdId) {
+      return signedIn()
+        && existsAfter(/databases/$(database)/documents/households/$(householdId))
+        && request.auth.uid in getAfter(/databases/$(database)/documents/households/$(householdId)).data.memberIds
+        && existsAfter(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/households/$(householdId)).data.createdBy == request.auth.uid
+        && getAfter(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid)).data.accessLevel == 'parent';
+    }
+
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;
       match /{document=**} {
@@ -17,7 +35,34 @@ service cloud.firestore {
     }
 
     match /households/{householdId} {
-      allow read: if signedIn() && request.auth.uid in resource.data.memberIds;
+      function memberPath(uid) {
+        return /databases/$(database)/documents/households/$(householdId)/members/$(uid);
+      }
+
+      function isMember() {
+        return signedIn() && request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds;
+      }
+
+      function isPrimaryParent() {
+        return isMember()
+          && exists(memberPath(request.auth.uid))
+          && (get(memberPath(request.auth.uid)).data.get('accessLevel', '') == 'parent'
+          || get(memberPath(request.auth.uid)).data.get('role', '') in ['mum', 'dad', 'carer', 'parent', 'partner']);
+      }
+
+      function isPrimaryMember(data) {
+        return data.get('accessLevel', '') == 'parent'
+          || data.get('role', '') in ['mum', 'dad', 'carer', 'parent', 'partner'];
+      }
+
+      function hasPermission(key) {
+        return isPrimaryParent()
+          || (isMember()
+            && exists(memberPath(request.auth.uid))
+            && get(memberPath(request.auth.uid)).data.get('permissions', {}).get(key, false) == true);
+      }
+
+      allow read: if isPrimaryParent();
 
       allow create: if signedIn()
         && request.auth.uid in request.resource.data.memberIds
@@ -25,8 +70,8 @@ service cloud.firestore {
 
       // Joining: only memberIds changes, old ids are kept, exactly the caller is added,
       // and the household's invitation code must exist.
-      // Leaving: only memberIds changes and the caller takes only themselves out.
-      // Editing: a member may change the baby details and the invitation code, with the
+      // Leaving: a member may take themselves out. A parent may also remove a caregiver.
+      // Editing: a parent may change the baby details and the invitation code, with the
       // baby name capped so one person cannot push a huge string into a shared document.
       allow update: if signedIn() && (
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
@@ -34,12 +79,20 @@ service cloud.firestore {
           && request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1
           && request.auth.uid in request.resource.data.memberIds
           && !(request.auth.uid in resource.data.memberIds)
-          && exists(/databases/$(database)/documents/invites/$(resource.data.inviteCode)))
+          && existsAfter(memberPath(request.auth.uid))
+          && getAfter(memberPath(request.auth.uid)).data.inviteCode is string
+          && exists(/databases/$(database)/documents/invites/$(getAfter(memberPath(request.auth.uid)).data.inviteCode))
+          && get(/databases/$(database)/documents/invites/$(getAfter(memberPath(request.auth.uid)).data.inviteCode)).data.householdId == householdId
+          && get(/databases/$(database)/documents/invites/$(getAfter(memberPath(request.auth.uid)).data.inviteCode)).data.usedBy == null
+          && get(/databases/$(database)/documents/invites/$(getAfter(memberPath(request.auth.uid)).data.inviteCode)).data.revokedAt == null
+          && (!('expiresAt' in get(/databases/$(database)/documents/invites/$(getAfter(memberPath(request.auth.uid)).data.inviteCode)).data)
+            || get(/databases/$(database)/documents/invites/$(getAfter(memberPath(request.auth.uid)).data.inviteCode)).data.expiresAt > request.time))
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds'])
-          && request.auth.uid in resource.data.memberIds
-          && !(request.auth.uid in request.resource.data.memberIds)
-          && request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1)
-        || (request.auth.uid in resource.data.memberIds
+          && request.resource.data.memberIds.size() == resource.data.memberIds.size() - 1
+          && resource.data.memberIds.hasAll(request.resource.data.memberIds)
+          && ((request.auth.uid in resource.data.memberIds && !(request.auth.uid in request.resource.data.memberIds))
+            || isPrimaryParent()))
+        || (isPrimaryParent()
           && request.resource.data.diff(resource.data).affectedKeys()
                .hasOnly(['babyName', 'babyStatus', 'babyDate', 'inviteCode'])
           && (!('babyName' in request.resource.data) || request.resource.data.babyName == null
@@ -47,25 +100,86 @@ service cloud.firestore {
       );
 
       match /members/{memberId} {
-        allow read: if signedIn()
-          && request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds;
-        // Rules see the pre-batch state, so a joiner is allowed when the household's invite
-        // exists. getAfter covers the creator, whose household is written in the same batch.
+        allow read: if isPrimaryParent() || request.auth.uid == memberId;
+
         allow create: if signedIn()
           && request.auth.uid == memberId
           && (
-            request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.memberIds
-            || exists(/databases/$(database)/documents/invites/$(get(/databases/$(database)/documents/households/$(householdId)).data.inviteCode))
-            || request.auth.uid in getAfter(/databases/$(database)/documents/households/$(householdId)).data.memberIds
+            (request.resource.data.accessLevel == 'parent'
+              && getAfter(/databases/$(database)/documents/households/$(householdId)).data.createdBy == request.auth.uid
+              && request.auth.uid in getAfter(/databases/$(database)/documents/households/$(householdId)).data.memberIds)
+            || (request.resource.data.inviteCode is string
+              && exists(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode))
+              && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.householdId == householdId
+              && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.usedBy == null
+              && get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.revokedAt == null
+              && (!('expiresAt' in get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data)
+                || get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.expiresAt > request.time)
+              && ((get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.get('kind', 'parent') == 'caregiver'
+                    && request.resource.data.accessLevel == 'caregiver'
+                    && request.resource.data.role == get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.caregiverRole
+                    && request.resource.data.permissions == get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.permissions)
+                || (get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode)).data.get('kind', 'parent') == 'parent'
+                    && request.resource.data.accessLevel == 'parent')))
           );
 
-        // Your own member document is the copy your partner reads, so only you may change
-        // it, and only you may remove it when you leave.
-        allow update: if signedIn()
-          && request.auth.uid == memberId
-          && (!('displayName' in request.resource.data) || request.resource.data.displayName == null
-            || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 80));
-        allow delete: if signedIn() && request.auth.uid == memberId;
+        allow update: if (request.auth.uid == memberId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'role'])
+            && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) || isPrimaryMember(resource.data))
+            && (!('displayName' in request.resource.data) || request.resource.data.displayName == null
+              || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 80)))
+          || (isPrimaryParent()
+            && !isPrimaryMember(resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'accessLevel', 'permissions'])
+            && request.resource.data.accessLevel == 'caregiver'
+            && request.resource.data.role in ['grandparent', 'domestic-helper', 'babysitter', 'childcare-provider', 'trusted-caregiver']
+            && request.resource.data.permissions is map
+            && request.resource.data.permissions.keys().hasOnly(['careBrief', 'careLogRead', 'careLogAdd', 'careLogEdit', 'careLogMedication', 'feedingInstructions', 'allergyInfo', 'medicationInfo', 'appointments', 'napRoutine']));
+        allow delete: if (signedIn() && request.auth.uid == memberId)
+          || (isPrimaryParent() && !isPrimaryMember(resource.data));
+      }
+
+      match /careBrief/{sectionId} {
+        allow read: if (sectionId == 'routine' && hasPermission('napRoutine'))
+          || (sectionId == 'feeding' && hasPermission('feedingInstructions'))
+          || ((sectionId == 'contacts' || sectionId == 'child') && hasPermission('careBrief'))
+          || (sectionId == 'allergies' && hasPermission('allergyInfo'))
+          || (sectionId == 'medications' && hasPermission('medicationInfo'));
+        allow create, update: if isPrimaryParent()
+          && ((sectionId == 'routine'
+              && request.resource.data.keys().hasOnly(['napRoutine'])
+              && request.resource.data.napRoutine is string && request.resource.data.napRoutine.size() <= 500)
+            || (sectionId == 'feeding'
+              && request.resource.data.keys().hasOnly(['feeding'])
+              && request.resource.data.feeding is string && request.resource.data.feeding.size() <= 500)
+            || (sectionId == 'contacts'
+              && request.resource.data.keys().hasOnly(['parentContacts'])
+              && request.resource.data.parentContacts is string && request.resource.data.parentContacts.size() <= 500)
+            || (sectionId == 'child'
+              && request.resource.data.keys().hasOnly(['babyName'])
+              && request.resource.data.babyName is string && request.resource.data.babyName.size() <= 80)
+            || (sectionId == 'allergies'
+              && request.resource.data.keys().hasOnly(['allergies'])
+              && request.resource.data.allergies is string && request.resource.data.allergies.size() <= 500)
+            || (sectionId == 'medications'
+              && request.resource.data.keys().hasOnly(['medications'])
+              && request.resource.data.medications is string && request.resource.data.medications.size() <= 500));
+        allow delete: if false;
+      }
+
+      // Babies. One document per extra baby in the household (the first baby stays on the
+      // household document). Parents read and write them, in the same shape the household
+      // document uses for its own baby. Nothing is deleted.
+      match /babies/{babyId} {
+        allow read: if isPrimaryParent();
+        allow create, update: if isPrimaryParent()
+          && request.resource.data.keys().hasOnly(['babyName', 'babyStatus', 'babyDate', 'createdAt'])
+          && (request.resource.data.babyName == null
+            || (request.resource.data.babyName is string && request.resource.data.babyName.size() <= 80))
+          && request.resource.data.babyStatus in ['expected', 'born']
+          && (request.resource.data.babyDate == null
+            || (request.resource.data.babyDate is string && request.resource.data.babyDate.size() == 10));
+        allow delete: if false;
       }
 
       // The care log. Members read. Anyone can add their own entries. Only the author edits
@@ -86,21 +200,24 @@ service cloud.firestore {
                 && request.resource.data.details.text.size() <= 400));
         }
 
-        allow read: if isMember();
+        allow read: if hasPermission('careLogRead');
 
-        allow create: if isMember()
+        allow create: if hasPermission('careLogAdd')
+          && (request.resource.data.type != 'medication' || hasPermission('careLogMedication'))
           && request.resource.data.by == request.auth.uid
           && validEntry();
 
         allow update: if isMember() && (
-          (resource.data.by == request.auth.uid
+          (hasPermission('careLogEdit')
+            && (resource.data.type != 'medication' || hasPermission('careLogMedication'))
+            && resource.data.by == request.auth.uid
             && request.resource.data.by == resource.data.by
             && validEntry())
-          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy'])
+          || (hasPermission('careLogRead') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy'])
             && request.resource.data.seenBy.diff(resource.data.seenBy).affectedKeys().hasOnly([request.auth.uid]))
         );
 
-        allow delete: if isMember() && resource.data.by == request.auth.uid;
+        allow delete: if hasPermission('careLogEdit') && resource.data.by == request.auth.uid;
       }
 
       // Shared membership check for the collections below. The care log keeps its own copy
@@ -113,28 +230,28 @@ service cloud.firestore {
       // The sleep rota plan. One document, "settings". Either parent may save it, and every
       // write says who did it.
       match /rota/{docId} {
-        allow read: if sharedMember();
-        allow create, update: if sharedMember() && request.resource.data.updatedBy == request.auth.uid;
+        allow read: if isPrimaryParent();
+        allow create, update: if isPrimaryParent() && request.resource.data.updatedBy == request.auth.uid;
         allow delete: if false;
       }
 
       // One document per night, id yyyy-mm-dd, for nights set by hand or by an accepted swap.
       match /nights/{nightId} {
-        allow read: if sharedMember();
-        allow create, update: if sharedMember() && request.resource.data.setBy == request.auth.uid;
-        allow delete: if sharedMember();
+        allow read: if isPrimaryParent();
+        allow create, update: if isPrimaryParent() && request.resource.data.setBy == request.auth.uid;
+        allow delete: if isPrimaryParent();
       }
 
       // Swap requests. You may only ask in your own name, only the other parent may accept or
       // decline, and only the asker may cancel.
       match /swaps/{swapId} {
-        allow read: if sharedMember();
+        allow read: if isPrimaryParent();
 
-        allow create: if sharedMember()
+        allow create: if isPrimaryParent()
           && request.resource.data.from == request.auth.uid
           && request.resource.data.status == 'pending';
 
-        allow update: if sharedMember()
+        allow update: if isPrimaryParent()
           && request.resource.data.from == resource.data.from
           && request.resource.data.date == resource.data.date
           && resource.data.status == 'pending'
@@ -150,18 +267,18 @@ service cloud.firestore {
 
       // Calendar events. Shared, so either parent may edit or delete one. The author is kept.
       match /events/{eventId} {
-        allow read: if sharedMember();
-        allow create: if sharedMember() && request.resource.data.createdBy == request.auth.uid;
-        allow update: if sharedMember() && request.resource.data.createdBy == resource.data.createdBy;
-        allow delete: if sharedMember();
+        allow read: if hasPermission('appointments');
+        allow create: if isPrimaryParent() && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isPrimaryParent() && request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if isPrimaryParent();
       }
 
       // Return to work tasks. Shared the same way as events.
       match /tasks/{taskId} {
-        allow read: if sharedMember();
-        allow create: if sharedMember() && request.resource.data.createdBy == request.auth.uid;
-        allow update: if sharedMember() && request.resource.data.createdBy == resource.data.createdBy;
-        allow delete: if sharedMember();
+        allow read: if isPrimaryParent();
+        allow create: if isPrimaryParent() && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isPrimaryParent() && request.resource.data.createdBy == resource.data.createdBy;
+        allow delete: if isPrimaryParent();
       }
 
       // The household stream's plain messages. Members read. You may only post in your own
@@ -172,8 +289,8 @@ service cloud.firestore {
       // share with their partner. Members read it; only its owner writes or removes it. The
       // private check-in itself is never stored here.
       match /feelings/{feelingId} {
-        allow read: if sharedMember();
-        allow create, update: if sharedMember()
+        allow read: if hasPermission('wellness');
+        allow create, update: if isPrimaryParent()
           && feelingId == request.auth.uid
           && request.resource.data.keys().hasOnly(['uid', 'level', 'date', 'updatedAt'])
           && request.resource.data.uid == request.auth.uid
@@ -181,7 +298,7 @@ service cloud.firestore {
           && request.resource.data.date is string
           && request.resource.data.date.size() == 10
           && request.resource.data.updatedAt == request.time;
-        allow delete: if sharedMember() && feelingId == request.auth.uid;
+        allow delete: if isPrimaryParent() && feelingId == request.auth.uid;
       }
 
       // Wellness check-ins. Both parents read them, so the week can be shown as a pair. One
@@ -207,8 +324,8 @@ service cloud.firestore {
       // The chat between the two parents. Written in your own name, once, and never edited or
       // deleted. "thanks" marks a thank you so the weekly summary can count it.
       match /chat/{messageId} {
-        allow read: if sharedMember();
-        allow create: if sharedMember()
+        allow read: if isPrimaryParent();
+        allow create: if isPrimaryParent()
           && request.resource.data.keys().hasOnly(['from', 'text', 'kind', 'createdAt'])
           && request.resource.data.from == request.auth.uid
           && request.resource.data.text is string
@@ -220,9 +337,9 @@ service cloud.firestore {
       }
 
       match /posts/{postId} {
-        allow read: if sharedMember();
+        allow read: if isPrimaryParent();
 
-        allow create: if sharedMember()
+        allow create: if isPrimaryParent()
           && request.resource.data.keys().hasOnly(['text', 'authorUid', 'createdAt', 'ackedBy'])
           && request.resource.data.authorUid == request.auth.uid
           && request.resource.data.text is string
@@ -231,20 +348,20 @@ service cloud.firestore {
           && request.resource.data.createdAt == request.time
           && (!('ackedBy' in request.resource.data) || request.resource.data.ackedBy == []);
 
-        allow update: if sharedMember()
+        allow update: if isPrimaryParent()
           && resource.data.authorUid != request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ackedBy', 'ackedAt'])
           && !(request.auth.uid in resource.data.get('ackedBy', []))
           && request.resource.data.ackedBy == resource.data.get('ackedBy', []).concat([request.auth.uid])
           && request.resource.data.ackedAt == request.time;
 
-        allow delete: if sharedMember() && resource.data.authorUid == request.auth.uid;
+        allow delete: if isPrimaryParent() && resource.data.authorUid == request.auth.uid;
       }
 
       // The return to work plan. One document, "plan", like the rota settings.
       match /rtw/{docId} {
-        allow read: if sharedMember();
-        allow create, update: if sharedMember() && request.resource.data.updatedBy == request.auth.uid;
+        allow read: if isPrimaryParent();
+        allow create, update: if isPrimaryParent() && request.resource.data.updatedBy == request.auth.uid;
         allow delete: if false;
       }
     }
@@ -255,19 +372,33 @@ service cloud.firestore {
     match /invites/{code} {
       allow read: if signedIn();
       allow create: if signedIn()
+        && (isParentFor(request.resource.data.householdId)
+          || isCreatorOfNewHousehold(request.resource.data.householdId))
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.usedAt == null
-        && request.resource.data.usedBy == null;
+        && request.resource.data.usedBy == null
+        && request.resource.data.kind in ['parent', 'caregiver']
+        && (request.resource.data.kind != 'caregiver'
+          || (request.resource.data.caregiverRole in ['grandparent', 'domestic-helper', 'babysitter', 'childcare-provider', 'trusted-caregiver']
+            && request.resource.data.permissions is map
+            && request.resource.data.permissions.keys().hasOnly(['careBrief', 'careLogRead', 'careLogAdd', 'careLogEdit', 'careLogMedication', 'feedingInstructions', 'allergyInfo', 'medicationInfo', 'appointments', 'napRoutine'])
+            && request.resource.data.caregiverName is string
+            && request.resource.data.caregiverName.size() <= 40));
 
       allow update: if signedIn() && (
         // Joining with it: only the two "used" fields, only once, in your own name.
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedAt', 'usedBy'])
           && resource.data.usedBy == null
+          && resource.data.revokedAt == null
+          && (!('expiresAt' in resource.data) || resource.data.expiresAt > request.time)
           && request.resource.data.usedBy == request.auth.uid
-          && request.resource.data.usedAt is timestamp)
+          && request.resource.data.usedAt is timestamp
+          && existsAfter(/databases/$(database)/documents/households/$(resource.data.householdId)/members/$(request.auth.uid))
+          && getAfter(/databases/$(database)/documents/households/$(resource.data.householdId)/members/$(request.auth.uid)).data.inviteCode == code
+          && request.auth.uid in getAfter(/databases/$(database)/documents/households/$(resource.data.householdId)).data.memberIds)
         // Replacing it: only the creator, and only the revoked stamp.
         || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['revokedAt'])
-          && resource.data.createdBy == request.auth.uid
+          && (resource.data.createdBy == request.auth.uid || isParentFor(resource.data.householdId))
           && request.resource.data.revokedAt is timestamp)
       );
 
