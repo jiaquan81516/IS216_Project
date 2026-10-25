@@ -1,5 +1,6 @@
 import { getCurrentScope, onScopeDispose, watch } from "vue";
 import { useCalendarStore } from "@/app/stores/calendar";
+import { useCheckinsStore } from "@/app/stores/checkins";
 import { useChatStore } from "@/app/stores/chat";
 import { usePostsStore } from "@/app/stores/posts";
 import { useReturnToWorkStore } from "@/app/stores/returnToWork";
@@ -20,7 +21,8 @@ export function useShared(householdId, meUid, partnerUid) {
   const posts = usePostsStore();
   const team = useTeamStore();
   const chat = useChatStore();
-  const stores = [rota, calendar, rtw, posts, team, chat];
+  const checkins = useCheckinsStore();
+  const stores = [rota, calendar, rtw, posts, team, chat, checkins];
 
   function stop() {
     for (const store of stores) store.unbind();
@@ -46,5 +48,5 @@ export function useShared(householdId, meUid, partnerUid) {
   );
   if (getCurrentScope()) onScopeDispose(stop);
 
-  return { rota, calendar, rtw, posts, team, chat, retry: start, stop };
+  return { rota, calendar, rtw, posts, team, chat, checkins, retry: start, stop };
 }

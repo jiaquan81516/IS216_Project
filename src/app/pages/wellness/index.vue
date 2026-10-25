@@ -2,11 +2,10 @@
 import "@/app/app.css";
 import { computed, h, inject, nextTick, ref, watch } from "vue";
 import AppButton from "@/components/ui/AppButton.vue";
-import ChipGroup from "@/app/components/ChipGroup.vue";
 import WeekTogether from "@/app/components/WeekTogether.vue";
 import { NUDGES_KEY } from "@/app/composables/useNudges";
 import { dateKey, useCheckinsStore } from "@/app/stores/checkins";
-import { HOME_KEY, displayName } from "@/app/composables/useHome";
+import { HOME_KEY } from "@/app/composables/useHome";
 import {
   BODY_AREAS,
   BODY_PROMPT,
@@ -21,10 +20,10 @@ import {
   kindWords,
   readingFor,
 } from "@/app/data/wellness";
-import { useTeamStore } from "@/app/stores/team";
-import { HOME_KEY } from "@/app/composables/useHome";
-import { FEELING_LABELS, feelingLevel, needsSupport } from "@/app/utils/loadHelpers";
+import { isHardCheckin, needsSupport } from "@/app/utils/loadHelpers";
 import { ROUTES } from "@/app/routes";
+import { setFeeling } from "@/api/team";
+import { notifyPartner } from "@/api/push";
 
 defineOptions({ name: "WellnessPage" });
 
@@ -154,24 +153,21 @@ CloseCircles.props = ["level"];
 
 /* Page */
 const store = useCheckinsStore();
+const home = inject(HOME_KEY, null);
+const partnerName = computed(() => home?.partner?.value?.firstName || "");
+const partnerFirst = computed(() => partnerName.value.split(" ")[0]);
+const privacyLine = computed(() =>
+  partnerName.value ? `You and ${partnerName.value} can both see your check-ins.` : "Your partner will see your check-ins once they join.",
+);
 
-const MOODS = [
-  { value: 1, label: "Very low" },
-  { value: 2, label: "Low" },
-  { value: 3, label: "Okay" },
-  { value: 4, label: "Good" },
-  { value: 5, label: "Great" },
-];
-// Stress is stored 1 (none) to 5 (very high); chips run from most to least stress.
-const STRESS = [
-  { value: 5, label: "Very high" },
-  { value: 4, label: "High" },
-  { value: 3, label: "Some" },
-  { value: 2, label: "Low" },
-  { value: 1, label: "None" },
-];
+// The weekly summary. Everything between you and your partner lives in the chat.
+const nudgeState = inject(NUDGES_KEY, null);
+const week = computed(() => nudgeState?.together.value ?? null);
+const today = dateKey(new Date());
 
-const existing = store.forDate(dateKey(new Date()));
+// A check-in from the last 24 hours stands in for today's quiz. It is shown first, and the quiz
+// is only reopened when the parent chooses to change their answers.
+const existing = store.recent() ?? store.forDate(today);
 const mood = ref(existing?.mood ?? null);
 const energy = ref(existing?.energy ?? null);
 const stress = ref(existing?.stress ?? null);
@@ -191,7 +187,7 @@ const answers = () => ({
 });
 
 // "steps" is the check-in, "summary" the reading of the saved answers.
-const view = ref("steps");
+const view = ref(store.recent() ? "summary" : "steps");
 const STEPS = ["light", "tank", "stones", "body", "close", "weigh", "review"];
 const REQUIRED = { light: () => mood.value, stones: () => stress.value };
 const step = ref(0);
@@ -305,7 +301,7 @@ async function showSummary() {
   await nextTick();
   summaryHeading.value?.focus();
 }
-const sharedNote = ref("");
+const saveNote = computed(() => store.error);
 
 async function save() {
   if (!mood.value || !stress.value) {
@@ -315,11 +311,53 @@ async function save() {
     return;
   }
   error.value = "";
-  store.save({ mood: mood.value, stress: stress.value });
-  saved.value = { mood: mood.value, stress: stress.value };
+  const entry = store.save(answers());
+  savedEntry.value = entry;
+  // Your partner sees the check-in itself, so a hard day also reaches their phone, once a day.
+  if (partnerName.value && isHardCheckin(entry)) {
+    shareHardDay(entry);
+  }
+  await showSummary();
 }
 
-const hardStretch = computed(() => saved.value && (saved.value.mood === 1 || saved.value.stress === 5));
+// The server reads households/{hid}/feelings/{uid} to word the push, so write it first.
+async function shareHardDay(entry) {
+  const hid = home?.householdId?.value;
+  const uid = home?.me?.value?.uid;
+  if (!hid || !uid) return;
+  try {
+    await setFeeling(hid, uid, { level: "hard", date: entry.date });
+    notifyPartner(hid, "feeling", uid);
+  } catch (cause) {
+    console.error("[app wellness]", cause?.code, cause);
+  }
+}
+
+// Hydrate from the household once it has loaded: a check-in made on another device, or before a
+// refresh, means this parent has already done today's quiz.
+let pristine = true;
+let adopted = Boolean(store.recent());
+watch([mood, energy, stress, body, closeness, concerns, lifts], () => (pristine = false), { deep: true });
+watch(
+  () => store.loaded,
+  (isLoaded) => {
+    const entry = isLoaded ? store.recent() : null;
+    if (!entry || adopted || !pristine || view.value !== "steps") return;
+    adopted = true;
+    mood.value = entry.mood;
+    energy.value = entry.energy;
+    stress.value = entry.stress;
+    body.value = [...entry.body];
+    closeness.value = entry.closeness;
+    concerns.value = [...entry.concerns];
+    lifts.value = [...entry.lifts];
+    savedEntry.value = entry;
+    showSummary();
+  },
+  { immediate: true },
+);
+
+const supportNeeded = computed(() => needsSupport(store.lastSeven(new Date()), new Date()));
 
 const days = computed(() => store.lastSeven(new Date()));
 const logged = computed(() => days.value.filter((d) => d.entry));
@@ -344,10 +382,10 @@ const dayLabel = (day) =>
 // Plot geometry, in percent of the plot height: Great at the top, Very low at the bottom.
 const yOf = (moodValue) => ((5 - moodValue) / 4) * 100;
 const xOf = (index) => ((index + 0.5) / 7) * 100;
-const linePath = computed(() => {
+const pathFor = (list) => {
   let path = "";
   let joined = false;
-  days.value.forEach((day, i) => {
+  list.forEach((day, i) => {
     if (!day.entry) {
       joined = false;
       return;
@@ -356,24 +394,61 @@ const linePath = computed(() => {
     joined = true;
   });
   return path.trim();
-});
+};
+const linePath = computed(() => pathFor(days.value));
+const partnerDays = computed(() => store.partnerLastSeven(new Date()));
+const partnerLinePath = computed(() => pathFor(partnerDays.value));
+const partnerLogged = computed(() => partnerDays.value.filter((d) => d.entry));
 
-const weekSummary = computed(() => {
-  const list = logged.value;
-  if (!list.length) return "One dot a day will appear here once you check in.";
+// One line for each of you, then what the two of you share.
+function describe(list, who, verb) {
+  if (!list.length) return `${who} ${verb === "are" ? "have" : "has"} not checked in this week.`;
   const counts = {};
   for (const d of list) counts[d.entry.mood] = (counts[d.entry.mood] ?? 0) + 1;
   const common = Number(Object.entries(counts).sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0]);
-  const count = list.length === 1 ? "1 check-in this week" : `${list.length} check-ins this week`;
-  let line = `${count}, mostly ${moodLabel(common).toLowerCase()}.`;
+  let line = `${who} ${verb === "are" ? "have" : "has"} been mostly ${moodLabel(common).toLowerCase()} (${list.length} ${list.length === 1 ? "check-in" : "check-ins"}).`;
   if (list.length > 1) {
     const first = list[0];
     const last = list[list.length - 1];
-    if (last.entry.stress < first.entry.stress) line += ` You are carrying less than on ${first.weekday}.`;
-    else if (last.entry.stress > first.entry.stress) line += ` You are carrying more than on ${first.weekday}.`;
+    if (last.entry.stress < first.entry.stress) line += ` ${who === "You" ? "You are" : `${who} is`} carrying less than on ${first.weekday}.`;
+    else if (last.entry.stress > first.entry.stress) line += ` ${who === "You" ? "You are" : `${who} is`} carrying more than on ${first.weekday}.`;
   }
   return line;
+}
+const weekSummary = computed(() => {
+  if (!logged.value.length && !partnerLogged.value.length) return "One dot a day will appear here once you check in.";
+  const lines = [describe(logged.value, "You", "are")];
+  if (partnerName.value) lines.push(describe(partnerLogged.value, partnerFirst.value, "is"));
+  const bothLow = days.value.filter((d, i) => d.entry && partnerDays.value[i].entry && d.entry.mood <= 2 && partnerDays.value[i].entry.mood <= 2);
+  if (bothLow.length) {
+    lines.push(`You were both low on ${bothLow.map((d) => d.weekday).join(" and ")}. That is a good day to ask for, or offer, a hand.`);
+  }
+  return lines.join(" ");
 });
+const bothLabel = (day, i) => {
+  const theirs = partnerDays.value[i]?.entry;
+  const mine = dayLabel(day);
+  if (!partnerName.value) return mine;
+  return `${mine}. ${partnerFirst.value}: ${theirs ? `mood ${moodLabel(theirs.mood).toLowerCase()} (${theirs.mood} of 5)` : "no check-in"}`;
+};
+
+// Reach out: shown in the summary when your partner's newest check-in this week was a hard one.
+const partnerLatest = computed(() => [...partnerLogged.value].reverse()[0] ?? null);
+const partnerHard = computed(() => {
+  const entry = partnerLatest.value?.entry;
+  if (!entry || !isHardCheckin(entry)) return false;
+  return partnerLatest.value.date >= dateKey(new Date(Date.now() - 2 * 86400000));
+});
+// Against your other check-ins this week: lighter, heavier or about the same.
+const trend = computed(() => {
+  const earlier = logged.value.filter((d) => d.date !== today).map((d) => d.entry.mood);
+  if (!earlier.length || !savedEntry.value) return null;
+  const diff = savedEntry.value.mood - earlier.reduce((x, y) => x + y, 0) / earlier.length;
+  return diff >= 1 ? "lighter" : diff <= -1 ? "heavier" : "same";
+});
+function reachOut() {
+  nudgeState?.openChat();
+}
 
 const highFirst = (list) => [...list].reverse();
 </script>
@@ -395,7 +470,7 @@ const highFirst = (list) => [...list].reverse();
     <!-- The check-in -->
     <form
       v-if="view === 'steps'"
-      class="nt-yours-alone wl__box"
+      class="wl__box"
       aria-labelledby="wl-step-title"
       novalidate
       @submit.prevent="current === 'review' ? save() : next()"
@@ -406,10 +481,7 @@ const highFirst = (list) => [...list].reverse();
           <WeekTogether :summary="week" my-name="You" :partner-name="partnerName" />
         </section>
 
-        <p class="nt-yours-alone__label wl__label">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
-          Yours alone
-        </p>
+        <p class="wl__label">{{ partnerName ? `Shared with ${partnerName}` : "Daily check-in" }}</p>
         <p class="wl__count-step">{{ step + 1 }} of {{ STEPS.length }}</p>
       </div>
       <div class="wl__progress" aria-hidden="true"><span :style="{ width: `${((step + 1) / STEPS.length) * 100}%` }" /></div>
@@ -497,21 +569,47 @@ const highFirst = (list) => [...list].reverse();
         </div>
       </div>
 
-          <fieldset class="wl__group">
-            <legend class="wl__legend">Mood</legend>
-            <ChipGroup v-model="mood" :options="MOODS" label="Mood" />
-          </fieldset>
+      <!-- 5. Closeness -->
+      <div v-else-if="current === 'close'" class="wl__close">
+        <p class="wl__legend-row">
+          <span class="wl__swatch wl__swatch--you" aria-hidden="true" /> You
+          <span class="wl__swatch wl__swatch--them" aria-hidden="true" /> {{ partnerFirst || "Your partner" }}
+        </p>
+        <div class="wl__pairs" role="radiogroup" aria-label="How close you feel">
+          <button
+            v-for="o in CLOSENESS"
+            :key="o.value"
+            type="button"
+            role="radio"
+            class="wl__pair"
+            :aria-checked="closeness === o.value ? 'true' : 'false'"
+            @click="closeness = o.value"
+          >
+            <CloseCircles :level="o.value" />
+            <span class="wl__option-label">{{ o.label }}</span>
+          </button>
+        </div>
+      </div>
 
-          <fieldset class="wl__group">
-            <legend class="wl__legend">Stress</legend>
-            <ChipGroup v-model="stress" :options="STRESS" label="Stress" />
-          </fieldset>
-
-          <p v-if="error" class="app-error-text" role="alert">{{ error }}</p>
-
-          <div class="wl__actions">
-            <AppButton size="md" @click="save">Save privately</AppButton>
-            <AppButton variant="outline" size="md" :to="ROUTES.HOME">Not now</AppButton>
+      <!-- 6. What took and what gave -->
+      <div v-else-if="current === 'weigh'" class="wl__weigh">
+        <fieldset class="wl__group">
+          <legend class="wl__legend">
+            Took the most out of me
+            <span class="wl__muted-inline">Pick up to {{ MAX_CONCERNS }}</span>
+          </legend>
+          <div class="wl__chips" role="group" aria-label="Took the most out of me">
+            <button
+              v-for="c in CONCERNS"
+              :key="c.value"
+              type="button"
+              class="app-chip"
+              :aria-pressed="concerns.includes(c.value) ? 'true' : 'false'"
+              :disabled="atLimit && !concerns.includes(c.value)"
+              @click="toggleConcern(c.value)"
+            >
+              {{ c.label }}
+            </button>
           </div>
         </fieldset>
         <fieldset class="wl__group">
@@ -617,83 +715,177 @@ const highFirst = (list) => [...list].reverse();
       </div>
     </form>
 
-    <!-- The summary, after saving -->
-    <section v-else-if="reading" class="nt-yours-alone wl__box wl__summary" aria-labelledby="wl-summary-title">
-      <header class="wl__sum-head">
-        <span class="wl__sum-face" aria-hidden="true"><Face :level="savedEntry.mood" /></span>
-        <div>
-          <p role="status" class="wl__sum-meta">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
-            {{ savedDay }}{{ savedTime ? `, ${savedTime}` : "" }}. Only you can see this.
+    <!-- The summary, after saving: one card per question the parent is likely to ask. -->
+    <div v-else-if="reading" class="wl__summary">
+      <!-- 1. The headline -->
+      <section class="wl__card wl__hero" aria-labelledby="wl-summary-title">
+        <span class="wl__hero-face" aria-hidden="true"><Face :level="savedEntry.mood" /></span>
+        <div class="wl__hero-text">
+          <p class="wl__chip wl__chip--done" role="status">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7" /></svg>
+            Checked in · {{ savedDay }}{{ savedTime ? `, ${savedTime}` : "" }}
           </p>
           <h2 id="wl-summary-title" ref="summaryHeading" class="nt-heading wl__sum-title" tabindex="-1">What today says</h2>
+          <p class="wl__story">{{ reading.story }}</p>
+          <p class="wl__hero-note">
+            {{ partnerName ? `${partnerName} can see this.` : "Your partner will see this once they join." }}
+            Next check-in tomorrow, or
+            <button type="button" class="app-textbtn" @click="goTo('review')">change your answers</button>.
+          </p>
+          <p v-if="saveNote" class="app-error-text" role="alert">{{ saveNote }}</p>
         </div>
-      </header>
+      </section>
 
-      <p class="wl__story">{{ reading.story }}</p>
+      <!-- 2. Today at a glance -->
+      <section class="wl__card wl__tone wl__tone--glance" aria-labelledby="wl-glance">
+        <h3 id="wl-glance" class="nt-heading wl__sec">
+          <span class="wl__sec-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M9 10h.01M15 10h.01M8.5 15c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8" /></svg></span>
+          Today at a glance
+        </h3>
+        <ul class="wl__glance">
+          <li class="wl__stat">
+            <span class="wl__stat-pic wl__stat-pic--face"><Face :level="savedEntry.mood" /></span>
+            <span class="wl__stat-name">Mood</span>
+            <span class="wl__stat-value">{{ moodLabel(savedEntry.mood) }}</span>
+          </li>
+          <li class="wl__stat">
+            <span class="wl__stat-pic"><TankJar :level="savedEntry.energy" clip="tile" /></span>
+            <span class="wl__stat-name">Tank</span>
+            <span class="wl__stat-value" :class="{ 'is-skipped': !savedEntry.energy }">{{ labelOf(ENERGY, savedEntry.energy) || "Skipped" }}</span>
+          </li>
+          <li class="wl__stat">
+            <span class="wl__stat-pic"><StoneStack :count="savedEntry.stress" /></span>
+            <span class="wl__stat-name">Carrying</span>
+            <span class="wl__stat-value">{{ stressLabel(savedEntry.stress) }}</span>
+          </li>
+          <li class="wl__stat">
+            <span class="wl__stat-pic wl__stat-pic--pair"><CloseCircles :level="savedEntry.closeness" /></span>
+            <span class="wl__stat-name">With {{ partnerFirst || "your partner" }}</span>
+            <span class="wl__stat-value" :class="{ 'is-skipped': !savedEntry.closeness }">{{ labelOf(CLOSENESS, savedEntry.closeness) || "Skipped" }}</span>
+          </li>
+        </ul>
+        <dl v-if="savedEntry.body.length || savedEntry.concerns.length || savedEntry.lifts.length" class="wl__tags">
+          <div v-if="savedEntry.body.length">
+            <dt>Holding it in</dt>
+            <dd><span v-for="a in savedEntry.body" :key="a" class="wl__tag wl__tag--body">{{ labelOf(BODY_AREAS, a) }}</span></dd>
+          </div>
+          <div v-if="savedEntry.concerns.length">
+            <dt>Took the most</dt>
+            <dd><span v-for="c in savedEntry.concerns" :key="c" class="wl__tag wl__tag--took">{{ labelOf(CONCERNS, c) }}</span></dd>
+          </div>
+          <div v-if="savedEntry.lifts.length">
+            <dt>Gave a little back</dt>
+            <dd><span v-for="l in savedEntry.lifts" :key="l" class="wl__tag wl__tag--gave">{{ labelOf(LIFTS, l) }}</span></dd>
+          </div>
+        </dl>
+      </section>
 
-      <dl class="wl__rows">
-        <div class="wl__row">
-          <dt>What it might mean</dt>
-          <dd>
-            <p v-for="i in reading.insights" :key="i.title" class="wl__insight"><strong>{{ i.title }}.</strong> {{ i.body }}</p>
-          </dd>
+      <!-- 3. What it might mean -->
+      <section class="wl__card wl__tone wl__tone--mean" aria-labelledby="wl-mean">
+        <h3 id="wl-mean" class="nt-heading wl__sec">
+          <span class="wl__sec-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z" /></svg></span>
+          What it might mean
+        </h3>
+        <ul class="wl__insights">
+          <li v-for="i in reading.insights" :key="i.title" class="wl__insight">
+            <strong class="wl__insight-title">{{ i.title }}</strong>
+            <span v-if="i.from" class="wl__insight-from">From your answers: {{ i.from }}</span>
+            <span class="wl__insight-body">{{ i.body }}</span>
+            <span v-if="i.tip" class="wl__insight-tip"><strong>Try this</strong> {{ i.tip }}</span>
+          </li>
+        </ul>
+      </section>
+
+      <!-- 4. The next 24 hours -->
+      <section class="wl__card wl__tone wl__tone--plan" aria-labelledby="wl-plan">
+        <div class="wl__sec-row">
+          <h3 id="wl-plan" class="nt-heading wl__sec">
+            <span class="wl__sec-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /></svg></span>
+            Next 24 hours
+          </h3>
+          <span class="wl__progress-label">{{ done.length }} of {{ reading.plan.length }} done</span>
         </div>
+        <div class="wl__meter" aria-hidden="true"><span :style="{ width: `${(done.length / reading.plan.length) * 100}%` }" /></div>
+        <ul class="wl__plan">
+          <li v-for="p in reading.plan" :key="p.id" class="wl__plan-item" :class="{ 'is-done': done.includes(p.id) }">
+            <button
+              type="button"
+              class="wl__tick"
+              :aria-pressed="done.includes(p.id) ? 'true' : 'false'"
+              :aria-label="`Done: ${p.title}`"
+              @click="toggleDone(p.id)"
+            >
+              <svg v-if="done.includes(p.id)" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7" /></svg>
+            </button>
+            <div class="wl__plan-body">
+              <strong class="wl__plan-title">{{ p.title }}</strong>
+              <span class="wl__plan-text">{{ p.body }}</span>
+              <router-link v-if="p.to" class="app-link" :to="p.to">{{ p.action }}</router-link>
+            </div>
+          </li>
+        </ul>
+      </section>
 
-        <div class="wl__row">
-          <dt>Next 24 hours</dt>
-          <dd>
-            <ul class="wl__plan">
-              <li v-for="p in reading.plan" :key="p.id" class="wl__plan-item" :class="{ 'is-done': done.includes(p.id) }">
-                <button
-                  type="button"
-                  class="wl__tick"
-                  :aria-pressed="done.includes(p.id) ? 'true' : 'false'"
-                  :aria-label="`Done: ${p.title}`"
-                  @click="toggleDone(p.id)"
-                >
-                  <svg v-if="done.includes(p.id)" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7" /></svg>
-                </button>
-                <p class="wl__plan-body">
-                  <strong>{{ p.title }}.</strong> {{ p.body }}
-                  <router-link v-if="p.to" class="app-link" :to="p.to">{{ p.action }}</router-link>
-                </p>
-              </li>
-            </ul>
-          </dd>
-        </div>
-
-        <div class="wl__row">
-          <dt>This week</dt>
-          <dd>
-            <p>{{ reading.compare }}</p>
-            <p v-if="reading.talk" class="wl__talk">
-              {{ reading.talk }}
-              <router-link class="app-link" :to="ROUTES.SUPPORT">Find support</router-link>
+      <!-- 5. You and your partner. A hard day offers a way to reach out, and opens the chat. -->
+      <section v-if="partnerName" class="wl__card wl__tone wl__tone--partner wl__partner" :class="{ 'is-hard': partnerHard }" aria-labelledby="wl-partner">
+        <h3 id="wl-partner" class="nt-heading wl__sec">
+          <span class="wl__sec-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.2" /><circle cx="17" cy="9" r="2.6" /><path d="M3 19c0-3 2.7-5 6-5s6 2 6 5M15 14.3c.6-.2 1.3-.3 2-.3 2.4 0 4 1.5 4 4" /></svg></span>
+          You and {{ partnerFirst }}
+        </h3>
+        <div v-if="partnerLatest" class="wl__partner-row">
+          <span class="wl__partner-face" aria-hidden="true"><Face :level="partnerLatest.entry.mood" /></span>
+          <div>
+            <p class="wl__partner-name">{{ partnerFirst }}, {{ partnerLatest.date === today ? "today" : partnerLatest.weekday }}</p>
+            <p class="wl__partner-text">
+              Feeling {{ moodLabel(partnerLatest.entry.mood).toLowerCase() }}, carrying {{ stressLabel(partnerLatest.entry.stress).toLowerCase() }}.
+              <template v-if="partnerLatest.entry.concerns.length">
+                Took the most: {{ labelsOf(CONCERNS, partnerLatest.entry.concerns).toLowerCase() }}.
+              </template>
             </p>
-          </dd>
+          </div>
+        </div>
+        <p v-else class="wl__partner-text">{{ partnerFirst }} has not checked in this week yet.</p>
+
+        <div v-if="partnerHard" class="wl__reach">
+          <p class="wl__reach-text"><strong>{{ partnerFirst }} is not doing well.</strong> A short message can help more than you think.</p>
+          <AppButton variant="outline" size="md" type="button" @click="reachOut">Reach out to {{ partnerFirst }}</AppButton>
         </div>
 
-        <div class="wl__row">
-          <dt>
-            To {{ partnerFirst || "your partner" }}
-            <span class="wl__dt-note">If you want to. Nothing is sent.</span>
-          </dt>
-          <dd><blockquote class="wl__share">“{{ reading.share }}”</blockquote></dd>
+        <figure class="wl__say">
+          <figcaption>If you want to say something to {{ partnerFirst }}. Nothing is sent.</figcaption>
+          <blockquote>“{{ reading.share }}”</blockquote>
+        </figure>
+      </section>
+
+      <!-- 6. Against your week -->
+      <section class="wl__card wl__tone wl__tone--week" aria-labelledby="wl-compare">
+        <h3 id="wl-compare" class="nt-heading wl__sec">
+          <span class="wl__sec-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 17l5-5 4 4 8-9M15 7h5v5" /></svg></span>
+          Against your week
+        </h3>
+        <p class="wl__trend" :class="trend && `wl__trend--${trend}`">
+          <span v-if="trend" class="wl__trend-arrow" aria-hidden="true">{{ trend === "lighter" ? "↑" : trend === "heavier" ? "↓" : "→" }}</span>
+          {{ reading.compare }}
+        </p>
+        <div v-if="reading.talk" class="wl__callout">
+          <p>{{ reading.talk }}</p>
+          <router-link class="app-link" :to="ROUTES.SUPPORT">Find support</router-link>
         </div>
-      </dl>
+      </section>
 
       <div class="wl__nav">
-        <button type="button" class="app-textbtn" @click="goTo('review')">Change answers</button>
         <span class="wl__spacer" />
         <router-link class="app-link" :to="ROUTES.HOME">Back to Home</router-link>
       </div>
-    </section>
+    </div>
 
     <section class="wl__card" aria-labelledby="wl-week">
       <div class="wl__card-head">
-        <h2 id="wl-week" class="nt-heading wl__h">Your week</h2>
-        <span class="wl__only">Only you</span>
+        <h2 id="wl-week" class="nt-heading wl__h">{{ partnerName ? "This week, together" : "Your week" }}</h2>
+        <span v-if="partnerName" class="wl__legend-inline">
+          <span class="wl__swatch wl__swatch--you" aria-hidden="true" /> You
+          <span class="wl__swatch wl__swatch--them" aria-hidden="true" /> {{ partnerFirst }}
+        </span>
       </div>
       <p class="wl__body">{{ weekSummary }}</p>
 
@@ -707,11 +899,15 @@ const highFirst = (list) => [...list].reverse();
             <svg v-if="linePath" class="wl__line" viewBox="0 0 100 100" preserveAspectRatio="none">
               <path :d="linePath" vector-effect="non-scaling-stroke" />
             </svg>
+            <svg v-if="partnerLinePath" class="wl__line wl__line--them" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <path :d="partnerLinePath" vector-effect="non-scaling-stroke" />
+            </svg>
           </div>
           <ul class="wl__days" aria-label="Mood over the last 7 days">
-            <li v-for="day in days" :key="day.date" class="wl__day">
-              <span class="wl__col" role="img" :aria-label="dayLabel(day)" :title="dayLabel(day)">
-                <span v-if="day.entry" class="wl__dot" :style="{ top: `${10 + yOf(day.entry.mood) * 1.2}px` }" />
+            <li v-for="(day, i) in days" :key="day.date" class="wl__day">
+              <span class="wl__col" role="img" :aria-label="bothLabel(day, i)" :title="bothLabel(day, i)">
+                <span v-if="day.entry" class="wl__dot" :class="{ 'wl__dot--solo': !partnerDays[i].entry }" :style="{ top: `${10 + yOf(day.entry.mood) * 1.2}px` }" />
+                <span v-if="partnerDays[i].entry" class="wl__dot wl__dot--them" :class="{ 'wl__dot--solo': !day.entry }" :style="{ top: `${10 + yOf(partnerDays[i].entry.mood) * 1.2}px` }" />
               </span>
               <span class="wl__weekday" :class="{ 'is-today': day.date === today }">{{ day.date === today ? "Today" : day.weekday }}</span>
             </li>
@@ -721,7 +917,7 @@ const highFirst = (list) => [...list].reverse();
     </section>
 
     <p class="wl__disclaimer">
-      For reflection, not diagnosis. Saved on this device only. If you feel unsafe, contact emergency services or a
+      For reflection, not diagnosis. Your check-ins are shared with your partner. If you feel unsafe, contact emergency services or a
       healthcare professional.
     </p>
   </div>
@@ -733,17 +929,17 @@ const highFirst = (list) => [...list].reverse();
 .wl__sub { margin: 0; color: var(--nt-muted); }
 
 /* The butter "Yours alone" box, for the check-in and its summary. */
-.wl__box { gap: 16px; padding: 24px; border-radius: 12px; }
+.wl__box { display: flex; flex-direction: column; gap: 16px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
 .wl__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; }
 .wl__label { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
-.wl__count-step { margin: 0; font-size: 0.875rem; color: var(--nt-butter-d); }
-.wl__progress { height: 2px; background: rgb(111 95 58 / 18%); }
+.wl__count-step { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
+.wl__progress { height: 2px; background: var(--nt-line); }
 .wl__progress span { display: block; height: 100%; background: var(--nt-plum); transition: width 0.3s ease; }
-.wl__earlier { margin: 4px 0 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-butter-d); }
+.wl__earlier { margin: 4px 0 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-muted); }
 .wl__earlier .app-textbtn { margin-left: 4px; }
 .wl__question { margin-top: 8px; font-size: 1.75rem; line-height: 1.25; }
 .wl__question:focus { outline: none; }
-.wl__hint { margin: -8px 0 4px; font-size: 0.9375rem; line-height: 1.5; color: var(--nt-butter-d); }
+.wl__hint { margin: -8px 0 4px; font-size: 0.9375rem; line-height: 1.5; color: var(--nt-muted); }
 
 .wl__stage { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: center; gap: 24px; }
 .wl__picture { display: flex; justify-content: center; width: 100%; max-width: 280px; margin: 0 auto; }
@@ -761,7 +957,7 @@ const highFirst = (list) => [...list].reverse();
 .wl__chips .app-chip:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .wl__close { display: flex; flex-direction: column; gap: 12px; }
-.wl__legend-row { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 0.875rem; color: var(--nt-butter-d); }
+.wl__legend-row { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
 .wl__swatch { display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
 .wl__swatch--you { background: var(--nt-powder); border: 1.5px solid var(--nt-powder-d); }
 .wl__swatch--them { margin-left: 12px; background: var(--nt-apricot); border: 1.5px solid var(--nt-apricot-d); }
@@ -778,7 +974,7 @@ const highFirst = (list) => [...list].reverse();
 .wl__weigh { display: flex; flex-direction: column; gap: 20px; }
 .wl__group { display: flex; flex-direction: column; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .wl__legend { float: none; width: auto; margin: 0 0 10px; padding: 0; font-size: 0.9375rem; font-weight: 600; color: var(--nt-ink); }
-.wl__muted-inline { margin-left: 6px; font-weight: 400; color: var(--nt-butter-d); }
+.wl__muted-inline { margin-left: 6px; font-weight: 400; color: var(--nt-muted); }
 
 .wl__reflect { margin: 4px 0 0; max-width: 56ch; font-size: 0.9375rem; line-height: 1.6; color: var(--nt-ink); }
 
@@ -806,34 +1002,102 @@ const highFirst = (list) => [...list].reverse();
 
 /* The summary: a journal page. Labels on the left, plain writing on the right. */
 .wl__summary { gap: 24px; }
-.wl__sum-head { display: flex; align-items: center; gap: 16px; }
-.wl__sum-face { flex: none; width: 56px; }
-.wl__sum-meta svg { flex: none; margin-top: 3px; }
-.wl__sum-meta { display: flex; align-items: flex-start; gap: 6px; margin: 0 0 2px; font-size: 0.875rem; color: var(--nt-butter-d); }
 .wl__sum-title { font-size: 1.75rem; line-height: 1.2; }
 .wl__sum-title:focus { outline: none; }
-.wl__story { margin: 0; font-size: 1.125rem; line-height: 1.65; }
-.wl__rows { margin: 0; }
-.wl__row { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 8px 24px; padding: 18px 0; border-top: 1px solid rgb(111 95 58 / 25%); }
-.wl__row dt { font-size: 0.875rem; font-weight: 600; line-height: 1.6; color: var(--nt-butter-d); }
-.wl__dt-note { display: block; font-weight: 400; }
-.wl__row dd { display: flex; flex-direction: column; gap: 10px; margin: 0; font-size: 0.9375rem; line-height: 1.6; }
-.wl__row dd p { margin: 0; }
 .wl__plan { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .wl__plan-item { display: flex; align-items: flex-start; gap: 12px; }
 .wl__plan-item.is-done .wl__plan-body { color: var(--nt-muted); }
 .wl__plan-item.is-done .wl__plan-body strong { text-decoration: line-through; }
 .wl__plan-body .app-link { margin-left: 4px; white-space: nowrap; }
-.wl__tick { display: grid; flex: none; place-items: center; width: 20px; height: 20px; margin-top: 3px; padding: 0; background: #fff; border: 1.5px solid var(--nt-butter-d); border-radius: 50%; color: #fff; cursor: pointer; }
+.wl__summary { display: flex; flex-direction: column; gap: 16px; }
+.wl__chip { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 4px 10px; border-radius: 999px; font-size: 0.875rem; font-weight: 500; }
+.wl__chip--done { background: #ccfbf1; color: #115e59; }
+.wl__hero { flex-direction: row; align-items: center; gap: 24px; background: #f4f7fb; }
+.wl__hero-face { flex: none; width: 96px; }
+.wl__hero-text { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; }
+.wl__story { margin: 0; font-size: 1.0625rem; line-height: 1.6; }
+.wl__hero-note { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-muted); }
+.wl__sec { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 1.25rem; line-height: 1.3; }
+.wl__tone { background: var(--tint); border-color: var(--edge); }
+.wl__tone--glance { --tint: #f3f7fc; --edge: #dce6f2; --accent: #dbeafe; --ink: #1e40af; }
+.wl__tone--mean { --tint: #fdf5ef; --edge: #f6d8c6; --accent: #f6d8c6; --ink: #7a3f1f; }
+.wl__tone--plan { --tint: #f1fcfa; --edge: #ccfbf1; --accent: #ccfbf1; --ink: #115e59; }
+.wl__tone--partner { --tint: #f7f3f8; --edge: #e6dce9; --accent: #e6dce9; --ink: #3b2f3f; }
+.wl__tone--week { --tint: #f8f9fb; --edge: #e5e7eb; --accent: #e5e7eb; --ink: #374151; }
+.wl__sec-icon { display: grid; flex: none; place-items: center; width: 32px; height: 32px; background: var(--accent, var(--nt-gray)); border-radius: 8px; color: var(--ink, var(--nt-plum)); }
+.wl__tone .wl__stat, .wl__tone .wl__plan-item.is-done, .wl__tone .wl__say, .wl__tone .wl__trend { background: #fff; }
+.wl__tone .wl__insight { background: #fff; }
+.wl__tone .wl__plan-item { background: #fff; border-color: var(--edge); }
+.wl__tone .wl__plan-item.is-done { background: rgb(255 255 255 / 55%); }
+.wl__tone .wl__meter { background: #fff; }
+.wl__tone--plan .wl__meter span { background: #14b8a6; }
+.wl__tone .wl__insight-from { background: var(--accent); color: var(--ink); }
+.wl__tone .wl__insight-tip strong { color: var(--ink); }
+.wl__sec-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.wl__glance { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.wl__stat { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 14px 8px 12px; background: var(--nt-gray); border-radius: 12px; text-align: center; }
+.wl__stat-pic { display: flex; align-items: center; justify-content: center; height: 56px; margin-bottom: 6px; }
+.wl__stat-pic :deep(svg) { width: auto; max-width: 100%; height: 100%; }
+.wl__stat-pic--face :deep(svg) { height: 48px; }
+.wl__stat-pic--pair :deep(svg) { height: 30px; }
+.wl__stat-name { font-size: 0.875rem; color: var(--nt-muted); }
+.wl__stat-value { font-size: 0.9375rem; font-weight: 600; }
+.wl__stat-value.is-skipped { font-weight: 400; color: var(--nt-muted); }
+.wl__tags { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+.wl__tags > div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.wl__tags dt { flex: 0 0 9rem; font-size: 0.875rem; font-weight: 400; color: var(--nt-muted); }
+.wl__tags dd { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.wl__tag { padding: 3px 10px; border-radius: 999px; font-size: 0.875rem; font-weight: 500; }
+.wl__tag--body { background: #dce6f2; color: #34506f; }
+.wl__tag--took { background: #f6d8c6; color: #7a3f1f; }
+.wl__tag--gave { background: #ccfbf1; color: #115e59; }
+.wl__insights { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.wl__insight { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; background: var(--nt-gray); border-left: 4px solid #5c7a9e; border-radius: 8px; }
+.wl__insight:nth-child(2) { border-left-color: #e3a584; }
+.wl__insight:nth-child(3) { border-left-color: #14b8a6; }
+.wl__insight-title { font-size: 1rem; }
+.wl__insight-from { align-self: flex-start; padding: 2px 10px; background: #fff; border-radius: 999px; font-size: 0.875rem; color: var(--nt-muted); }
+.wl__insight-tip { padding-top: 8px; border-top: 1px solid var(--nt-line); font-size: 0.9375rem; line-height: 1.55; }
+.wl__insight-tip strong { margin-right: 4px; color: var(--nt-plum); }
+.wl__insight-body { font-size: 0.9375rem; line-height: 1.55; color: var(--nt-ink); }
+.wl__progress-label { font-size: 0.875rem; color: var(--nt-muted); white-space: nowrap; }
+.wl__meter { height: 6px; background: var(--nt-line); border-radius: 999px; overflow: hidden; }
+.wl__meter span { display: block; height: 100%; background: var(--nt-plum); transition: width 0.3s ease; }
+.wl__plan { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.wl__plan-item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border: 1px solid var(--nt-line); border-radius: 8px; }
+.wl__plan-item.is-done { background: var(--nt-gray); }
+.wl__plan-item.is-done .wl__plan-body { color: var(--nt-muted); }
+.wl__plan-item.is-done .wl__plan-title { text-decoration: line-through; }
+.wl__plan-body { display: flex; flex-direction: column; gap: 2px; font-size: 0.9375rem; line-height: 1.55; }
+.wl__plan-body .app-link { align-self: flex-start; margin-top: 2px; }
+.wl__tone.wl__partner.is-hard { --tint: #fff6ef; --edge: #e3a584; --accent: #f6d8c6; --ink: #7a3f1f; }
+.wl__partner-row { display: flex; align-items: center; gap: 14px; }
+.wl__partner-face { flex: none; width: 52px; }
+.wl__partner-name { margin: 0; font-weight: 600; }
+.wl__partner-text { margin: 0; font-size: 0.9375rem; line-height: 1.5; }
+.wl__reach { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: #fff; border: 1px solid #e3a584; border-radius: 8px; }
+.wl__reach-text { flex: 1 1 14rem; margin: 0; font-size: 0.9375rem; line-height: 1.5; }
+.wl__say { margin: 0; padding: 14px 16px; background: var(--nt-gray); border-radius: 8px; }
+.wl__say figcaption { margin-bottom: 6px; font-size: 0.875rem; color: var(--nt-muted); }
+.wl__say blockquote { margin: 0; font-size: 1rem; line-height: 1.6; }
+.wl__trend { display: flex; align-items: center; gap: 12px; margin: 0; padding: 12px 14px; background: var(--nt-gray); border-radius: 8px; font-size: 0.9375rem; line-height: 1.5; }
+.wl__trend-arrow { display: grid; flex: none; place-items: center; width: 28px; height: 28px; background: #fff; border-radius: 50%; font-size: 1.125rem; font-weight: 600; }
+.wl__trend--lighter .wl__trend-arrow { color: #115e59; }
+.wl__trend--heavier .wl__trend-arrow { color: #c0553b; }
+.wl__callout { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px 16px; border: 1px solid var(--nt-line); border-left: 4px solid #c0553b; border-radius: 8px; font-size: 0.9375rem; line-height: 1.55; }
+.wl__callout p { margin: 0; }
+.wl__tick { display: grid; flex: none; place-items: center; width: 20px; height: 20px; margin-top: 3px; padding: 0; background: #fff; border: 1.5px solid var(--nt-muted); border-radius: 50%; color: #fff; cursor: pointer; }
 .wl__tick[aria-pressed="true"] { background: var(--nt-plum); border-color: var(--nt-plum); }
-.wl__talk { font-weight: 500; }
-.wl__share { margin: 0; font-size: 1rem; line-height: 1.6; }
 
 /* Cards */
 .wl__card { display: flex; flex-direction: column; gap: 12px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
 .wl__card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .wl__h { font-size: 1.375rem; line-height: 1.3; }
 .wl__body { margin: 0; font-size: 0.9375rem; line-height: 1.55; color: var(--nt-ink); }
+.wl__legend-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 0.875rem; color: var(--nt-muted); white-space: nowrap; }
+.wl__dot--them { left: 62%; background: var(--nt-apricot-d); }
+.wl__dot--solo { left: 50%; }
+.wl__line--them path { stroke: var(--nt-apricot-d); }
 .wl__only { font-size: 0.875rem; color: var(--nt-muted); white-space: nowrap; }
 
 /* Week plot: mood as one dot a day, joined where days are consecutive. */
@@ -848,7 +1112,7 @@ const highFirst = (list) => [...list].reverse();
 .wl__days { position: relative; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }
 .wl__day { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; }
 .wl__col { position: relative; display: block; width: 100%; height: 140px; }
-.wl__dot { position: absolute; left: 50%; width: 12px; height: 12px; background: var(--nt-plum); border: 2px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); }
+.wl__dot { position: absolute; left: 38%; width: 12px; height: 12px; background: var(--nt-plum); border: 2px solid #fff; border-radius: 50%; transform: translate(-50%, -50%); }
 .wl__weekday { padding-bottom: 2px; font-size: 0.875rem; color: var(--nt-muted); border-bottom: 2px solid transparent; }
 .wl__weekday.is-today { font-weight: 600; color: var(--nt-ink); border-bottom-color: var(--nt-coral); }
 
@@ -872,13 +1136,15 @@ const highFirst = (list) => [...list].reverse();
 
 @media (max-width: 991px) { .wl__title { font-size: 2rem; } }
 @media (max-width: 640px) {
+  .wl__glance { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wl__hero { flex-direction: column; align-items: flex-start; }
+  .wl__tags dt { flex-basis: 100%; }
   .wl__stage { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .wl__picture--narrow { max-width: 130px; }
   .wl__picture { max-width: 220px; }
   .wl__pairs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .wl__faces { gap: 6px; }
   .wl__face { padding: 10px 4px; }
-  .wl__row { grid-template-columns: minmax(0, 1fr); padding: 14px 0; }
   .wl__tile { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; }
 }
 @media (max-width: 575px) {

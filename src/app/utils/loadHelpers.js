@@ -204,7 +204,7 @@ export function buildNudges({
       id: "partner-feeling",
       kind: "partner-feeling",
       title: `${partnerName} is ${FEELING_LABELS.hard}`,
-      text: "They chose to share this with you. A kind word helps.",
+      text: "Their check-in says it was a tough one. A kind word helps.",
     });
   }
   const partnerLogsOn = settings?.notifications?.partnerLogs !== false;
