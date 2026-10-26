@@ -34,7 +34,7 @@ async function save() {
     message.value = deleting.value ? "Room deleted." : "Room saved.";
     dialog.value.close();
   } catch (cause) {
-    error.value = cause.code === "permission-denied"
+    error.value = cause.code?.startsWith("rooms/") ? cause.message : cause.code === "permission-denied"
       ? "You do not have permission to manage rooms. Sign in again or contact your administrator."
       : "Could not save the room. Check the details and your connection, then try again.";
   } finally {
@@ -52,11 +52,9 @@ async function save() {
         <p v-if="deleting">Delete {{ draft.name }} from the directory?</p>
         <template v-else>
           <label>Name<input v-model="draft.name" required maxlength="80" /></label>
-          <label>Address<input v-model="draft.address" required maxlength="200" /></label>
+          <label>Address (including postal code)<input v-model="draft.address" required maxlength="200" placeholder="e.g. 1 Example Road, Singapore 012345" /></label>
           <label>Location details<textarea v-model="draft.details" required maxlength="200" placeholder="Level and directions to the room" /></label>
-          <label>Latitude<input v-model.number="draft.lat" type="number" step="any" min="-90" max="90" required /></label>
-          <label>Longitude<input v-model.number="draft.lng" type="number" step="any" min="-180" max="180" required /></label>
-          <p>Use the room's confirmed coordinates from OneMap.</p>
+          <p>The six-digit postal code in the address is used to find the building on OneMap when you save.</p>
           <fieldset><legend>Features</legend>
             <label v-for="[key, label] in ROOM_FEATURES" :key="key" class="manager-feature"><input v-model="draft.features" type="checkbox" :value="label" /> {{ label }}</label>
           </fieldset>
