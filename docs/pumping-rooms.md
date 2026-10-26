@@ -4,8 +4,32 @@
 
 Admins can add, edit and delete rooms at `/support/rooms`, including bundled BMSG
 and example listings. The editor accepts name, address, exact location details,
-confirmed coordinates, features and verification status. No Maps API key is needed.
+features and verification status. Coordinates are retrieved automatically from
+the six-digit postal code in `room.address` when Save is pressed. For example,
+`1 Example Road, Singapore 012345` searches OneMap for `012345`. The original
+address text is saved along with the returned latitude and longitude. Admins
+do not enter coordinates. Floor and directions stay in `details`.
 Deletion requires confirmation. Changes are shared live with signed-in users.
+
+### Automatic postal-code lookup
+
+Set `ONEMAP_TOKEN` and the Firebase Admin environment variables from `.env.example`
+in `.env.local`, then restart Vite. The local Vite middleware serves the same
+authenticated `GET /api/rooms/location?postalCode=...` endpoint as Vercel.
+For production, configure those variables in Vercel and deploy the code.
+The JSON service account file by itself does not configure this endpoint.
+
+Obtain a token from [OneMap authentication](https://www.onemap.gov.sg/apidocs/authentication).
+Tokens expire after three days and must be replaced. Keep the token server-side;
+do not use a `VITE_` variable. [OneMap Search](https://www.onemap.gov.sg/apidocs/search)
+is queried by postal code, and only exact matches with valid coordinates are accepted.
+Missing, ambiguous or unknown postal codes stop the save and keep the form open.
+Lookup failures also leave existing room data unchanged. Edits repeat the lookup
+to avoid retaining stale coordinates after changing the address; deletion skips it.
+
+Saved coordinates power both Show on map and Open in OneMap. The marker identifies
+the building, not its indoor floor. The Firestore document shape is unchanged;
+postal code is extracted from the address rather than stored in a separate field.
 
 Access requires the Firebase Auth custom claim `admin: true`. User profile fields
 and household roles do not grant this permission. Deploy `firestore.rules` before

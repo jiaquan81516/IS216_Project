@@ -1,6 +1,7 @@
 import { collection, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "./db";
 import { featureMap } from "@/app/utils/roomHelpers";
+import { resolveRoomLocation } from "./roomLocation";
 
 const rooms = () => collection(db, "pumpingRoomOverrides");
 
@@ -22,14 +23,16 @@ export async function saveManagedRoom(uid, room, deleted = false) {
   const address = String(room.address ?? "").trim();
   const details = String(room.details ?? "").trim();
   if (!uid || !name || name.length > 80 || !address || address.length > 200 ||
-      !details || details.length > 200 || !Number.isFinite(room.lat) ||
-      !Number.isFinite(room.lng) || room.lat < -90 || room.lat > 90 ||
-      room.lng < -180 || room.lng > 180) {
-    throw new Error("Enter a name, address, location details and valid coordinates.");
+      !details || details.length > 200) {
+    const error = new Error("Enter a name, address and location details within the field limits.");
+    error.code = "rooms/invalid-input";
+    throw error;
   }
+  // Always resolve the current address; never reuse coordinates from an edited address.
+  const { lat, lng } = await resolveRoomLocation(address);
   const target = room.id ? doc(rooms(), room.id) : doc(rooms());
   await setDoc(target, {
-    name, address, details, lat: room.lat, lng: room.lng,
+    name, address, details, lat, lng,
     features: featureMap(room.features),
     status: room.status === "verified" ? "verified" : "unverified",
     verifiedAt: room.status === "verified" ? (room.verifiedAt || serverTimestamp()) : null,
