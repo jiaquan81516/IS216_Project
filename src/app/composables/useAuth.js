@@ -3,6 +3,7 @@ import { signInWithGoogle } from "@/api/authApi";
 import { useAuth as useFirebaseAuth } from "@/composables/useAuth";
 import { describeAuthError, signInWithEmail, signUpWithEmail } from "@/api/emailAuth";
 import { ensureUserProfile } from "@/api/profile";
+import { hasAdminClaim } from "@/api/adminAccess";
 import { withTimeout } from "@/app/utils/timeout";
 import { ROUTES } from "@/app/routes";
 import { useOnboarding } from "@/app/stores/onboarding";
@@ -31,6 +32,10 @@ export function useAuth() {
     try {
       const user = await action();
       await waitForSignedIn(currentUser, user.uid);
+      if (await hasAdminClaim(user)) {
+        authProfile.value = null;
+        return ROUTES.ROOMS;
+      }
       const profile = await withTimeout(
         ensureUserProfile(user, {
           name: extraDraft.name || draft.name,
