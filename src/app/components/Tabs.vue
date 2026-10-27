@@ -59,10 +59,14 @@ function onKeydown(event, index) {
 <style scoped>
 .apptabs {
   display: flex;
+  flex-wrap: nowrap;
   gap: 24px;
   overflow-x: auto;
+  overflow-y: hidden;          /* removes the vertical ▲ ● ▼ control */
   border-bottom: 1px solid var(--nt-line);
+  scrollbar-width: none;       /* hide the sideways scrollbar (Firefox) */
 }
+.apptabs::-webkit-scrollbar { display: none; }  /* same for Chrome, Edge, Safari */
 .apptabs__tab {
   margin-bottom: -1px;
   padding: 10px 2px;
@@ -77,6 +81,8 @@ function onKeydown(event, index) {
   color: var(--nt-muted);
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
+  padding: 12px 4px;
+  font-size: 1rem;
 }
 .apptabs__tab:hover {
   color: var(--nt-ink);

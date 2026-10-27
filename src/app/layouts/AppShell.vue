@@ -69,9 +69,9 @@ function onToastOpen(toast) {
 
 // Web push. Keep this device's token current when the parent already allowed it. A push that
 // arrives while this tab is in front is shown here as a pop up (the service worker only shows
-// a system notification when no tab is visible). Chat messages already pop up from the chat
+// a system notification when no tab is visible). Chat messages already pop up from the chat 
 // listener, so only tasks are added here. A tap on a system notification lands here too.
-const push = usePush(() => meUid.value);
+const push = usePush(() => meUid.value)
 watch(meUid, (uid) => uid && push.refresh(), { immediate: true });
 usePushMessages((message) => {
   if (message.source === "nt-push-open") {
@@ -171,7 +171,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
         <div v-if="ready" class="side__chip">
           <p class="side__chip-names">{{ names }}</p>
           <p v-if="babyName" class="side__chip-baby">{{ babyName }}</p>
-          <p v-if="babyAge" class="side__chip-age">{{ babyAge }}</p>
+          
           <select v-if="showSwitcher" class="side__switch" :value="selectedBaby?.id" aria-label="Switch baby" @change="selectBaby($event.target.value)">
             <option v-for="(b, i) in babies" :key="b.id" :value="b.id">
               {{ b.babyName || `Baby ${i + 1}` }}
@@ -391,57 +391,146 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   border-top: 1px solid var(--nt-line);
 }
 
-@media (max-width: 991px) {
+/* Desktop: the sidebar becomes a horizontal top bar. */
+@media (min-width: 992px) {
   .appshell {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
   }
   .appshell__main {
-    padding: 24px 16px 64px;
+    padding: 32px clamp(24px, 6vw, 96px);
   }
   .side {
-    position: sticky;
     z-index: 20;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
     height: auto;
     overflow: visible;
-    padding: 0;
+    padding: 10px 20px;
     border-right: 0;
     border-bottom: 1px solid var(--nt-line);
   }
-  .side__bar {
+  .side__bar { flex: none; padding: 0; }
+  .side__panel {
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+    min-width: 0;
+  }
+  .side__chip {
+    flex: none;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    padding: 6px 10px;
   }
-  .side__menu {
-    display: inline-flex;
+  .side__chip-baby { margin: 0; }
+  .side__switch { width: auto; margin-top: 0; }
+  .side__add { margin-top: 0; }
+  .side__panel nav {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .side__panel nav::-webkit-scrollbar { display: none; }
+  .side__nav { flex-direction: row; gap: 4px; }
+  .side__link {
+    padding: 8px 8px;
+    gap: 6px;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+  }
+  .side__foot {
+    flex: none;
+    flex-direction: row;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: #fff;
-    border: 1px solid var(--nt-line);
-    border-radius: 8px;
-    font-family: inherit;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--nt-ink);
-    cursor: pointer;
+    margin: 0 0 0 auto;
   }
-  .side__panel {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    max-height: calc(100vh - 66px);
-    overflow-y: auto;
-    padding: 16px;
-    background: var(--nt-bg);
+  .side__note { display: none; }
+  .side__user { padding-top: 0; border-top: 0; }
+}
+
+/* Mobile and tablet: the Menu button and dropdown panel. */
+/* Desktop: a two-row header. Row 1: logo, baby card, user. Row 2: navigation. */
+@media (min-width: 992px) {
+  .appshell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .appshell__main {
+    padding: 32px clamp(24px, 6vw, 96px);
+  }
+
+  .side {
+    z-index: 100;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "logo . chip user"
+      "nav  nav nav  nav";
+    align-items: center;
+    gap: 12px 24px;
+    height: auto;
+    overflow: visible;
+    padding: 14px clamp(24px, 6vw, 96px) 0;
+    border-right: 0;
     border-bottom: 1px solid var(--nt-line);
   }
-  .side__panel--open {
+  .side__panel { display: contents; }
+
+  .side__bar { grid-area: logo; padding: 0; }
+
+  .side__chip {
+    grid-area: chip;
+    justify-self: end;
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 16px;
+    padding: 8px 16px;
+    border-radius: 999px;
+  }
+  .side__chip-baby { margin: 0; }
+  .side__switch { width: auto; margin: 0; padding: 4px 8px; }
+  .side__add { margin: 0; }
+
+  .side__foot {
+    grid-area: user;
+    justify-self: end;
+    margin: 0 0 0 4px;
+  }
+  
+  .side__note { display: none; }
+  .side__user { padding: 0; border-top: 0; }
+
+  .side nav {
+    grid-area: nav;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    border-top: 1px solid var(--nt-line);
+  }
+  .side nav::-webkit-scrollbar { display: none; }
+  .side__nav { flex-direction: row; gap: 8px; }
+  .side__link {
+    gap: 8px;
+    padding: 12px 14px;
+    border-radius: 0;
+    border-bottom: 2px solid transparent;
+    font-size: 0.9375rem;
+    white-space: nowrap;
+  }
+  .side__link:hover { background: transparent; color: var(--nt-ink); }
+  .side__link--active,
+  .side__link--active:hover {
+    background: transparent;
+    border-bottom-color: var(--nt-plum);
+    color: var(--nt-plum);
   }
 }
 </style>

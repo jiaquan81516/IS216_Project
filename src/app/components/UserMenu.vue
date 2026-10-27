@@ -135,16 +135,18 @@ onBeforeUnmount(() => {
 }
 .um__panel {
   position: absolute;
-  bottom: calc(100% + 4px);
-  left: 0;
+  top: calc(100% + 4px);
   right: 0;
-  z-index: 25;
+  left: auto;
+  min-width: 180px;
+  z-index: 110;
   display: flex;
   flex-direction: column;
   padding: 4px;
   background: #fff;
   border: 1px solid var(--nt-line);
   border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(31 41 55 / 12%);
 }
 .um__item {
   padding: 8px 10px;
@@ -169,5 +171,15 @@ onBeforeUnmount(() => {
 .um__item:focus-visible {
   outline: 2px solid var(--nt-plum);
   outline-offset: -2px;
+}
+
+@media (max-width: 991px) {
+  .um__panel {
+    top: auto;
+    bottom: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    min-width: 0;
+  }
 }
 </style>
