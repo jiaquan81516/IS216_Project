@@ -60,6 +60,8 @@ export function roomView(id, data = {}, now = new Date()) {
     name: String(data.name ?? ""),
     address: String(data.address ?? ""),
     details: String(data.details ?? ""),
+    roomType: String(data.roomType ?? ""),
+    feedback: String(data.feedback ?? ""),
     placeId: String(data.placeId ?? ""),
     lat: Number.isFinite(data.lat) ? data.lat : null,
     lng: Number.isFinite(data.lng) ? data.lng : null,
