@@ -43,6 +43,7 @@ const router = createRouter({
         { path: "calendar", name: "calendar", component: appPage("calendar") },
         { path: "settings", name: "settings", component: appPage("settings") },
         { path: "profile", name: "profile", component: appPage("profile") },
+        { path: "users", name: "users", component: appPage("users")}
       ],
     },
 

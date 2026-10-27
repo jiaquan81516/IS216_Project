@@ -49,10 +49,10 @@ export const useRoomsStore = defineStore("app-rooms", () => {
     return currentUser.value?.uid ?? "";
   }
 
-  async function addRoom({ name, address, details = "", placeId = "", lat = null, lng = null, features = [] }) {
+  async function addRoom({ name, address, details = "", placeId = "", lat = null, lng = null, features = [], roomType = "", feedback = "" }) {
     writeError.value = "";
     try {
-      const id = await addRoomDoc(uid(), { name, address, details, placeId, lat, lng, features });
+      const id = await addRoomDoc(uid(), { name, address, details, placeId, lat, lng, features, roomType, feedback });
       return { id, name: String(name).trim() };
     } catch (cause) {
       writeError.value =
