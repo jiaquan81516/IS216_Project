@@ -16,7 +16,10 @@ export const useRoomsStore = defineStore("app-rooms", () => {
   const writeError = ref("");
   let stop = null;
 
-  const fromFirestore = computed(() => docs.value.map((d) => roomView(d.id, d)));
+  // Rooms waiting for review or rejected stay off the public list. Older rooms have no approval.
+  const fromFirestore = computed(() =>
+    docs.value.filter((d) => d.approval !== "pending" && d.approval !== "rejected").map((d) => roomView(d.id, d)),
+  );
   const usingSeed = computed(() => fromFirestore.value.length === 0);
   const rooms = computed(() => (usingSeed.value ? SEED_ROOMS : fromFirestore.value));
 

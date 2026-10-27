@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted, watch } from "vue";
 import { ONEMAP_HOME_URL, oneMapEmbedUrl } from "@/app/utils/oneMapHelpers";
 
 defineOptions({ name: "OneMapEmbed" });
@@ -13,6 +13,38 @@ const props = defineProps({
 });
 
 const src = computed(() => oneMapEmbedUrl({ lat: props.lat, lng: props.lng, zoom: props.zoom ?? undefined, markers: props.markers }));
+
+// The OneMap page can grab focus while it loads, and the browser then scrolls the whole page
+// to the map. For a few seconds after the map (re)loads, undo any page scroll the person did
+// not cause themselves (wheel, touch or keys).
+const GUARD_MS = 4000;
+let anchorY = 0;
+let until = 0;
+let touched = false;
+const note = () => {
+  anchorY = window.scrollY;
+  until = Date.now() + GUARD_MS;
+  touched = false;
+};
+const touch = () => {
+  touched = true;
+};
+function holdScroll() {
+  if (touched || Date.now() > until || window.scrollY === anchorY) return;
+  window.scrollTo({ top: anchorY, behavior: "instant" });
+}
+const INPUTS = ["wheel", "touchmove", "keydown", "mousedown"];
+onMounted(() => {
+  note();
+  INPUTS.forEach((name) => window.addEventListener(name, touch, { passive: true }));
+  window.addEventListener("scroll", holdScroll, { passive: true });
+});
+onBeforeUnmount(() => {
+  INPUTS.forEach((name) => window.removeEventListener(name, touch));
+  window.removeEventListener("scroll", holdScroll);
+});
+watch(src, note, { flush: "pre" });
+
 const title = computed(() => `Map of ${props.label || "Singapore"}`);
 </script>
 
@@ -24,6 +56,7 @@ const title = computed(() => `Map of ${props.label || "Singapore"}`);
       :title="title"
       :style="{ height: `${height}px` }"
       loading="lazy"
+      @load="holdScroll"
       referrerpolicy="no-referrer-when-downgrade"
     ></iframe>
     <p class="omap__credit">
