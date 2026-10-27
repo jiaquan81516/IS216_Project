@@ -34,7 +34,7 @@ export function useAuth() {
       await waitForSignedIn(currentUser, user.uid);
       if (await hasAdminClaim(user)) {
         authProfile.value = null;
-        return ROUTES.ROOMS;
+        return ROUTES.ADMIN;
       }
       const profile = await withTimeout(
         ensureUserProfile(user, {

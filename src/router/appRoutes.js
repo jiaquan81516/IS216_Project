@@ -15,6 +15,9 @@ const router = createRouter({
     { path: ROUTES.ROLE, name: "role", component: appPage("role"), meta: { public: true } },
     { path: ROUTES.ACCOUNT, name: "account", component: appPage("account"), meta: { public: true } },
     { path: ROUTES.SIGN_IN, name: "sign-in", component: appPage("sign-in"), meta: { public: true } },
+    ...(ROUTES.ADMIN_SIGN_IN
+      ? [{ path: ROUTES.ADMIN_SIGN_IN, name: "admin-sign-in", component: appPage("sign-in-admin"), meta: { public: true } }]
+      : []),
     { path: ROUTES.HOUSEHOLD, name: "household", component: appPage("household"), meta: { requiresAuth: true } },
     { path: ROUTES.CARE_BRIEF, name: "care-brief", component: appPage("care-brief"), meta: { requiresAuth: true } },
 
@@ -43,7 +46,7 @@ const router = createRouter({
         { path: "calendar", name: "calendar", component: appPage("calendar") },
         { path: "settings", name: "settings", component: appPage("settings") },
         { path: "profile", name: "profile", component: appPage("profile") },
-        { path: "users", name: "users", component: appPage("users")}
+        { path: "admin", name: "admin", component: appPage("admin-rooms") },
       ],
     },
 

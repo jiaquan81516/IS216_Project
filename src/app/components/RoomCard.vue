@@ -98,7 +98,7 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
       </a>
     </p>
     <div class="rc__actions rc__actions--room">
-      <div v-if="placeUrl" class="rc__action-group">
+      <div v-if="placeUrl || canManage" class="rc__action-group">
       <button v-if="placeUrl" type="button" class="rc__action" @click.stop="emit('select', room)">
         <Icon name="pin" :size="16" />
         Show on map<span class="visually-hidden"> for {{ room.name }}</span>
@@ -107,11 +107,12 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
         <Icon name="external" :size="16" />
         Open in OneMap<span class="visually-hidden"> for {{ room.name }}, opens in a new tab</span>
       </a>
+      <template v-if="canManage">
+        <button type="button" class="rc__action" @click.stop="emit('edit', room)">Edit<span class="visually-hidden"> {{ room.name }}</span></button>
+        <button type="button" class="rc__action" @click.stop="emit('delete', room)">Delete<span class="visually-hidden"> {{ room.name }}</span></button>
+      </template>
       </div>
-      <div class="rc__action-group rc__action-group--end">
-    <div class="rc__actions">
-      <button v-if="canManage" type="button" class="app-textbtn" @click.stop="emit('edit', room)">Edit<span class="visually-hidden"> {{ room.name }}</span></button>
-      <button v-if="canManage" type="button" class="app-textbtn" @click.stop="emit('delete', room)">Delete<span class="visually-hidden"> {{ room.name }}</span></button>
+      <div v-if="!canManage" class="rc__action-group rc__action-group--end">
       <button
         type="button"
         class="rc__action"
