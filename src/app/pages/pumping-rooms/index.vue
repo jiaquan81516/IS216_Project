@@ -21,9 +21,13 @@ import { describeSharedError } from "@/app/utils/sharedHelpers";
 import { SEED_COORDS } from "@/app/data/pumpingRooms";
 import { ROOM_FEATURES } from "@/app/utils/roomHelpers";
 import { useRoomsStore } from "@/app/stores/rooms";
+import { useSavedPlaces } from "@/app/composables/useSavedPlaces";
+import { useLocate } from "@/app/composables/useLocate";
+import { useAuth } from "@/composables/useAuth";
 import RoomManager from "@/app/components/RoomManager.vue";
 import { useAdmin } from "@/composables/useAdmin";
 import { subscribeRoomOverrides } from "@/api/roomManagement";
+import { lookupPostalCode } from "@/api/roomLocation";
 import { applyRoomOverrides } from "@/app/utils/roomManagement";
 
 defineOptions({ name: "PumpingRoomsPage" });
@@ -46,31 +50,12 @@ const filterOpen = ref(false);
 const view = ref("all");
 const selectedId = ref("");
 const message = ref("");
-const locationMessage = ref("");
 
 // Where distances are measured from.
 const origin = ref({ ...DEFAULT_CENTER });
 const originLabel = ref("in Singapore");
 
-function readSaved() {
-  try {
-    const value = JSON.parse(localStorage.getItem(SAVED_ROOMS_KEY) || "[]");
-    return Array.isArray(value) ? value.map(String) : [];
-  } catch {
-    return [];
-  }
-}
-const savedIds = ref(readSaved());
-function toggleSaved(room) {
-  savedIds.value = savedIds.value.includes(room.id)
-    ? savedIds.value.filter((id) => id !== room.id)
-    : [...savedIds.value, room.id];
-  try {
-    localStorage.setItem(SAVED_ROOMS_KEY, JSON.stringify(savedIds.value));
-  } catch {
-    // Saving is a convenience; the list still works for this visit.
-  }
-}
+const { savedIds, toggleSaved } = useSavedPlaces(SAVED_ROOMS_KEY);
 
 // Rooms: database rooms first, then the BMSG directory rooms, de-duplicated.
 const allRooms = computed(() => mergeRooms(applyRoomOverrides(
@@ -115,23 +100,14 @@ onMounted(async () => {
 onBeforeUnmount(() => { roomsStore.unbind(); stopOverrides?.(); });
 
 // Geolocation
+const { locating, message: locationMessage, locate: findMe } = useLocate();
 function locate() {
-  locationMessage.value = "";
-  if (!globalThis.navigator?.geolocation) {
-    locationMessage.value = "Location is not available in this browser. Search for a place instead.";
-    return;
-  }
-  navigator.geolocation.getCurrentPosition(
-    ({ coords }) => {
-      located.value = true;
-      query.value = "";
-      origin.value = { lat: coords.latitude, lng: coords.longitude };
-      originLabel.value = "near you";
-    },
-    () => {
-      locationMessage.value = "We could not access your location. Search for a place instead.";
-    },
-  );
+  findMe(({ lat, lng }) => {
+    located.value = true;
+    query.value = "";
+    origin.value = { lat, lng };
+    originLabel.value = "near you";
+  });
 }
 
 function viewAll() {
@@ -144,9 +120,48 @@ function viewAll() {
   located.value = false;
 }
 
-const emptyRoom = () => ({ name: "", address: "", roomType: "", features: [], details: "", feedback: "" });
+// A parent can confirm a community room they did not add, once it is approved and still unverified.
+const { currentUser } = useAuth();
+const canConfirm = (room) =>
+  !isAdmin.value && !!room.createdBy && room.createdBy !== currentUser.value?.uid && room.approval === "approved" && room.status !== "verified";
+async function confirmRoom(room) {
+  message.value = "";
+  if (await roomsStore.reportRoom(room.id, "confirm")) message.value = `Thanks. ${room.name} is now marked as verified.`;
+}
+
+const emptyRoom = () => ({ postal: "", name: "", address: "", lat: null, lng: null, roomType: "", features: [], details: "", feedback: "" });
 const draft = ref(emptyRoom());
 const saving = ref(false);
+
+// Typing a six-digit postal code fills in the address and the map position from OneMap.
+// If the lookup fails, the parent can still type the address themselves.
+const lookup = ref({ state: "idle", text: "" });
+let lookupToken = 0;
+watch(
+  () => draft.value.postal,
+  async (postal) => {
+    const token = ++lookupToken;
+    draft.value.lat = null;
+    draft.value.lng = null;
+    if (!/^\d{6}$/.test(postal)) {
+      lookup.value = { state: "idle", text: "" };
+      return;
+    }
+    lookup.value = { state: "busy", text: "Looking up the address..." };
+    try {
+      const found = await lookupPostalCode(postal);
+      if (token !== lookupToken) return;
+      draft.value.lat = found.lat;
+      draft.value.lng = found.lng;
+      if (found.address) draft.value.address = found.address;
+      if (found.building && !draft.value.name) draft.value.name = found.building;
+      lookup.value = { state: "ok", text: "Address found. Check it, then add where the room is inside." };
+    } catch {
+      if (token !== lookupToken) return;
+      lookup.value = { state: "failed", text: "We could not look that up. Type the address below instead." };
+    }
+  },
+);
 async function submitRoom() {
   if (saving.value) return;
   saving.value = true;
@@ -155,7 +170,7 @@ async function submitRoom() {
     if (!room) return;
     viewAll();
     selectedId.value = room.id;
-    message.value = `${room.name} has been added. It needs community verification.`;
+    message.value = `${room.name} has been added. An administrator reviews it first; until then only you can see it.`;
     draft.value = emptyRoom();
     saving.value = false;
     closeForm();
@@ -233,9 +248,9 @@ watch(supportTab, (id) => {
 
         <div class="pr__bar">
           <p class="pr__count" aria-live="polite">{{ countText }}</p>
-          <AppButton variant="outline" size="sm" @click="locate()">
+          <AppButton variant="outline" size="sm" :disabled="locating" @click="locate()">
             <Icon name="locate" :size="16" />
-            Use my location
+            {{ locating ? "Locating..." : "Use my location" }}
           </AppButton>
           <AppButton
             variant="outline"
@@ -276,10 +291,12 @@ watch(supportTab, (id) => {
             :saved="savedIds.includes(room.id)"
             :show-distance="located"
             :can-manage="isAdmin"
+            :can-confirm="canConfirm(room)"
             @edit="manager?.edit($event)"
             @delete="manager?.remove($event)"
             @select="selectFromList"
             @toggle-save="toggleSaved"
+            @confirm="confirmRoom"
           />
         </ul>
         <div v-else class="pr__empty">
@@ -303,14 +320,19 @@ watch(supportTab, (id) => {
           <h2 id="pr-add-title" class="nt-heading nt-heading--sm">Add a pumping room</h2>
           <button type="button" class="pr__x" aria-label="Close add a room" @click="closeForm"><Icon name="close" :size="18" /></button>
         </div>
-        <p class="pr__muted">Community additions need verification before others rely on them.</p>
+        <p class="pr__muted">An administrator reviews new rooms before other parents see them.</p>
         <form class="pr__form" @submit.prevent="submitRoom">
+          <div class="pr__f">
+            <label class="pr__flabel" for="pr-postal">Postal code</label>
+            <input id="pr-postal" v-model.trim="draft.postal" class="form-control" inputmode="numeric" maxlength="6" autocomplete="postal-code" placeholder="For example 179103" :disabled="saving" aria-describedby="pr-postal-status" />
+            <p id="pr-postal-status" class="pr__muted" role="status">{{ lookup.text || "Enter the six-digit postal code and we fill in the address." }}</p>
+          </div>
           <div class="pr__f">
             <label class="pr__flabel" for="pr-name">Name of location</label>
             <input id="pr-name" v-model.trim="draft.name" class="form-control" required maxlength="80" :disabled="saving" />
           </div>
           <div class="pr__f">
-            <label class="pr__flabel" for="pr-address">Full address</label>
+            <label class="pr__flabel" for="pr-address">Address</label>
             <textarea id="pr-address" v-model.trim="draft.address" class="form-control" required maxlength="200" rows="2" :disabled="saving" />
           </div>
           <div class="pr__f">
@@ -337,8 +359,8 @@ watch(supportTab, (id) => {
             </div>
           </fieldset>
           <div class="pr__f">
-            <label class="pr__flabel" for="pr-details">Description of features</label>
-            <textarea id="pr-details" v-model.trim="draft.details" class="form-control" required maxlength="200" rows="3" :disabled="saving" />
+            <label class="pr__flabel" for="pr-details">Where is it inside?</label>
+            <textarea id="pr-details" v-model.trim="draft.details" class="form-control" required maxlength="200" rows="3" placeholder="For example Level 3, near the lifts" :disabled="saving" />
           </div>
           <div class="pr__f">
             <label class="pr__flabel" for="pr-feedback">Parent feedback (optional)</label>

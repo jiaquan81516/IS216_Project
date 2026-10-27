@@ -67,7 +67,7 @@ function toggleGuide(slug) {
                 <svg class="sp__ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h10a4 4 0 0 1 4 4v12H9a4 4 0 0 1-4-4z" /><path d="M5 16a4 4 0 0 1 4-4h10" /></svg>
                 <span>
                 <span class="sp__acc-title">{{ g.title }}</span>
-                <span class="sp__muted sp__acc-blurb">{{ g.blurb }}</span>
+                <span class="sp__muted sp__acc-blurb">{{ g.blurb }}<template v-if="g.minutes"> About {{ g.minutes }} min read.</template></span>
                 </span>
               </span>
               <span class="sp__chev" :class="{ 'sp__chev--open': openGuides.has(g.slug) }"><Icon name="chevron-down" :size="20" /></span>

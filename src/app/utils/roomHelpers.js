@@ -2,6 +2,7 @@
 import { toDate } from "./entryHelpers";
 
 export function statusText(room) {
+  if (room.approval === "pending") return "Pending review";
   if (room.status !== "verified") return "Needs verification";
   const d = room.verifiedDaysAgo;
   if (d === 0) return "Verified today";
@@ -71,6 +72,7 @@ export function roomView(id, data = {}, now = new Date()) {
     verifiedAt: data.verifiedAt ?? null,
     verifiedDaysAgo: verified ? daysSince(data.verifiedAt, now) : null,
     createdBy: data.createdBy ?? null,
+    approval: data.approval ?? "approved",
     seed: false,
   };
 }

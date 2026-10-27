@@ -12,12 +12,15 @@ import {
   countText,
   filterPlaces,
   formatDate,
+  isStale,
   normalizeView,
   telHref,
 } from "@/app/utils/kidsCareHelpers";
 import OneMapEmbed from "@/app/components/OneMapEmbed.vue";
 import { oneMapPlaceUrl } from "@/app/utils/oneMapHelpers";
 import { loadChasClinics } from "@/api/chasClinics";
+import { useSavedPlaces } from "@/app/composables/useSavedPlaces";
+import { useLocate } from "@/app/composables/useLocate";
 import { KIDS_EMERGENCY, KIDS_EMERGENCY_NUMBERS, RETRIEVED_AT } from "@/app/data/kidsEmergency";
 
 defineOptions({ name: "KidsCarePage" });
@@ -32,7 +35,6 @@ const filterOpen = ref(false);
 const includeDental = ref(false);
 const located = ref(false);
 const origin = ref(null);
-const locationMessage = ref("");
 const mapPlace = ref(null);
 const shown = ref(PAGE_SIZE);
 
@@ -54,25 +56,7 @@ watch([view, query, saveView, includeDental, origin], () => {
   mapPlace.value = null;
 });
 
-function readSaved() {
-  try {
-    const value = JSON.parse(localStorage.getItem(SAVED_KIDS_KEY) || "[]");
-    return Array.isArray(value) ? value.map(String) : [];
-  } catch {
-    return [];
-  }
-}
-const savedIds = ref(readSaved());
-function toggleSaved(place) {
-  savedIds.value = savedIds.value.includes(place.id)
-    ? savedIds.value.filter((id) => id !== place.id)
-    : [...savedIds.value, place.id];
-  try {
-    localStorage.setItem(SAVED_KIDS_KEY, JSON.stringify(savedIds.value));
-  } catch {
-    // Saving is a convenience; the list still works for this visit.
-  }
-}
+const { savedIds, toggleSaved } = useSavedPlaces(SAVED_KIDS_KEY);
 
 const source = computed(() => (view.value === "emergency" ? [...KIDS_EMERGENCY] : clinics.value));
 const matches = computed(() => {
@@ -87,6 +71,7 @@ const savedCount = computed(() => source.value.filter((p) => savedIds.value.incl
 const count = computed(() => countText(matches.value.length, located.value ? "near you" : "in Singapore"));
 const filterCount = computed(() => (includeDental.value ? 1 : 0));
 
+const clinicsStale = computed(() => view.value === "clinics" && isStale(clinicMeta.value.retrievedAt));
 const retrievedText = computed(() => formatDate(view.value === "emergency" ? RETRIEVED_AT : clinicMeta.value.retrievedAt));
 
 function showOnMap(place) {
@@ -96,22 +81,13 @@ function showOnMap(place) {
 function setView(next) {
   router.replace({ path: route.path, query: { ...route.query, view: next } });
 }
+const { locating, message: locationMessage, locate: findMe } = useLocate();
 function locate() {
-  locationMessage.value = "";
-  if (!globalThis.navigator?.geolocation) {
-    locationMessage.value = "Location is not available in this browser. Search for a place instead.";
-    return;
-  }
-  navigator.geolocation.getCurrentPosition(
-    ({ coords }) => {
-      origin.value = { lat: coords.latitude, lng: coords.longitude };
-      located.value = true;
-      query.value = "";
-    },
-    () => {
-      locationMessage.value = "We could not access your location. Search for a place instead.";
-    },
-  );
+  findMe(({ lat, lng }) => {
+    origin.value = { lat, lng };
+    located.value = true;
+    query.value = "";
+  });
 }
 const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
 </script>
@@ -168,14 +144,17 @@ const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
       </svg>
       <span>CHAS subsidies depend on your card. Check with the clinic. For emergencies use the Emergency tab.</span>
     </p>
+    <p v-if="clinicsStale" class="kc__notice" role="status">
+      <span>This clinic list was last updated on {{ retrievedText }}, so some details may have changed. Check with the clinic before you go.</span>
+    </p>
     <p v-if="locationMessage" class="kc__notice" role="status">{{ locationMessage }}</p>
 
     <div class="kc__bar">
       <p class="kc__count" aria-live="polite">{{ count }}</p>
       <div class="kc__controls">
-        <AppButton variant="outline" size="sm" @click="locate">
+        <AppButton variant="outline" size="sm" :disabled="locating" @click="locate">
           <Icon name="locate" :size="16" />
-          Use my location
+          {{ locating ? "Locating..." : "Use my location" }}
         </AppButton>
         <AppButton
           v-if="view === 'clinics'"

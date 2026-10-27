@@ -119,6 +119,7 @@ export function isVerified(room) {
 // The text under the room name. Only a room with status verified (a database room or a BMSG
 // directory room) says "Verified".
 export function verificationText(room) {
+  if (room.approval === "pending") return "Pending review";
   if (room.seed) return "Example room, not confirmed";
   if (!isVerified(room)) return "Needs verification";
   const days = room.verifiedDaysAgo;

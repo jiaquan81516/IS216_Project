@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { useAuth } from "@/composables/useAuth";
 import { addRoom as addRoomDoc, reportRoom as reportRoomDoc, subscribeRooms } from "@/api/rooms";
+import { resolveRoomLocation } from "@/api/roomLocation";
 import { roomView } from "@/app/utils/roomHelpers";
 import { SEED_ROOMS } from "@/app/data/pumpingRooms";
 import { takeLimit } from "@/app/utils/limits";
@@ -25,6 +26,7 @@ export const useRoomsStore = defineStore("app-rooms", () => {
     loading.value = true;
     error.value = null;
     stop = subscribeRooms(
+      uid(),
       (list) => {
         docs.value = list;
         loading.value = false;
@@ -52,7 +54,17 @@ export const useRoomsStore = defineStore("app-rooms", () => {
   async function addRoom({ name, address, details = "", placeId = "", lat = null, lng = null, features = [], roomType = "", feedback = "" }) {
     writeError.value = "";
     try {
-      const id = await addRoomDoc(uid(), { name, address, details, placeId, lat, lng, features, roomType, feedback });
+      // The form already looked the postal code up. If that did not happen, try once more from
+      // the address; a room without a map position is still saved, and an administrator can fix it.
+      let point = { lat, lng };
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        try {
+          point = await resolveRoomLocation(address);
+        } catch {
+          point = { lat: null, lng: null };
+        }
+      }
+      const id = await addRoomDoc(uid(), { name, address, details, placeId, lat: point.lat, lng: point.lng, features, roomType, feedback });
       return { id, name: String(name).trim() };
     } catch (cause) {
       writeError.value =

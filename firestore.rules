@@ -491,9 +491,16 @@ service cloud.firestore {
     // server (docs/data-model.md, section 7). What rules can do is make every write
     // attributable and bounded, which is what the time and length checks below are for.
     match /pumpingRooms/{roomId} {
-      allow read: if signedIn();
+      // Parents read approved rooms and their own pending ones. Administrators read all.
+      // Rooms saved before approval existed need scripts/approve-existing-rooms.mjs run once.
+      allow read: if signedIn()
+        && (resource.data.approval == 'approved'
+          || resource.data.createdBy == request.auth.uid
+          || roomAdmin());
 
+      // A new room always starts pending; only an administrator moves it on.
       allow create: if signedIn()
+        && request.resource.data.approval == 'pending'
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -512,10 +519,19 @@ service cloud.firestore {
         && (!('feedback' in request.resource.data) || (request.resource.data.feedback is string && request.resource.data.feedback.size() <= 400))
         && request.resource.data.createdAt == request.time;
 
-      // Only the verification state moves, and only ever through a report.
-      allow update: if signedIn()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'verifiedAt'])
-        && request.resource.data.status in ['verified', 'unverified'];
+      // A parent can only move the verification state of an approved room, through a report.
+      // An administrator can accept or reject a room, with an optional short reason.
+      allow update: if (signedIn()
+          && resource.data.get('approval', 'approved') == 'approved'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'verifiedAt'])
+          && request.resource.data.status in ['verified', 'unverified'])
+        || (roomAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approval', 'reviewedBy', 'reviewedAt', 'reviewNote'])
+          && request.resource.data.approval in ['approved', 'rejected']
+          && request.resource.data.reviewedBy == request.auth.uid
+          && request.resource.data.reviewedAt == request.time
+          && (!('reviewNote' in request.resource.data)
+            || (request.resource.data.reviewNote is string && request.resource.data.reviewNote.size() <= 200)));
 
       allow delete: if false;
 

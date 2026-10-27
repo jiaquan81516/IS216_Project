@@ -5,8 +5,8 @@ import { allowMethod, fail, ok } from "../_lib/respond.js";
 export default async function handler(req, res) {
   if (!allowMethod(req, res, "GET")) return;
   try {
-    const user = await requireUser(req);
-    if (user.admin !== true) return fail(res, 403, "permission-denied", "Only admins can look up room locations.");
+    // Any signed in user may look up a postal code, so parents can add a room by postal code.
+    await requireUser(req);
     const postalCode = req.query?.postalCode;
     if (typeof postalCode !== "string" || !/^[0-9]{6}$/.test(postalCode)) {
       return fail(res, 400, "rooms/postal-code", "Enter a six-digit postal code in the address.");
@@ -32,8 +32,14 @@ export default async function handler(req, res) {
     if (Number(data.totalNumPages) > 1 || points.some((point) => point.lat !== points[0].lat || point.lng !== points[0].lng)) {
       return fail(res, 422, "rooms/location-ambiguous", "That postal code has multiple map locations. Check that you entered the building's postal code.");
     }
-    ok(res, { postalCode, ...points[0] });
+    // The first match also names the place, so the form can fill in the address.
+    const row = matches[0];
+    const clean = (value) => (value && String(value).trim().toUpperCase() !== "NIL" ? String(value).trim() : "");
+    const address = clean(row.ADDRESS);
+    const building = clean(row.BUILDING);
+    ok(res, { postalCode, ...points[0], ...(address ? { address } : {}), ...(building ? { building } : {}) });
   } catch (error) {
+    console.error("[rooms location]", error?.code || error?.name, error?.message);
     fail(res, error.status || 502, error.code || "rooms/location-unavailable",
       error.status === 401 ? "Sign in again to look up a room location." : "Address lookup is unavailable. Please try again.");
   }
