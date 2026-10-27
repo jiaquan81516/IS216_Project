@@ -1,6 +1,7 @@
 <script setup>
 import { nextTick, ref } from "vue";
 import AppButton from "@/components/ui/AppButton.vue";
+import AddressPicker from "@/app/components/AddressPicker.vue";
 import { useAuth } from "@/composables/useAuth";
 import { saveManagedRoom } from "@/api/roomManagement";
 import { ROOM_FEATURES } from "@/app/utils/roomHelpers";
@@ -12,6 +13,12 @@ const deleting = ref(false);
 const busy = ref(false);
 const error = ref("");
 const message = ref("");
+
+// Picking a suggestion fills in the address (with its postal code); the name is only filled if empty.
+function pickPlace(place) {
+  if (!draft.value.name) draft.value.name = place.name.slice(0, 80);
+  draft.value.address = place.address;
+}
 
 function open(room, remove = false) {
   if (busy.value) return;
@@ -51,10 +58,10 @@ async function save() {
       <fieldset :disabled="busy" class="manager-fields">
         <p v-if="deleting">Delete {{ draft.name }} from the directory?</p>
         <template v-else>
+          <AddressPicker id="rm-place" />
           <label>Name<input v-model="draft.name" required maxlength="80" /></label>
           <label>Address (including postal code)<input v-model="draft.address" required maxlength="200" placeholder="e.g. 1 Example Road, Singapore 012345" /></label>
           <label>Location details<textarea v-model="draft.details" required maxlength="200" placeholder="Level and directions to the room" /></label>
-          <p>The six-digit postal code in the address is used to find the building on OneMap when you save.</p>
           <fieldset><legend>Features</legend>
             <label v-for="[key, label] in ROOM_FEATURES" :key="key" class="manager-feature"><input v-model="draft.features" type="checkbox" :value="label" /> {{ label }}</label>
           </fieldset>

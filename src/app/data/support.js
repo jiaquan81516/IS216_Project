@@ -44,3 +44,11 @@ export const TRUSTED_RESOURCES = Object.freeze([
     telLabel: "6389 2222",
   },
 ]);
+
+// A phone link for a contact. Saved contacts keep only the number as typed, so the link is
+// built from its digits; the built-in ones carry their own link.
+export function contactHref(contact) {
+  if (contact.tel) return contact.tel;
+  const digits = String(contact.telLabel ?? "").replace(/[^\d+]/g, "");
+  return digits ? `tel:${digits}` : null;
+}

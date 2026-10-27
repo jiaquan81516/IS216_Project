@@ -42,6 +42,16 @@ export function featureMap(labels = []) {
   return Object.fromEntries(ROOM_FEATURES.map(([key, label]) => [key, chosen.has(label)]));
 }
 
+// The floors a parent can choose for a room inside a mall, lowest first.
+export const BASEMENT_FLOORS = Object.freeze(["Basement 3", "Basement 2", "Basement 1"]);
+export const UPPER_FLOORS = Object.freeze([...Array.from({ length: 12 }, (_, i) => `Level ${i + 1}`), "Rooftop"]);
+
+// "Level 3, near the lifts": the chosen floor, then an optional landmark.
+export function roomDetails(floor, near = "") {
+  const where = String(near).trim();
+  return where ? `${floor}, near ${where}` : String(floor);
+}
+
 const DAY_MS = 86400000;
 
 // Whole days between a timestamp and now, or null when there is none.

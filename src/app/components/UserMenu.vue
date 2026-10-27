@@ -9,6 +9,8 @@ defineOptions({ name: "UserMenu" });
 
 const props = defineProps({
   name: { type: String, required: true },
+  // An administrator has no profile or settings pages, only sign out.
+  admin: { type: Boolean, default: false },
 });
 const emit = defineEmits(["sign-out"]);
 
@@ -18,10 +20,14 @@ const button = ref(null);
 const panel = ref(null);
 const root = ref(null);
 
-const links = computed(() => [
-  { label: "Profile", to: ROUTES.PROFILE },
-  { label: "Settings", to: ROUTES.SETTINGS },
-]);
+const links = computed(() =>
+  props.admin
+    ? []
+    : [
+        { label: "Profile", to: ROUTES.PROFILE },
+        { label: "Settings", to: ROUTES.SETTINGS },
+      ],
+);
 
 async function focusFirstItem() {
   await nextTick();

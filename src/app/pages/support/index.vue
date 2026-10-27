@@ -1,19 +1,32 @@
 <script setup>
 import "@/app/app.css";
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Icon from "@/app/components/Icon.vue";
 import Tabs from "@/app/components/Tabs.vue";
-import { SUPPORT_GUIDES, TRUSTED_RESOURCES } from "@/app/data/support";
+import AppButton from "@/components/ui/AppButton.vue";
+import SupportItemActions from "@/app/components/admin/SupportItemActions.vue";
+import SupportItemForm from "@/app/components/admin/SupportItemForm.vue";
+import { useAdmin } from "@/composables/useAdmin";
+import { useSupportEditor } from "@/app/composables/useSupportEditor";
+import { useSupportContent } from "@/app/composables/useSupportContent";
 import { ROUTES } from "@/app/routes";
 
 defineOptions({ name: "SupportPage" });
 
-const TABS = [
+const { guides, contacts } = useSupportContent();
+// An administrator sees the same page,  on each item.
+const { isAdmin } = useAdmin();
+const guideEditor = useSupportEditor("guides", guides);
+const contactEditor = useSupportEditor("contacts", contacts);
+
+const ALL_TABS = [
   { id: "guides", label: "Guides" },
   { id: "rooms", label: "Pumping rooms" },
   { id: "resources", label: "Trusted resources" },
 ];
+// Administrators manage rooms on their own page, so the rooms tab is left out for them.
+const TABS = computed(() => (isAdmin.value ? ALL_TABS.filter((t) => t.id !== "rooms") : ALL_TABS));
 const route = useRoute();
 const router = useRouter();
 const tab = ref(route.query.tab === "resources" ? "resources" : "guides");
@@ -52,8 +65,15 @@ function toggleGuide(slug) {
 
     <!-- Guides -->
     <div v-if="tab === 'guides'" id="support-panel-guides" class="sp__guides" role="tabpanel" aria-labelledby="support-tab-guides">
+      <div v-if="isAdmin" class="sp__admin-bar">
+        <AppButton v-if="!guideEditor.editing.value" variant="outline" size="sm" :disabled="guideEditor.atLimit()" @click="guideEditor.start(-1)">Add guide</AppButton>
+        <p v-if="!guideEditor.editing.value && guideEditor.error.value" class="app-error-text" role="alert">{{ guideEditor.error.value }}</p>
+      </div>
       <ul class="sp__acc">
-        <li v-for="g in SUPPORT_GUIDES" :key="g.slug" class="sp__acc-item">
+        <SupportItemForm v-if="isAdmin && guideEditor.editing.value?.index === -1" kind="guides" :editor="guideEditor" />
+        <template v-for="(g, i) in guides" :key="g.slug">
+        <SupportItemForm v-if="isAdmin && guideEditor.editing.value?.index === i" kind="guides" :editor="guideEditor" />
+        <li v-else class="sp__acc-item">
           <h2 class="sp__acc-h">
             <button
               :id="`guide-btn-${g.slug}`"
@@ -86,12 +106,16 @@ function toggleGuide(slug) {
                 <strong>{{ s.title }}.</strong> {{ s.body }}
               </li>
             </ol>
+            <template v-if="g.callIf?.length">
             <p class="sp__text sp__strong">Call your doctor if:</p>
             <ul class="sp__bullets">
               <li v-for="c in g.callIf" :key="c">{{ c }}</li>
             </ul>
+            </template>
           </div>
+          <SupportItemActions v-if="isAdmin" class="sp__item-actions" :editor="guideEditor" :index="i" :name="g.title" />
         </li>
+        </template>
       </ul>
       <p class="sp__muted sp__guides-note">General guidance only, not medical advice.</p>
     </div>
@@ -110,16 +134,25 @@ function toggleGuide(slug) {
           <router-link class="app-link sp__res-link" :to="c.to">{{ c.label }}<span class="visually-hidden">: {{ c.name }}</span></router-link>
         </li>
       </ul>
-      <h2 class="sp__group">Contacts</h2>
+      <div class="sp__group-row">
+        <h2 class="sp__group">Contacts</h2>
+        <AppButton v-if="isAdmin && !contactEditor.editing.value" variant="outline" size="sm" :disabled="contactEditor.atLimit()" @click="contactEditor.start(-1)">Add contact</AppButton>
+      </div>
+      <p v-if="isAdmin && !contactEditor.editing.value && contactEditor.error.value" class="app-error-text" role="alert">{{ contactEditor.error.value }}</p>
       <ul class="sp__res">
-        <li v-for="r in TRUSTED_RESOURCES" :key="r.id" class="sp__res-item">
+        <SupportItemForm v-if="isAdmin && contactEditor.editing.value?.index === -1" kind="contacts" :editor="contactEditor" />
+        <template v-for="(r, i) in contacts" :key="r.id">
+        <SupportItemForm v-if="isAdmin && contactEditor.editing.value?.index === i" kind="contacts" :editor="contactEditor" />
+        <li v-else class="sp__res-item">
           <svg class="sp__ico" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z" /></svg>
           <div class="sp__res-body">
-            <h2 class="sp__res-name">{{ r.name }}</h2>
+            <h3 class="sp__res-name">{{ r.name }}</h3>
             <p class="sp__text">{{ r.purpose }}</p>
           </div>
           <a v-if="r.tel" class="app-link sp__res-link" :href="r.tel">{{ r.telLabel }}</a>
+          <SupportItemActions v-if="isAdmin" class="sp__item-actions" :editor="contactEditor" :index="i" :name="r.name" />
         </li>
+        </template>
       </ul>
       <p class="sp__muted">General guidance only, not medical advice.</p>
     </div>
@@ -160,6 +193,11 @@ function toggleGuide(slug) {
 .sp__res-link { grid-column: 2; font-weight: 600; }
 .sp__res-name { margin: 0 0 4px; font-size: 1rem; font-weight: 600; }
 
+.sp__admin-bar { display: flex; align-items: center; gap: 12px; }
+.sp__group-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.sp__group-row .sp__group { margin: 0; }
+.sp__acc-item .sp__item-actions { padding: 0 24px 16px; }
+.sp__res-item .sp__item-actions { padding-top: 4px; }
 .sp__group { margin: 8px 0 0; font-size: 1rem; font-weight: 600; color: var(--nt-ink); }
 
 @media (max-width: 1099px) {
