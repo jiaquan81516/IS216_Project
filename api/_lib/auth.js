@@ -8,7 +8,7 @@
 import { auth } from "./admin.js";
 
 export const TOKEN_ERROR = "auth/invalid-token";
-const ADMIN_UID = process.env.ADMIN_UID || "";
+export const FORBIDDEN_ERROR = "auth/forbidden";
 
 function unauthorised(message = "Sign in again, then try that once more.") {
   const error = new Error(message);
@@ -52,22 +52,18 @@ export async function requireAdmin(req) {
 
 // Returns the decoded token, or throws a 401 shaped error.
 export async function requireUser(req) {
-  const uid = await requireUid(req);
-  if (uid !== ADMIN_UID) {
-    const token = readToken(req);
-    if (!token) throw unauthorised("You need to be signed in to do that.");
-    try {
-      return await auth.verifyIdToken(token);
-    } catch (cause) {
-      // The reason goes to the server log only (first line, never the token), so a 401 can be
-      // told apart: a wrong project, a bad service account key, or a really expired token.
-      console.error("[auth] verifyIdToken failed:", cause?.code, String(cause?.message ?? cause).split("\n")[0].slice(0, 200));
-      const error = unauthorised("Your sign in has expired. Sign in again, then try that once more.");
-      error.cause = cause;
-      return Promise.reject(error);
-    }
-  };
-  
+  const token = readToken(req);
+  if (!token) throw unauthorised("You need to be signed in to do that.");
+  try {
+    return await auth.verifyIdToken(token);
+  } catch (cause) {
+    // The reason goes to the server log only (first line, never the token), so a 401 can be
+    // told apart: a wrong project, a bad service account key, or a really expired token.
+    console.error("[auth] verifyIdToken failed:", cause?.code, String(cause?.message ?? cause).split("\n")[0].slice(0, 200));
+    const error = unauthorised("Your sign in has expired. Sign in again, then try that once more.");
+    error.cause = cause;
+    return Promise.reject(error);
+  }
 }
 
 export function isAuthError(error) {

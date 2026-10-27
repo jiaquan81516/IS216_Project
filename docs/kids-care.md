@@ -8,9 +8,9 @@ Static, hand curated list in `src/app/data/kidsEmergency.js`, checked against ea
 
 Included:
 - KK Women's and Children's Hospital Children's Emergency (KKH page, MOH reply of 6 August 2026 names it as a dedicated paediatric emergency). The KKH page does not state opening hours, so the card says to check.
-- NUH Children's Emergency (NUH facilities page: "24 hours").
 
 Left out on purpose:
+- NUH Children's Emergency: removed by choice so the page points to one hospital, KKH.
 - Singapore General Hospital, Ng Teng Fong General Hospital, Sengkang General Hospital: their own pages say they have no paediatric facilities and send children to KKH or NUH.
 - Changi General Hospital, Khoo Teck Puat Hospital, Tan Tock Seng Hospital, Woodlands Health: the pages checked did not state a paediatric emergency service. Add one only after confirming it on the hospital's own page, and record the source URL.
 
