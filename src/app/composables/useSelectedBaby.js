@@ -12,6 +12,7 @@ function readSaved() {
 
 const babies = ref([]);
 const selectedBabyId = ref(readSaved());
+const babyLoadError = ref(null);
 
 export function useSelectedBaby() {
   const selectedBaby = computed(
@@ -21,8 +22,16 @@ export function useSelectedBaby() {
   async function loadBabies(householdId) {
     try {
       babies.value = await getHouseholdBabies(householdId);
-    } catch {
+      babyLoadError.value = null;
+      // A saved selection may belong to another household. Keep the selected id valid
+      // before any new care entries are created for this household.
+      if (!babies.value.some((baby) => baby.id === selectedBabyId.value)) {
+        selectBaby(babies.value[0]?.id ?? "primary");
+      }
+    } catch (cause) {
       babies.value = [];
+      babyLoadError.value = cause?.code ?? "unknown";
+      selectBaby("primary");
     }
   }
 
@@ -35,5 +44,5 @@ export function useSelectedBaby() {
     }
   }
 
-  return { babies, selectedBaby, selectedBabyId, loadBabies, selectBaby };
+  return { babies, selectedBaby, selectedBabyId, babyLoadError, loadBabies, selectBaby };
 }

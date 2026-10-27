@@ -167,11 +167,48 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // A care brief belongs to one baby. The old direct careBrief documents above stay
+      // readable as the primary baby's fallback until a parent saves its new baby-scoped copy.
+      match /careBrief/{babyId}/sections/{sectionId} {
+        function babyExists() {
+          return babyId == 'primary'
+            || exists(/databases/$(database)/documents/households/$(householdId)/babies/$(babyId));
+        }
+
+        allow read: if babyExists()
+          && ((sectionId == 'routine' && hasPermission('napRoutine'))
+            || (sectionId == 'feeding' && hasPermission('feedingInstructions'))
+            || (sectionId == 'contacts' && hasPermission('careBrief'))
+            || (sectionId == 'allergies' && hasPermission('allergyInfo'))
+            || (sectionId == 'medications' && hasPermission('medicationInfo')));
+        allow create, update: if isPrimaryParent() && babyExists()
+          && ((sectionId == 'routine'
+              && request.resource.data.keys().hasOnly(['napRoutine'])
+              && request.resource.data.napRoutine is string && request.resource.data.napRoutine.size() <= 500)
+            || (sectionId == 'feeding'
+              && request.resource.data.keys().hasOnly(['feeding'])
+              && request.resource.data.feeding is string && request.resource.data.feeding.size() <= 500)
+            || (sectionId == 'contacts'
+              && request.resource.data.keys().hasOnly(['parentContacts'])
+              && request.resource.data.parentContacts is string && request.resource.data.parentContacts.size() <= 500)
+            || (sectionId == 'allergies'
+              && request.resource.data.keys().hasOnly(['allergies'])
+              && request.resource.data.allergies is string && request.resource.data.allergies.size() <= 500)
+            || (sectionId == 'medications'
+              && request.resource.data.keys().hasOnly(['medications'])
+              && request.resource.data.medications is string && request.resource.data.medications.size() <= 500));
+        allow delete: if false;
+      }
+
       // Babies. One document per extra baby in the household (the first baby stays on the
-      // household document). Parents read and write them, in the same shape the household
-      // document uses for its own baby. Nothing is deleted.
+      // household document). Caregivers who can read or add care logs, see appointments,
+      // or view the care brief may read baby details to identify the child. Only parents edit.
       match /babies/{babyId} {
-        allow read: if isPrimaryParent();
+        allow read: if isPrimaryParent()
+          || hasPermission('careBrief')
+          || hasPermission('careLogRead')
+          || hasPermission('careLogAdd')
+          || hasPermission('appointments');
         allow create, update: if isPrimaryParent()
           && request.resource.data.keys().hasOnly(['babyName', 'babyStatus', 'babyDate', 'createdAt'])
           && (request.resource.data.babyName == null
