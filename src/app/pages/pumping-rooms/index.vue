@@ -19,7 +19,7 @@ import {
 } from "@/app/utils/mapHelpers";
 import { describeSharedError } from "@/app/utils/sharedHelpers";
 import { SEED_COORDS } from "@/app/data/pumpingRooms";
-import { ROOM_FEATURES } from "@/app/utils/roomHelpers";
+import { BASEMENT_FLOORS, ROOM_FEATURES, UPPER_FLOORS, roomDetails } from "@/app/utils/roomHelpers";
 import { useRoomsStore } from "@/app/stores/rooms";
 import { useSavedPlaces } from "@/app/composables/useSavedPlaces";
 import { useLocate } from "@/app/composables/useLocate";
@@ -27,7 +27,8 @@ import { useAuth } from "@/composables/useAuth";
 import RoomManager from "@/app/components/RoomManager.vue";
 import { useAdmin } from "@/composables/useAdmin";
 import { subscribeRoomOverrides } from "@/api/roomManagement";
-import { lookupPostalCode } from "@/api/roomLocation";
+import AddressPicker from "@/app/components/AddressPicker.vue";
+import { resolveRoomLocation, searchPlaces } from "@/api/roomLocation";
 import { applyRoomOverrides } from "@/app/utils/roomManagement";
 
 defineOptions({ name: "PumpingRoomsPage" });
@@ -76,9 +77,35 @@ const roomsError = computed(() => (roomsStore.error ? describeSharedError(roomsS
 const filterCount = computed(() => activeFilterCount(filters.value));
 
 // The OneMap embed: the chosen room, else the person's location, else the whole island.
+// A room saved without a map position is looked up from its address (or its name) the first
+// time it is chosen, so every room the directory lists can be shown on the map.
+const found = ref({}); // room id -> { lat, lng }, or null when nothing was found
+const mapNote = ref("");
+const hasPoint = (p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lng);
+watch(selectedId, async (id) => {
+  mapNote.value = "";
+  const room = visible.value.find((r) => r.id === id);
+  if (!room || hasPoint(room) || id in found.value) return;
+  found.value = { ...found.value, [id]: null };
+  let point = null;
+  try {
+    point = await resolveRoomLocation(room.address);
+  } catch {
+    try {
+      const [first] = await searchPlaces(`${room.name} ${room.address}`.trim().slice(0, 100));
+      point = first ?? null;
+    } catch {
+      point = null;
+    }
+  }
+  if (hasPoint(point)) found.value = { ...found.value, [id]: { lat: point.lat, lng: point.lng } };
+  else if (selectedId.value === id) mapNote.value = `We could not find ${room.name} on the map. Use Open in OneMap to search for it.`;
+});
+
 const embed = computed(() => {
   const room = visible.value.find((r) => r.id === selectedId.value);
-  if (room && Number.isFinite(room.lat) && Number.isFinite(room.lng)) return { lat: room.lat, lng: room.lng, label: room.name };
+  if (room && hasPoint(room)) return { lat: room.lat, lng: room.lng, label: room.name };
+  if (room && hasPoint(found.value[room.id])) return { ...found.value[room.id], label: room.name };
   if (located.value) return { lat: origin.value.lat, lng: origin.value.lng, label: "your area" };
   return { lat: null, lng: null, label: "" };
 });
@@ -129,44 +156,29 @@ async function confirmRoom(room) {
   if (await roomsStore.reportRoom(room.id, "confirm")) message.value = `Thanks. ${room.name} is now marked as verified.`;
 }
 
-const emptyRoom = () => ({ postal: "", name: "", address: "", lat: null, lng: null, roomType: "", features: [], details: "", feedback: "" });
+const emptyRoom = () => ({ name: "", address: "", lat: null, lng: null, roomType: "", features: [], floor: "", near: "", feedback: "" });
 const draft = ref(emptyRoom());
 const saving = ref(false);
 
-// Typing a six-digit postal code fills in the address and the map position from OneMap.
-// If the lookup fails, the parent can still type the address themselves.
-const lookup = ref({ state: "idle", text: "" });
-let lookupToken = 0;
-watch(
-  () => draft.value.postal,
-  async (postal) => {
-    const token = ++lookupToken;
-    draft.value.lat = null;
-    draft.value.lng = null;
-    if (!/^\d{6}$/.test(postal)) {
-      lookup.value = { state: "idle", text: "" };
-      return;
-    }
-    lookup.value = { state: "busy", text: "Looking up the address..." };
-    try {
-      const found = await lookupPostalCode(postal);
-      if (token !== lookupToken) return;
-      draft.value.lat = found.lat;
-      draft.value.lng = found.lng;
-      if (found.address) draft.value.address = found.address;
-      if (found.building && !draft.value.name) draft.value.name = found.building;
-      lookup.value = { state: "ok", text: "Address found. Check it, then add where the room is inside." };
-    } catch {
-      if (token !== lookupToken) return;
-      lookup.value = { state: "failed", text: "We could not look that up. Type the address below instead." };
-    }
-  },
-);
+// Picking a suggestion in the address picker fills in the name, address and map position.
+const manual = ref(false);
+function pickPlace(place) {
+  manual.value = false;
+  draft.value.name = place.name.slice(0, 80);
+  draft.value.address = place.address;
+  draft.value.lat = place.lat;
+  draft.value.lng = place.lng;
+}
 async function submitRoom() {
   if (saving.value) return;
+  if (!draft.value.name || !draft.value.address) {
+    roomsStore.writeError = "Search for the place and pick it from the list, or enter the address yourself.";
+    return;
+  }
+  roomsStore.writeError = "";
   saving.value = true;
   try {
-    const room = await roomsStore.addRoom({ ...draft.value });
+    const room = await roomsStore.addRoom({ ...draft.value, details: roomDetails(draft.value.floor, draft.value.near) });
     if (!room) return;
     viewAll();
     selectedId.value = room.id;
@@ -220,6 +232,7 @@ watch(supportTab, (id) => {
     <section class="pr__side" aria-label="Pumping room list">
       <div class="pr__scroll">
         <Tabs
+          v-if="!isAdmin"
           v-model="supportTab"
           :tabs="SUPPORT_TABS"
           label="Support sections"
@@ -267,11 +280,12 @@ watch(supportTab, (id) => {
 
         <section class="pr__mapslot" aria-label="Map">
           <OneMapEmbed :lat="embed.lat" :lng="embed.lng" :label="embed.label" />
+          <p v-if="mapNote" class="pr__muted" role="status">{{ mapNote }}</p>
         </section>
 
         <div class="pr__views" role="group" aria-label="Show">
           <button type="button" class="app-chip" :aria-pressed="view === 'all' ? 'true' : 'false'" @click="view = 'all'">All rooms</button>
-          <button type="button" class="app-chip" :aria-pressed="view === 'saved' ? 'true' : 'false'" @click="view = 'saved'">
+          <button v-if="!isAdmin" type="button" class="app-chip" :aria-pressed="view === 'saved' ? 'true' : 'false'" @click="view = 'saved'">
             Saved places ({{ savedCount }})
           </button>
         </div>
@@ -322,19 +336,24 @@ watch(supportTab, (id) => {
         </div>
         <p class="pr__muted">An administrator reviews new rooms before other parents see them.</p>
         <form class="pr__form" @submit.prevent="submitRoom">
-          <div class="pr__f">
-            <label class="pr__flabel" for="pr-postal">Postal code</label>
-            <input id="pr-postal" v-model.trim="draft.postal" class="form-control" inputmode="numeric" maxlength="6" autocomplete="postal-code" placeholder="For example 179103" :disabled="saving" aria-describedby="pr-postal-status" />
-            <p id="pr-postal-status" class="pr__muted" role="status">{{ lookup.text || "Enter the six-digit postal code and we fill in the address." }}</p>
+          <AddressPicker id="pr-place" :disabled="saving" @pick="pickPlace" />
+          <div v-if="draft.address && !manual" class="pr__picked" role="status">
+            <p class="pr__picked-name">{{ draft.name }}</p>
+            <p class="pr__muted">{{ draft.address }}</p>
           </div>
-          <div class="pr__f">
-            <label class="pr__flabel" for="pr-name">Name of location</label>
-            <input id="pr-name" v-model.trim="draft.name" class="form-control" required maxlength="80" :disabled="saving" />
-          </div>
-          <div class="pr__f">
-            <label class="pr__flabel" for="pr-address">Address</label>
-            <textarea id="pr-address" v-model.trim="draft.address" class="form-control" required maxlength="200" rows="2" :disabled="saving" />
-          </div>
+          <template v-if="manual">
+            <div class="pr__f">
+              <label class="pr__flabel" for="pr-name">Name of location</label>
+              <input id="pr-name" v-model.trim="draft.name" class="form-control" required maxlength="80" :disabled="saving" />
+            </div>
+            <div class="pr__f">
+              <label class="pr__flabel" for="pr-address">Address</label>
+              <textarea id="pr-address" v-model.trim="draft.address" class="form-control" required maxlength="200" rows="2" :disabled="saving" @input="draft.lat = null; draft.lng = null" />
+            </div>
+          </template>
+          <button type="button" class="app-textbtn pr__manual" :disabled="saving" @click="manual = !manual">
+            {{ manual ? "Use the search instead" : "Cannot find it? Enter the address yourself" }}
+          </button>
           <div class="pr__f">
             <label class="pr__flabel" for="pr-type">Room type</label>
             <select id="pr-type" v-model="draft.roomType" class="form-select" required :disabled="saving">
@@ -359,8 +378,16 @@ watch(supportTab, (id) => {
             </div>
           </fieldset>
           <div class="pr__f">
-            <label class="pr__flabel" for="pr-details">Where is it inside?</label>
-            <textarea id="pr-details" v-model.trim="draft.details" class="form-control" required maxlength="200" rows="3" placeholder="For example Level 3, near the lifts" :disabled="saving" />
+            <label class="pr__flabel" for="pr-floor">Which level is it on?</label>
+            <select id="pr-floor" v-model="draft.floor" class="form-select" required :disabled="saving">
+              <option disabled value="">Choose a level</option>
+              <optgroup label="Basement"><option v-for="f in BASEMENT_FLOORS" :key="f">{{ f }}</option></optgroup>
+              <optgroup label="Upper floors"><option v-for="f in UPPER_FLOORS" :key="f">{{ f }}</option></optgroup>
+            </select>
+          </div>
+          <div class="pr__f">
+            <label class="pr__flabel" for="pr-near">Near (optional)</label>
+            <input id="pr-near" v-model.trim="draft.near" class="form-control" maxlength="120" placeholder="For example the lifts or a shop name" :disabled="saving" />
           </div>
           <div class="pr__f">
             <label class="pr__flabel" for="pr-feedback">Parent feedback (optional)</label>
@@ -414,6 +441,9 @@ watch(supportTab, (id) => {
 .pr__x:hover { background: var(--nt-gray); color: var(--nt-ink); }
 .pr__form { display: flex; flex-direction: column; gap: 16px; }
 .pr__f { display: flex; flex-direction: column; gap: 6px; }
+.pr__picked { padding: 12px 16px; background: #f3eef4; border: 1px solid var(--nt-line); border-radius: 8px; }
+.pr__picked-name { margin: 0; font-weight: 600; color: var(--nt-ink); }
+.pr__manual { align-self: flex-start; }
 .pr__flabel { font-size: 0.875rem; font-weight: 600; color: var(--nt-ink); }
 .pr__picked { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; background: var(--nt-gray); border-radius: 8px; font-size: 0.875rem; }
 .pr__picked span { color: var(--nt-muted); }

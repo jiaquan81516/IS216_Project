@@ -25,6 +25,7 @@ service cloud.firestore {
         && existsAfter(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid))
         && getAfter(/databases/$(database)/documents/households/$(householdId)).data.createdBy == request.auth.uid
         && getAfter(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid)).data.accessLevel == 'parent';
+    }
     // Only a trusted server can assign this Firebase custom claim.
     function roomAdmin() {
       return signedIn() && request.auth.token.get('admin', false) == true;
@@ -32,6 +33,19 @@ service cloud.firestore {
 
     // Admin additions and overrides of community/bundled rooms. Deletion markers
     // keep bundled listings from reappearing and preserve community report history.
+    // Support page text. Everyone signed in reads it; only an administrator writes it.
+    match /supportContent/{list} {
+      allow read: if signedIn();
+      allow create, update: if roomAdmin()
+        && list in ['guides', 'contacts']
+        && request.resource.data.keys().hasOnly(['items', 'updatedBy', 'updatedAt'])
+        && request.resource.data.items is list
+        && request.resource.data.items.size() <= 30
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
     match /pumpingRoomOverrides/{roomId} {
       allow read: if signedIn();
       allow create, update: if roomAdmin()
@@ -482,6 +496,11 @@ service cloud.firestore {
     match /serverLimits/{uid} {
       allow read, write: if false;
     }
+    // admins/{uid}  a directory of administrators, written by scripts/set-room-admin.mjs The
+    //               admin claim on the sign in token decides access, never this collection.
+    match /admins/{uid} {
+      allow read, write: if false;
+    }
 
     // The pumping room directory. Global on purpose: a nursing room at a mall is the same
     // room for every household. Any signed in user reads it, adds one, and confirms or flags
@@ -525,6 +544,7 @@ service cloud.firestore {
           && resource.data.get('approval', 'approved') == 'approved'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'verifiedAt'])
           && request.resource.data.status in ['verified', 'unverified'])
+        // Review: only an administrator, only the review fields, in their own name.
         || (roomAdmin()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approval', 'reviewedBy', 'reviewedAt', 'reviewNote'])
           && request.resource.data.approval in ['approved', 'rejected']

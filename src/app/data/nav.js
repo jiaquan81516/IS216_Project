@@ -11,3 +11,11 @@ export const NAV = Object.freeze([
   { key: "wellness", label: "Wellness", icon: "heart", to: ROUTES.WELLNESS },
   { key: "support", label: "Support", icon: "lifebuoy", to: ROUTES.SUPPORT },
 ]);
+
+// Sections of the administrator page, opened from the sidebar as /admin?tab=<id>.
+export const ADMIN_SECTIONS = Object.freeze([
+  { id: "pending", label: "Pending", icon: "clock" },
+  { id: "live", label: "Live rooms", icon: "pin" },
+  { id: "reviewed", label: "Reviewed", icon: "check" },
+  { id: "support", label: "Support", icon: "lifebuoy" },
+]);

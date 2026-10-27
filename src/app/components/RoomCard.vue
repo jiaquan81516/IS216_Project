@@ -21,8 +21,6 @@ const feedbackButton = ref(null);
 async function openFeedback() {
   feedbackOpen.value = true;
   feedbackError.value = "";
-  await nextTick();
-  feedbackInput.value?.focus();
   feedbackLoading.value = true;
   try {
     feedbackItems.value = await listRoomFeedback(props.room.id);
@@ -90,7 +88,6 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
       <li v-for="f in room.features" :key="f" class="app-pill">{{ f }}</li>
     </ul>
     <p v-if="room.facilities?.length" class="rc__muted">{{ room.facilities.join(", ") }}</p>
-    <p v-if="room.feedback" class="rc__muted">Parent feedback: {{ room.feedback }}</p>
     <p class="rc__verify" :class="{ 'rc__verify--ok': verified }">{{ verification }}</p>
     <p v-if="distance" class="rc__muted">{{ distance }} away</p>
     <p v-if="room.sourceUrl" class="rc__muted">
@@ -99,8 +96,8 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
       </a>
     </p>
     <div class="rc__actions rc__actions--room">
-      <div v-if="placeUrl" class="rc__action-group">
-      <button v-if="placeUrl" type="button" class="rc__action" @click.stop="emit('select', room)">
+      <div class="rc__action-group">
+      <button type="button" class="rc__action" @click.stop="emit('select', room)">
         <Icon name="pin" :size="16" />
         Show on map<span class="visually-hidden"> for {{ room.name }}</span>
       </button>
@@ -108,14 +105,16 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
         <Icon name="external" :size="16" />
         Open in OneMap<span class="visually-hidden"> for {{ room.name }}, opens in a new tab</span>
       </a>
+      <template v-if="canManage">
+        <button type="button" class="rc__action" @click.stop="emit('edit', room)">Edit<span class="visually-hidden"> {{ room.name }}</span></button>
+        <button type="button" class="rc__action" @click.stop="emit('delete', room)">Delete<span class="visually-hidden"> {{ room.name }}</span></button>
+      </template>
       </div>
-      <div class="rc__action-group rc__action-group--end">
+      <div v-if="!canManage" class="rc__action-group rc__action-group--end">
       <button v-if="canConfirm" type="button" class="rc__action" @click.stop="emit('confirm', room)">
         <Icon name="check" :size="16" />
         It is still there<span class="visually-hidden">: {{ room.name }}</span>
       </button>
-      <button v-if="canManage" type="button" class="app-textbtn" @click.stop="emit('edit', room)">Edit<span class="visually-hidden"> {{ room.name }}</span></button>
-      <button v-if="canManage" type="button" class="app-textbtn" @click.stop="emit('delete', room)">Delete<span class="visually-hidden"> {{ room.name }}</span></button>
       <button
         type="button"
         class="rc__action"
@@ -129,14 +128,16 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
       </button>
       <button ref="feedbackButton" type="button" class="rc__action" :class="{ 'rc__action--active': feedbackOpen }" :aria-expanded="feedbackOpen" :aria-controls="`room-feedback-${room.id}`" @click.stop="feedbackOpen ? closeFeedback() : openFeedback()">
         <Icon name="chat" :size="16" />
-        Add feedback<span class="visually-hidden"> for {{ room.name }}</span>
+        {{ feedbackOpen ? "Hide feedback" : "See feedback" }}<span class="visually-hidden"> for {{ room.name }}</span>
       </button>
       </div>
     </div>
     <section v-if="feedbackOpen" :id="`room-feedback-${room.id}`" class="rc__feedback" :aria-labelledby="`room-feedback-title-${room.id}`" @click.stop @keydown.esc.stop="closeFeedback">
       <h3 :id="`room-feedback-title-${room.id}`" class="rc__feedback-title">Parent feedback</h3>
       <p v-if="feedbackLoading" class="rc__muted" role="status">Loading feedback…</p>
-      <ul v-if="feedbackItems.length" class="rc__feedback-list">
+      <p v-if="!feedbackLoading && !room.feedback && !feedbackItems.length" class="rc__muted">No feedback yet. Be the first to share.</p>
+      <ul v-if="room.feedback || feedbackItems.length" class="rc__feedback-list">
+        <li v-if="room.feedback" class="rc__text">{{ room.feedback }}</li>
         <li v-for="item in feedbackItems" :key="item.id" class="rc__text">{{ item.text }}</li>
       </ul>
       <form class="rc__feedback-form" @submit.prevent="saveFeedback">

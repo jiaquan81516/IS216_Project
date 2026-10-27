@@ -21,6 +21,7 @@ import { oneMapPlaceUrl } from "@/app/utils/oneMapHelpers";
 import { loadChasClinics } from "@/api/chasClinics";
 import { useSavedPlaces } from "@/app/composables/useSavedPlaces";
 import { useLocate } from "@/app/composables/useLocate";
+import { useAdmin } from "@/composables/useAdmin";
 import { KIDS_EMERGENCY, KIDS_EMERGENCY_NUMBERS, RETRIEVED_AT } from "@/app/data/kidsEmergency";
 
 defineOptions({ name: "KidsCarePage" });
@@ -30,6 +31,8 @@ const router = useRouter();
 const view = computed(() => normalizeView(route.query.view));
 
 const query = ref("");
+// Saving places is for parents; an administrator has no saved list.
+const { isAdmin } = useAdmin();
 const saveView = ref("all");
 const filterOpen = ref(false);
 const includeDental = ref(false);
@@ -176,7 +179,7 @@ const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
       </label>
     </section>
 
-    <div class="kc__views" role="group" aria-label="Show">
+    <div v-if="!isAdmin" class="kc__views" role="group" aria-label="Show">
       <button type="button" class="kc__tab kc__tab--btn" :class="{ 'kc__tab--on': saveView === 'all' }" :aria-pressed="saveView === 'all' ? 'true' : 'false'" @click="saveView = 'all'">All</button>
       <button type="button" class="kc__tab kc__tab--btn" :class="{ 'kc__tab--on': saveView === 'saved' }" :aria-pressed="saveView === 'saved' ? 'true' : 'false'" @click="saveView = 'saved'">
         Saved places ({{ savedCount }})
@@ -197,6 +200,7 @@ const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
         <p v-if="distanceOf(place)" class="kc__muted">{{ distanceOf(place) }} away</p>
         <div class="kc__actions">
           <button
+            v-if="!isAdmin"
             type="button"
             class="app-textbtn"
             :aria-pressed="savedIds.includes(place.id) ? 'true' : 'false'"
