@@ -1,5 +1,77 @@
 # Pumping rooms map
 
+## Admin room management
+
+Admins can add, edit and delete rooms at `/support/rooms`, including bundled BMSG
+and example listings. The editor accepts name, address, exact location details,
+features and verification status. Coordinates are retrieved automatically from
+the six-digit postal code in `room.address` when Save is pressed. For example,
+`1 Example Road, Singapore 012345` searches OneMap for `012345`. The original
+address text is saved along with the returned latitude and longitude. Admins
+do not enter coordinates. Floor and directions stay in `details`.
+Deletion requires confirmation. Changes are shared live with signed-in users.
+
+### Automatic postal-code lookup
+
+Set `ONEMAP_TOKEN` and the Firebase Admin environment variables from `.env.example`
+in `.env.local`, then restart Vite. The local Vite middleware serves the same
+authenticated `GET /api/rooms/location?postalCode=...` endpoint as Vercel.
+For production, configure those variables in Vercel and deploy the code.
+The JSON service account file by itself does not configure this endpoint.
+
+Obtain a token from [OneMap authentication](https://www.onemap.gov.sg/apidocs/authentication).
+Tokens expire after three days and must be replaced. Keep the token server-side;
+do not use a `VITE_` variable. [OneMap Search](https://www.onemap.gov.sg/apidocs/search)
+is queried by postal code, and only exact matches with valid coordinates are accepted.
+Missing, ambiguous or unknown postal codes stop the save and keep the form open.
+Lookup failures also leave existing room data unchanged. Edits repeat the lookup
+to avoid retaining stale coordinates after changing the address; deletion skips it.
+
+Saved coordinates power both Show on map and Open in OneMap. The marker identifies
+the building, not its indoor floor. The Firestore document shape is unchanged;
+postal code is extracted from the address rather than stored in a separate field.
+
+Access requires the Firebase Auth custom claim `admin: true`. User profile fields
+and household roles do not grant this permission. Deploy `firestore.rules` before
+using this feature. With `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL` and
+`FIREBASE_PRIVATE_KEY` configured in a trusted terminal, run:
+
+```sh
+node scripts/set-room-admin.mjs <firebase-uid> grant
+# To remove access:
+node scripts/set-room-admin.mjs <firebase-uid> revoke
+```
+
+Alternatively, pass a local service account JSON file as the last argument:
+
+```sh
+node scripts/set-room-admin.mjs <firebase-uid> grant src/api/privkey.json
+```
+
+This file is read only by the Node script. Never import a service account key or
+`firebase-admin` from browser code under `src/`. Ignoring a file in Git does not
+prevent a browser import from including it in the application.
+
+Admins sign in through the normal email/password or Google sign-in page and go
+directly to `/support/rooms`. Sign-in skips normal profile creation for admins;
+the router also redirects them away from journey, role, account and household
+setup. A parent profile and household are not required for admin work. Admins
+without a household see directory navigation in the sidebar. Ordinary accounts
+still follow the existing profile and household setup flow.
+
+The script preserves other custom claims. Sign out and sign in after changing
+access; already-issued tokens retain their claims until refreshed or expired.
+Never put server credentials in browser environment variables.
+
+Admin writes go to `pumpingRoomOverrides/{roomId}`. New rooms use generated IDs;
+edits use the existing listing ID. Deletions store a marker so bundled rooms do
+not reappear on reload. Original community documents and reports remain intact.
+Rules require the admin claim, validate the editable fields, and record the
+administrator UID and server timestamp. Ordinary members retain their existing
+community permissions but cannot write overrides. Source attribution is retained
+when a bundled listing is edited. The older map implementation notes below are
+historical; admin additions now use this editor.
+
 Page: `/support/rooms` (`src/app/pages/pumping-rooms/index.vue`), inside the app shell, guarded like the other app pages. Linked from a "Find a pumping room" card in Support Guides (the old Support pumping rooms tab and its directory UI were removed) and from the Return to work pumping section.
 
 ## Data sources
