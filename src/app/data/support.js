@@ -9,6 +9,7 @@ export const SUPPORT_GUIDES = Object.freeze(
     intro: g.intro,
     steps: g.steps,
     callIf: g.callIf ?? DOCTOR_CALL,
+    minutes: g.minutes ?? null,
   })),
 );
 
@@ -17,9 +18,9 @@ export const TRUSTED_RESOURCES = Object.freeze([
   {
     id: "emergency",
     name: "Local emergency number",
-    purpose: "If you or your partner feel unsafe, or are thinking about self-harm, call straight away.",
-    tel: null,
-    telLabel: "",
+    purpose: "Ambulance 995, police 999. Call straight away if you or your partner feel unsafe, or are thinking about self-harm.",
+    tel: "tel:995",
+    telLabel: "995",
   },
   {
     id: "doctor",
