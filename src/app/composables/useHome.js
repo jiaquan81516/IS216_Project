@@ -4,6 +4,7 @@ import { babySummary, getHousehold, getHouseholdMembers, getUserProfile } from "
 import { normaliseSettings } from "@/app/utils/settingsHelpers";
 import { withTimeout } from "@/app/utils/timeout";
 import { setDisplay } from "@/app/composables/usePrefs";
+import { isPrimaryParent } from "@/app/utils/caregiverHelpers";
 
 // Key used by the layout to share one household load with its child pages.
 export const HOME_KEY = Symbol("app-home");
@@ -79,7 +80,9 @@ export function useHome() {
   });
 
   const partner = computed(() => {
-    const other = members.value.find((m) => m.uid !== me.value.uid);
+    // Caregivers share the household too, but they are not the other parent.
+    // Keep them out of every UI and shared-data path that consumes `partner`.
+    const other = members.value.find((m) => m.uid !== me.value.uid && isPrimaryParent(m));
     return other ? { ...other, firstName: firstNameOf(other.displayName, "") } : null;
   });
 
