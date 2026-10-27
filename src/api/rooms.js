@@ -45,7 +45,7 @@ export function subscribeRooms(onData, onError) {
 
 export async function addRoom(
   uid,
-  { name, address, details = "", placeId = "", lat = null, lng = null, region = null, features = [] } = {},
+  { name, address, details = "", placeId = "", lat = null, lng = null, region = null, features = [], roomType = "", feedback = "" } = {},
 ) {
   const cleanName = String(name ?? "").trim().slice(0, NAME_MAX);
   const cleanAddress = String(address ?? "").trim().slice(0, ADDRESS_MAX);
@@ -56,7 +56,7 @@ export async function addRoom(
     error.code = "rooms/no-user";
     throw error;
   }
-  if (!cleanName || !cleanAddress || !cleanDetails || !cleanPlaceId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+  if (!cleanName || !cleanAddress || !cleanDetails) {
     const error = new Error("A room needs an address and exact location details.");
     error.code = "rooms/incomplete";
     throw error;
@@ -66,12 +66,14 @@ export async function addRoom(
     address: cleanAddress,
     details: cleanDetails,
     placeId: cleanPlaceId,
+    roomType: String(roomType).trim().slice(0, NAME_MAX),
+    feedback: String(feedback).trim().slice(0, NOTE_MAX),
     region: region ? String(region).slice(0, NAME_MAX) : null,
     features: featureMap(features),
     status: "unverified",
     verifiedAt: null,
-    lat,
-    lng,
+    lat: Number.isFinite(lat) ? lat : null,
+    lng: Number.isFinite(lng) ? lng : null,
     createdBy: uid,
     createdAt: serverTimestamp(),
   });
@@ -113,4 +115,23 @@ export async function reportRoom(uid, roomId, kind) {
 export async function listRooms() {
   const snap = await getDocs(query(roomsRef(), orderBy("name", "asc"), limit(ROOMS_MAX)));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+// Directory room IDs also work here, even when the room comes from BMSG.
+export async function addRoomFeedback(uid, roomId, text) {
+  const clean = String(text ?? "").trim();
+  if (!uid || !roomId || !clean || clean.length > NOTE_MAX) {
+    throw new Error("Sign in and enter feedback of up to 400 characters.");
+  }
+  const result = await addDoc(collection(db, "pumpingRooms", roomId, "feedback"), {
+    by: uid,
+    text: clean,
+    at: serverTimestamp(),
+  });
+  return result.id;
+}
+
+export async function listRoomFeedback(roomId) {
+  const snap = await getDocs(query(collection(db, "pumpingRooms", roomId, "feedback"), orderBy("at", "desc"), limit(20)));
+  return snap.docs.map((item) => ({ id: item.id, ...item.data() }));
 }
