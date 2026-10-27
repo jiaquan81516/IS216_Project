@@ -19,11 +19,12 @@ import {
 } from "@/app/utils/mapHelpers";
 import { describeSharedError } from "@/app/utils/sharedHelpers";
 import { SEED_COORDS } from "@/app/data/pumpingRooms";
+import { ROOM_FEATURES } from "@/app/utils/roomHelpers";
 import { useRoomsStore } from "@/app/stores/rooms";
 
 defineOptions({ name: "PumpingRoomsPage" });
 
-const ADD_OFF = "Adding a room needs OneMap address search, which comes with the deployed version. For now rooms are added by the team.";
+
 const SAVED_ROOMS_KEY = "nurturetrack:saved-pumping-rooms";
 const located = ref(false);
 
@@ -130,18 +131,38 @@ function viewAll() {
   located.value = false;
 }
 
-// Add a room: explained, not offered, until OneMap address search is available.
+const emptyRoom = () => ({ name: "", address: "", roomType: "", features: [], details: "", feedback: "" });
+const draft = ref(emptyRoom());
+const saving = ref(false);
+async function submitRoom() {
+  if (saving.value) return;
+  saving.value = true;
+  try {
+    const room = await roomsStore.addRoom({ ...draft.value });
+    if (!room) return;
+    viewAll();
+    selectedId.value = room.id;
+    message.value = `${room.name} has been added. It needs community verification.`;
+    draft.value = emptyRoom();
+    saving.value = false;
+    closeForm();
+  } finally {
+    saving.value = false;
+  }
+}
 const formOpen = ref(false);
 const addButton = ref(null);
 const panel = ref(null);
 function openForm() {
   message.value = "";
+  roomsStore.writeError = "";
   formOpen.value = true;
   nextTick(() => panel.value?.focus?.());
 }
 function closeForm() {
+  if (saving.value) return;
   formOpen.value = false;
-  nextTick(() => addButton.value?.$el?.focus?.());
+  nextTick(() => addButton.value?.focus());
 }
 function onKeydown(event) {
   if (event.key === "Escape" && formOpen.value) closeForm();
@@ -177,7 +198,6 @@ watch(supportTab, (id) => {
         />
         <header class="pr__head">
           <h1 class="nt-title pr__title">Find a pumping room</h1>
-          <AppButton ref="addButton" variant="outline" size="sm" @click="openForm">Add a room</AppButton>
         </header>
 
         <div class="pr__field pr__field--plain">
@@ -253,10 +273,9 @@ watch(supportTab, (id) => {
         </div>
 
         <div class="pr__foot">
-          <button type="button" class="app-link pr__all" @click="viewAll">View all rooms</button>
           <p class="pr__muted pr__note">
             Verified rooms are from the Breastfeeding Mothers' Support Group directory. Know another room?
-            <button type="button" class="app-textbtn pr__add" @click="openForm">Add it<span class="visually-hidden"> (add a room)</span></button>.
+            <button ref="addButton" type="button" class="app-textbtn pr__add" @click="openForm">Add it<span class="visually-hidden"> (add a room)</span></button>.
           </p>
         </div>
       </div>
@@ -267,13 +286,52 @@ watch(supportTab, (id) => {
           <button type="button" class="pr__x" aria-label="Close add a room" @click="closeForm"><Icon name="close" :size="18" /></button>
         </div>
         <p class="pr__muted">Community additions need verification before others rely on them.</p>
-        <div class="pr__off">
-          <p class="pr__muted">{{ ADD_OFF }}</p>
-          <div class="pr__actions">
-            <AppButton size="sm" disabled>Save room</AppButton>
-            <AppButton variant="outline" size="sm" @click="closeForm">Cancel</AppButton>
+        <form class="pr__form" @submit.prevent="submitRoom">
+          <div class="pr__f">
+            <label class="pr__flabel" for="pr-name">Name of location</label>
+            <input id="pr-name" v-model.trim="draft.name" class="form-control" required maxlength="80" :disabled="saving" />
           </div>
-        </div>
+          <div class="pr__f">
+            <label class="pr__flabel" for="pr-address">Full address</label>
+            <textarea id="pr-address" v-model.trim="draft.address" class="form-control" required maxlength="200" rows="2" :disabled="saving" />
+          </div>
+          <div class="pr__f">
+            <label class="pr__flabel" for="pr-type">Room type</label>
+            <select id="pr-type" v-model="draft.roomType" class="form-select" required :disabled="saving">
+              <option disabled value="">Choose a room type</option>
+              <option>Pumping room</option>
+              <option>Nursing room</option>
+              <option>Baby care room</option>
+              <option>Shared nursing and pumping room</option>
+            </select>
+          </div>
+          <fieldset class="pr__f pr__features" :disabled="saving" aria-describedby="pr-features-hint">
+            <legend class="pr__flabel">Feature tags</legend>
+            <p id="pr-features-hint" class="pr__muted">Select all the features available.</p>
+            <div class="pr__chips">
+              <label v-for="[key, label] in ROOM_FEATURES" :key="key" class="pr__feature">
+                <input v-model="draft.features" class="pr__feature-input" type="checkbox" :value="label" />
+                <span class="pr__feature-pill">
+                  <span class="pr__feature-mark" aria-hidden="true"><Icon :name="draft.features.includes(label) ? 'check' : 'plus'" :size="14" /></span>
+                  {{ label }}
+                </span>
+              </label>
+            </div>
+          </fieldset>
+          <div class="pr__f">
+            <label class="pr__flabel" for="pr-details">Description of features</label>
+            <textarea id="pr-details" v-model.trim="draft.details" class="form-control" required maxlength="200" rows="3" :disabled="saving" />
+          </div>
+          <div class="pr__f">
+            <label class="pr__flabel" for="pr-feedback">Parent feedback (optional)</label>
+            <textarea id="pr-feedback" v-model.trim="draft.feedback" class="form-control" maxlength="400" rows="3" :disabled="saving" />
+          </div>
+          <p v-if="roomsStore.writeError" class="app-error-text" role="alert">{{ roomsStore.writeError }}</p>
+          <div class="pr__actions">
+            <AppButton type="submit" size="sm" :disabled="saving">{{ saving ? "Submitting…" : "Submit room" }}</AppButton>
+            <AppButton variant="outline" size="sm" :disabled="saving" @click="closeForm">Cancel</AppButton>
+          </div>
+        </form>
       </section>
     </section>
 
@@ -284,9 +342,10 @@ watch(supportTab, (id) => {
 .pr { display: grid; grid-template-columns: 440px minmax(0, 1fr); height: 100vh; background: var(--nt-bg-care); }
 .pr__side { position: relative; min-width: 0; border-right: 1px solid var(--nt-line); overflow: hidden; }
 .pr__scroll { height: 100%; overflow-y: auto; padding: 32px 0 24px; }
-.pr__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 0 24px; }
+.pr__scroll > :deep(.apptabs) { margin: 0 24px; }
+.pr__head { padding: 24px 24px 0; }
 .pr__title { margin: 0; font-size: 1.75rem; line-height: 1.25; }
-.pr__field { position: relative; margin: 20px 24px 8px; }
+.pr__field { position: relative; margin: 24px 24px 8px; }
 .pr__input { width: 100%; padding: 24px 44px 8px 16px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 8px; font: inherit; font-size: 0.875rem; color: var(--nt-ink); }
 .pr__input:focus { outline: 2px solid var(--nt-plum); outline-offset: 1px; border-color: var(--nt-plum); }
 .pr__label { position: absolute; left: 16px; top: 16px; font-size: 0.875rem; color: var(--nt-muted); pointer-events: none; }
@@ -303,10 +362,9 @@ watch(supportTab, (id) => {
 .pr__list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
 .pr__empty { display: flex; flex-direction: column; gap: 8px; padding: 32px 24px; border-top: 1px solid var(--nt-line); }
 .pr__foot { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px 24px 8px; }
-.pr__all { padding: 0; background: none; border: 0; font: inherit; font-size: 0.875rem; font-weight: 600; text-decoration: underline; cursor: pointer; }
 .pr__note { font-size: 0.875rem; }
 .pr__add { font-size: 0.875rem; }
-.pr__add:focus-visible, .pr__all:focus-visible, .pr__x:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
+.pr__add:focus-visible, .pr__x:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 
 .pr__panel { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; gap: 12px; padding: 32px 24px; overflow-y: auto; background: var(--nt-white); }
 .pr__panel:focus { outline: none; }
@@ -319,7 +377,19 @@ watch(supportTab, (id) => {
 .pr__flabel { font-size: 0.875rem; font-weight: 600; color: var(--nt-ink); }
 .pr__picked { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; background: var(--nt-gray); border-radius: 8px; font-size: 0.875rem; }
 .pr__picked span { color: var(--nt-muted); }
-.pr__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pr__features { margin: 0; padding: 0; border: 0; min-width: 0; }
+.pr__features legend { float: none; width: auto; margin-bottom: 0; }
+.pr__chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.pr__feature { position: relative; cursor: pointer; }
+.pr__feature-input { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.pr__feature-pill { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--nt-line); border-radius: 999px; background: var(--nt-white); color: var(--nt-muted); font-size: 0.875rem; font-weight: 500; line-height: 1.4; transition: background-color 150ms, border-color 150ms, color 150ms; }
+.pr__feature-mark { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: var(--nt-gray); }
+.pr__feature:hover .pr__feature-input:not(:disabled) + .pr__feature-pill { border-color: var(--nt-plum); color: var(--nt-plum); }
+.pr__feature-input:checked + .pr__feature-pill { background: #f3eef4; border-color: var(--nt-plum); color: var(--nt-plum); }
+.pr__feature-input:checked + .pr__feature-pill .pr__feature-mark { background: var(--nt-plum); color: var(--nt-white); }
+.pr__feature-input:focus-visible + .pr__feature-pill { outline: 2px solid var(--nt-plum); outline-offset: 3px; }
+.pr__feature:has(:disabled) { cursor: default; opacity: 0.6; }
+@media (prefers-reduced-motion: reduce) { .pr__feature-pill { transition: none; } }
 .pr__actions { display: flex; gap: 8px; }
 
 .pr__mapslot { padding: 0 24px; margin: 0 0 16px; }
