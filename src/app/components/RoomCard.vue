@@ -62,8 +62,9 @@ const props = defineProps({
   saved: { type: Boolean, default: false },
   showDistance: { type: Boolean, default: true },
   canManage: { type: Boolean, default: false },
+  canConfirm: { type: Boolean, default: false },
 });
-const emit = defineEmits(["select", "toggle-save", "edit", "delete"]);
+const emit = defineEmits(["select", "toggle-save", "edit", "delete", "confirm"]);
 
 const distance = computed(() => (props.showDistance ? formatDistance(props.room.distance) : ""));
 const verification = computed(() => verificationText(props.room));
@@ -109,7 +110,10 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
       </a>
       </div>
       <div class="rc__action-group rc__action-group--end">
-    <div class="rc__actions">
+      <button v-if="canConfirm" type="button" class="rc__action" @click.stop="emit('confirm', room)">
+        <Icon name="check" :size="16" />
+        It is still there<span class="visually-hidden">: {{ room.name }}</span>
+      </button>
       <button v-if="canManage" type="button" class="app-textbtn" @click.stop="emit('edit', room)">Edit<span class="visually-hidden"> {{ room.name }}</span></button>
       <button v-if="canManage" type="button" class="app-textbtn" @click.stop="emit('delete', room)">Delete<span class="visually-hidden"> {{ room.name }}</span></button>
       <button
@@ -170,10 +174,10 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
 .rc__feedback-form { display: flex; flex-direction: column; gap: 8px; }
 .rc__feedback-list { display: flex; flex-direction: column; gap: 8px; padding-left: 20px; margin: 0 0 16px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .rc__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
-.rc__actions--room { width: 100%; }
-.rc__action-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.rc__action-group--end { margin-left: auto; justify-content: flex-end; }
-.rc__action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 12px; border: 1px solid var(--nt-line); border-radius: 999px; background: var(--nt-white); color: var(--nt-ink); font: inherit; font-size: 0.875rem; font-weight: 500; line-height: 1.4; text-decoration: none; cursor: pointer; transition: background-color 150ms, border-color 150ms, color 150ms; }
+/* One tidy row of buttons, left aligned and pinned to the bottom so cards in a row line up. */
+.rc__actions--room { width: 100%; margin-top: auto; padding-top: 12px; }
+.rc__action-group, .rc__action-group--end { display: contents; }
+.rc__action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 6px 12px; border: 1px solid var(--nt-line); border-radius: 999px; background: var(--nt-white); color: var(--nt-ink); font: inherit; font-size: 0.875rem; font-weight: 500; line-height: 1.4; text-decoration: none; cursor: pointer; transition: background-color 150ms, border-color 150ms, color 150ms; }
 .rc__action :deep(svg) { flex-shrink: 0; color: var(--nt-muted); }
 .rc__action:hover { border-color: var(--nt-plum); background: #f3eef4; color: var(--nt-plum); }
 .rc__action:hover :deep(svg), .rc__action--active :deep(svg) { color: var(--nt-plum); }

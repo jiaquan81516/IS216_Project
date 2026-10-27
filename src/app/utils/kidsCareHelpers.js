@@ -54,6 +54,13 @@ export function formatDate(iso) {
   return `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}`;
 }
 
+// True when a snapshot date (YYYY-MM-DD) is older than `days`, so the page can warn parents.
+export function isStale(iso, days = 90, now = new Date()) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso ?? ""));
+  if (!m) return false;
+  return now.getTime() - Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) > days * 86400000;
+}
+
 // A compact clinic record from chasClinics.json becomes a card shaped place.
 export function clinicToPlace(c) {
   return {

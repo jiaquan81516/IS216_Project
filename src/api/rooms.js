@@ -1,7 +1,7 @@
 // The pumping room directory. A top level collection, shared by every household, because a
 // nursing room at a mall is the same room for everyone.
 //
-// pumpingRooms/{roomId}                  the room
+// pumpingRooms/{roomId}                  the room; approval is "pending" until an administrator accepts it
 // pumpingRooms/{roomId}/reports/{id}     one confirmation or flag by one member
 import {
   addDoc,
@@ -13,6 +13,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  where,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "./db";
@@ -30,17 +31,44 @@ function report(code, error) {
   console.error("[app rooms]", code, error);
 }
 
-// Live list of every room, by name. Reports { code } on failure like the other modules.
-export function subscribeRooms(onData, onError) {
-  const q = query(roomsRef(), orderBy("name", "asc"), limit(ROOMS_MAX));
-  return onSnapshot(
-    q,
-    (snap) => onData(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-    (error) => {
-      report(error?.code, error);
-      onError?.({ code: error?.code ?? "unknown" });
-    },
-  );
+// Live list of the rooms a parent may see: every approved room, plus the rooms this parent
+// added that are still waiting for an administrator. Two queries, because a rule can only
+// allow a query it can prove safe. Reports { code } on failure like the other modules.
+export function subscribeRooms(uid, onData, onError) {
+  let approved = [];
+  let mine = [];
+  const emit = () => {
+    const seen = new Set();
+    const rooms = [...approved, ...mine].filter((room) => !seen.has(room.id) && seen.add(room.id));
+    onData(rooms.sort((a, b) => String(a.name).localeCompare(String(b.name))));
+  };
+  const fail = (error) => {
+    report(error?.code, error);
+    onError?.({ code: error?.code ?? "unknown" });
+  };
+  const stops = [
+    onSnapshot(
+      query(roomsRef(), where("approval", "==", "approved"), limit(ROOMS_MAX)),
+      (snap) => {
+        approved = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        emit();
+      },
+      fail,
+    ),
+  ];
+  if (uid) {
+    stops.push(
+      onSnapshot(
+        query(roomsRef(), where("createdBy", "==", uid), where("approval", "==", "pending"), limit(ROOMS_MAX)),
+        (snap) => {
+          mine = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          emit();
+        },
+        fail,
+      ),
+    );
+  }
+  return () => stops.forEach((stop) => stop());
 }
 
 export async function addRoom(
@@ -72,6 +100,7 @@ export async function addRoom(
     features: featureMap(features),
     status: "unverified",
     verifiedAt: null,
+    approval: "pending",
     lat: Number.isFinite(lat) ? lat : null,
     lng: Number.isFinite(lng) ? lng : null,
     createdBy: uid,
@@ -109,12 +138,6 @@ export async function reportRoom(uid, roomId, kind) {
   });
   await batch.commit();
   return reportRef.id;
-}
-
-// One shot read, used by tests and by anything that only needs a snapshot.
-export async function listRooms() {
-  const snap = await getDocs(query(roomsRef(), orderBy("name", "asc"), limit(ROOMS_MAX)));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
 // Directory room IDs also work here, even when the room comes from BMSG.
