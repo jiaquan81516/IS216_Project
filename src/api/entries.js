@@ -34,7 +34,7 @@ function fromSnap(snap) {
   return { id: snap.id, ...snap.data() };
 }
 
-export async function addEntry(user, householdId, { type, at, endedAt = null, details = {}, byName = "", babyId = "primary" }) {
+export async function addEntry(user, householdId, { type, at, endedAt = null, details = {}, byName = "", babyId = selectedBabyId.value }) {
   const ref = await addDoc(entriesRef(householdId), {
     type,
     babyId,
@@ -45,7 +45,6 @@ export async function addEntry(user, householdId, { type, at, endedAt = null, de
     details,
     seenBy: { [user.uid]: serverTimestamp() },
     createdAt: serverTimestamp(),
-    babyId: selectedBabyId.value,
   });
   return ref.id;
 }
