@@ -16,7 +16,7 @@ import { useNudges, NUDGES_KEY } from "@/app/composables/useNudges";
 import { usePush, usePushMessages } from "@/app/composables/usePush";
 import { buildStream, unreadCount } from "@/app/utils/stream";
 import { resetLimits } from "@/app/utils/limits";
-import { NAV } from "@/app/data/nav";
+import { ADMIN_SECTIONS, NAV } from "@/app/data/nav";
 import { ROUTES } from "@/app/routes";
 import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 import { babySummary } from "@/api/profile";
@@ -25,9 +25,10 @@ defineOptions({ name: "AppShell" });
 
 const route = useRoute();
 const router = useRouter();
-const { logout } = useAuth();
+const { logout, currentUser } = useAuth();
 const { isAdmin } = useAdmin();
-const adminWorkspace = computed(() => isAdmin.value && !home.householdId.value);
+// An administrator sees only the admin tools, even if the same account also has a household.
+const adminWorkspace = computed(() => isAdmin.value);
 const tone = computed(() => {
   if (route.path === ROUTES.WELLNESS) return "personal";
   if (route.path === ROUTES.SUPPORT || route.path.startsWith(ROUTES.SUPPORT + "/")) return "care";
@@ -116,13 +117,25 @@ const userName = computed(() => displayName(home.me.value.displayName || home.me
 const unread = computed(() =>
   unreadCount(buildStream({ posts: shared.posts.posts, uid: meUid.value }), meUid.value),
 );
+// An administrator's sidebar holds the admin sections; each opens /admin on that section.
+const ADMIN_NAV = ADMIN_SECTIONS.map((section) => ({
+  key: section.id,
+  label: section.label,
+  icon: section.icon,
+  to: { path: ROUTES.ADMIN, query: { tab: section.id } },
+}));
+const adminSection = computed(() => (ADMIN_SECTIONS.some((s) => s.id === route.query.tab) ? route.query.tab : ADMIN_SECTIONS[0].id));
 const items = computed(() =>
-  (adminWorkspace.value ? [{ key: "rooms", label: "Pumping rooms", to: ROUTES.ROOMS, icon: "pin" }] : NAV).map((item) => ({
+  (adminWorkspace.value ? ADMIN_NAV : NAV).map((item) => ({
     ...item,
-    active: item.to === route.path || route.path.startsWith(item.to + "/"),
+    active: adminWorkspace.value
+      ? route.path === ROUTES.ADMIN && adminSection.value === item.key
+      : item.to === route.path || route.path.startsWith(item.to + "/"),
     dot: item.key === "today" && unread.value > 0,
   })),
 );
+// The administrator is shown by their account name: display name, else the part of the email before @.
+const adminName = computed(() => currentUser.value?.displayName || currentUser.value?.email?.split("@")[0] || "Administrator");
 
 function toggleMenu() {
   menuOpen.value = !menuOpen.value;
@@ -141,8 +154,9 @@ function skipToMain(event) {
 }
 async function signOut() {
   resetLimits();
+  const wasAdmin = isAdmin.value;
   await logout();
-  router.push(ROUTES.LANDING);
+  router.push(wasAdmin && ROUTES.ADMIN_SIGN_IN ? ROUTES.ADMIN_SIGN_IN : ROUTES.LANDING);
 }
 
 watch(() => route.fullPath, () => closeMenu());
@@ -156,7 +170,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
     <aside class="side" aria-label="Household and navigation">
       <div class="side__bar">
-        <BrandLogo :to="isAdmin ? ROUTES.ROOMS : ROUTES.HOME" />
+        <BrandLogo :to="isAdmin ? ROUTES.ADMIN : ROUTES.HOME" />
         <button
           ref="menuButton"
           type="button"
@@ -171,8 +185,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       </div>
 
       <div id="app-side-panel" class="side__panel" :class="{ 'side__panel--open': menuOpen }">
-        <div v-if="ready" class="side__chip">
-          <p class="side__chip-names">{{ adminWorkspace ? 'Administrator' : names }}</p>
+        <div v-if="adminWorkspace" class="side__chip">
+          <p class="side__chip-names">{{ adminName }}</p>
+        </div>
+        <div v-else-if="ready" class="side__chip">
+          <p class="side__chip-names">{{ names }}</p>
           <p v-if="babyName" class="side__chip-baby">{{ babyName }}</p>
           <p v-if="babyAge" class="side__chip-age">{{ babyAge }}</p>
           <select v-if="showSwitcher" class="side__switch" :value="selectedBaby?.id" aria-label="Switch baby" @change="selectBaby($event.target.value)">
@@ -183,7 +200,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           <RouterLink class="side__add" :to="{ path: ROUTES.PROFILE, query: { addBaby: '1' } }" @click="menuOpen = false">Add a baby</RouterLink>
         </div>
 
-        <nav aria-label="Main">
+        <nav v-if="items.length" aria-label="Main">
           <ul class="side__nav">
             <li v-for="item in items" :key="item.key">
               <RouterLink
@@ -202,10 +219,9 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
         </nav>
 
         <div class="side__foot">
-          <p v-if="adminWorkspace" class="side__note">Manage the pumping room directory.</p>
-          <p v-else class="side__note">Your care space is shared. Wellness check-ins stay private by default.</p>
+          <p v-if="!adminWorkspace" class="side__note">Your care space is shared. Wellness check-ins stay private by default.</p>
           <div class="side__user">
-            <UserMenu :name="userName" @sign-out="signOut" />
+            <UserMenu :name="adminWorkspace ? adminName : userName" :admin="adminWorkspace" @sign-out="signOut" />
           </div>
         </div>
       </div>
@@ -217,8 +233,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
       </div>
     </main>
 
-    <PartnerToast :toasts="chat.toasts.value" @close="chat.closeToast" @open="onToastOpen" />
-    <ChatDock :chat="chat" :me="meUid" />
+    <template v-if="!adminWorkspace">
+      <PartnerToast :toasts="chat.toasts.value" @close="chat.closeToast" @open="onToastOpen" />
+      <ChatDock :chat="chat" :me="meUid" />
+    </template>
   </div>
 </template>
 

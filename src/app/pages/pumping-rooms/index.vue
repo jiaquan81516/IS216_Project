@@ -205,6 +205,7 @@ watch(supportTab, (id) => {
     <section class="pr__side" aria-label="Pumping room list">
       <div class="pr__scroll">
         <Tabs
+          v-if="!isAdmin"
           v-model="supportTab"
           :tabs="SUPPORT_TABS"
           label="Support sections"
@@ -256,7 +257,7 @@ watch(supportTab, (id) => {
 
         <div class="pr__views" role="group" aria-label="Show">
           <button type="button" class="app-chip" :aria-pressed="view === 'all' ? 'true' : 'false'" @click="view = 'all'">All rooms</button>
-          <button type="button" class="app-chip" :aria-pressed="view === 'saved' ? 'true' : 'false'" @click="view = 'saved'">
+          <button v-if="!isAdmin" type="button" class="app-chip" :aria-pressed="view === 'saved' ? 'true' : 'false'" @click="view = 'saved'">
             Saved places ({{ savedCount }})
           </button>
         </div>

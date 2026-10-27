@@ -27,12 +27,22 @@ const SETUP_PATHS = new Set([
 // Authentication and household rules for the current app routes.
 export function installGuard(router) {
   router.beforeEach(async (to) => {
+    // The admin pages: only a signed in administrator sees the admin view, and an administrator
+    // who is already signed in does not need the admin sign in page again.
+    if (to.path === ROUTES.ADMIN || (ROUTES.ADMIN_SIGN_IN && to.path === ROUTES.ADMIN_SIGN_IN)) {
+      await waitForAuthInitialization();
+      const { isAuthenticated, currentUser } = useAuth();
+      const admin = isAuthenticated.value && (await hasAdminClaim(currentUser.value));
+      // Anyone else is sent to the landing page, never to the secret sign in address.
+      if (to.path === ROUTES.ADMIN) return admin ? true : ROUTES.LANDING;
+      return admin ? ROUTES.ADMIN : true;
+    }
     if (SETUP_PATHS.has(to.path) || GUARDED_APP_PATHS.has(to.path)) {
       await waitForAuthInitialization();
       const { isAuthenticated, currentUser } = useAuth();
       if (isAuthenticated.value && await hasAdminClaim(currentUser.value)) {
         // Admin work does not require a parent profile or household membership.
-        if (SETUP_PATHS.has(to.path) || to.path === ROUTES.HOME) return ROUTES.ROOMS;
+        if (SETUP_PATHS.has(to.path) || to.path === ROUTES.HOME) return ROUTES.ADMIN;
         return true;
       }
     }
