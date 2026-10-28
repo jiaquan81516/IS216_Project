@@ -41,9 +41,15 @@ async function save() {
     message.value = deleting.value ? "Room deleted." : "Room saved.";
     dialog.value.close();
   } catch (cause) {
-    error.value = cause.code?.startsWith("rooms/") ? cause.message : cause.code === "permission-denied"
-      ? "You do not have permission to manage rooms. Sign in again or contact your administrator."
-      : "Could not save the room. Check the details and your connection, then try again.";
+    // The real reason goes to the console and, for an unknown failure, onto the screen.
+    console.error("[app room manager]", cause?.code, cause?.message, cause);
+    const code = String(cause?.code ?? "");
+    error.value = code.startsWith("rooms/") ? cause.message
+      : code === "permission-denied"
+        ? "You do not have permission to manage rooms. Sign in again, or publish the latest firestore.rules."
+        : code === "unavailable" || code === "server/unreachable"
+          ? "Could not reach the server. Check your connection and try again."
+          : `Could not save the room (${code || cause?.name || "unknown error"}: ${String(cause?.message ?? "").slice(0, 160)}).`;
   } finally {
     busy.value = false;
   }

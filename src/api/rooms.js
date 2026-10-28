@@ -31,8 +31,9 @@ function report(code, error) {
   console.error("[app rooms]", code, error);
 }
 
-// Live list of the rooms a parent may see: every approved room, plus the rooms this parent
-// added that are still waiting for an administrator. Two queries, because a rule can only
+// Live list of the rooms a parent may see: every approved room, plus every room this parent
+// added, so one still waiting for an administrator, or one that was rejected with a reason,
+// can be shown back to them. Two queries, because a rule can only
 // allow a query it can prove safe. Reports { code } on failure like the other modules.
 export function subscribeRooms(uid, onData, onError) {
   let approved = [];
@@ -59,7 +60,7 @@ export function subscribeRooms(uid, onData, onError) {
   if (uid) {
     stops.push(
       onSnapshot(
-        query(roomsRef(), where("createdBy", "==", uid), where("approval", "==", "pending"), limit(ROOMS_MAX)),
+        query(roomsRef(), where("createdBy", "==", uid), limit(ROOMS_MAX)),
         (snap) => {
           mine = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
           emit();

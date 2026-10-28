@@ -85,6 +85,8 @@ usePushMessages((message) => {
   }
   if (message.type === "task") {
     chat.showToast({ id: `push:${Date.now()}`, kind: "message", title: message.title, text: message.body, to: ROUTES.CHECKLIST });
+  } else if (message.type === "room") {
+    chat.showToast({ id: `push:${Date.now()}`, kind: "message", title: message.title, text: message.body, to: message.url || "/support/rooms" });
   }
 });
 // "/home?chat=1" is where a chat notification opens a fresh tab: open the chat, then tidy the address.

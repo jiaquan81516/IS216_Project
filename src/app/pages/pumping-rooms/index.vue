@@ -26,7 +26,7 @@ import { useLocate } from "@/app/composables/useLocate";
 import { useAuth } from "@/composables/useAuth";
 import RoomManager from "@/app/components/RoomManager.vue";
 import { useAdmin } from "@/composables/useAdmin";
-import { subscribeRoomOverrides } from "@/api/roomManagement";
+import { saveManagedRoom, subscribeRoomOverrides } from "@/api/roomManagement";
 import AddressPicker from "@/app/components/AddressPicker.vue";
 import { resolveRoomLocation, searchPlaces } from "@/api/roomLocation";
 import { applyRoomOverrides } from "@/app/utils/roomManagement";
@@ -87,7 +87,7 @@ watch(selectedId, async (id) => {
   const room = visible.value.find((r) => r.id === id);
   if (!room || hasPoint(room) || id in found.value) return;
   found.value = { ...found.value, [id]: null };
-  let point = null;
+  let point;
   try {
     point = await resolveRoomLocation(room.address);
   } catch {
@@ -178,7 +178,17 @@ async function submitRoom() {
   roomsStore.writeError = "";
   saving.value = true;
   try {
-    const room = await roomsStore.addRoom({ ...draft.value, details: roomDetails(draft.value.floor, draft.value.near) });
+    const payload = { ...draft.value, details: roomDetails(draft.value.floor, draft.value.near) };
+    if (isAdmin.value) {
+      await saveManagedRoom(currentUser.value?.uid, { ...payload, status: "unverified" });
+      viewAll();
+      message.value = `${payload.name} has been added to the live directory.`;
+      draft.value = emptyRoom();
+      saving.value = false;
+      closeForm();
+      return;
+    }
+    const room = await roomsStore.addRoom(payload);
     if (!room) return;
     viewAll();
     selectedId.value = room.id;
@@ -186,6 +196,10 @@ async function submitRoom() {
     draft.value = emptyRoom();
     saving.value = false;
     closeForm();
+  } catch (cause) {
+    roomsStore.writeError = cause?.code === "rooms/invalid-input"
+      ? cause.message
+      : "We could not save that room. Check the details and your connection, then try again.";
   } finally {
     saving.value = false;
   }
@@ -194,7 +208,6 @@ const formOpen = ref(false);
 const addButton = ref(null);
 const panel = ref(null);
 function openForm() {
-  if (isAdmin.value) { manager.value?.edit(); return; }
   message.value = "";
   roomsStore.writeError = "";
   formOpen.value = true;
@@ -203,7 +216,7 @@ function openForm() {
 function closeForm() {
   if (saving.value) return;
   formOpen.value = false;
-  nextTick(() => addButton.value?.focus());
+  nextTick(() => (addButton.value?.$el ?? addButton.value)?.focus?.());
 }
 function onKeydown(event) {
   if (event.key === "Escape" && formOpen.value) closeForm();
@@ -285,6 +298,10 @@ watch(supportTab, (id) => {
 
         <div class="pr__views" role="group" aria-label="Show">
           <button type="button" class="app-chip" :aria-pressed="view === 'all' ? 'true' : 'false'" @click="view = 'all'">All rooms</button>
+          <AppButton v-if="isAdmin" ref="addButton" variant="outline" size="sm" @click="openForm">
+            <Icon name="plus" :size="16" />
+            Add room
+          </AppButton>
           <button v-if="!isAdmin" type="button" class="app-chip" :aria-pressed="view === 'saved' ? 'true' : 'false'" @click="view = 'saved'">
             Saved places ({{ savedCount }})
           </button>
@@ -295,6 +312,31 @@ watch(supportTab, (id) => {
         </div>
         <p v-if="roomsStore.writeError" class="app-error-text pr__pad" role="alert">{{ roomsStore.writeError }}</p>
         <p v-if="roomsError" class="app-error-text pr__pad" role="alert">{{ roomsError }}</p>
+
+        <section v-if="!isAdmin && roomsStore.submissions.length" class="pr__subs" aria-labelledby="pr-subs-title">
+          <h2 id="pr-subs-title" class="nt-heading nt-heading--sm">Your suggestions</h2>
+          <ul class="pr__sublist">
+            <li v-for="s in roomsStore.submissions" :key="s.id" class="pr__sub" :class="{ 'pr__sub--no': s.approval === 'rejected' }">
+              <div class="pr__subhead">
+                <strong>{{ s.name }}</strong>
+                <span class="app-pill">{{ s.approval === "rejected" ? "Not accepted" : "Pending review" }}</span>
+                <button
+                  v-if="s.approval === 'rejected'"
+                  type="button"
+                  class="app-textbtn pr__subclose"
+                  :aria-label="`Close the message about ${s.name}`"
+                  @click="roomsStore.dismissSubmission(s.id)"
+                >Close</button>
+              </div>
+              <p class="pr__muted">{{ s.address }}</p>
+              <p v-if="s.approval === 'pending'" class="pr__muted">An administrator will review this room. It shows to everyone once accepted.</p>
+              <p v-else class="pr__muted">
+                <template v-if="s.reviewNote">Reason: {{ s.reviewNote }}</template>
+                <template v-else>No reason was given. Check the address and details, then add the room again.</template>
+              </p>
+            </li>
+          </ul>
+        </section>
 
         <ul v-if="visible.length" class="pr__list" aria-label="Pumping rooms">
           <RoomCard
@@ -320,7 +362,7 @@ watch(supportTab, (id) => {
           </p>
         </div>
 
-        <div class="pr__foot">
+        <div v-if="!isAdmin" class="pr__foot">
           <p class="pr__muted pr__note">
             Verified rooms are from the Breastfeeding Mothers' Support Group directory. Know another room?
             <button ref="addButton" type="button" class="app-textbtn pr__add" @click="openForm">Add it<span class="visually-hidden"> (add a room)</span></button>.
@@ -334,7 +376,9 @@ watch(supportTab, (id) => {
           <h2 id="pr-add-title" class="nt-heading nt-heading--sm">Add a pumping room</h2>
           <button type="button" class="pr__x" aria-label="Close add a room" @click="closeForm"><Icon name="close" :size="18" /></button>
         </div>
-        <p class="pr__muted">An administrator reviews new rooms before other parents see them.</p>
+        <p class="pr__muted">
+          {{ isAdmin ? "This room will appear in the live directory." : "An administrator reviews new rooms before other parents see them." }}
+        </p>
         <form class="pr__form" @submit.prevent="submitRoom">
           <AddressPicker id="pr-place" :disabled="saving" @pick="pickPlace" />
           <div v-if="draft.address && !manual" class="pr__picked" role="status">
@@ -426,6 +470,13 @@ watch(supportTab, (id) => {
 .pr__status { padding: 0 24px 12px; }
 .pr__pad { padding: 0 24px; }
 .pr__muted { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-muted); }
+.pr__subs { display: flex; flex-direction: column; gap: 10px; padding: 0 24px 16px; }
+.pr__sublist { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.pr__sub { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
+.pr__sub--no { border-left: 3px solid var(--nt-plum); }
+.pr__subhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pr__sub p { margin: 0; }
+.pr__subclose { margin-left: auto; min-height: 44px; padding: 0 8px; }
 .pr__list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
 .pr__empty { display: flex; flex-direction: column; gap: 8px; padding: 32px 24px; border-top: 1px solid var(--nt-line); }
 .pr__foot { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px 24px 8px; }

@@ -6,6 +6,7 @@ import { loadEnv } from "vite";
 const LOADERS = {
   "/api/rooms/location": () => import("../api/rooms/location.js"),
   "/api/rooms/search": () => import("../api/rooms/search.js"),
+  "/api/rooms/notify": () => import("../api/rooms/notify.js"),
 };
 
 export function roomLocationDev() {
@@ -25,6 +26,16 @@ export function roomLocationDev() {
         if (!load) return next();
         try {
           req.query = Object.fromEntries(url.searchParams);
+          // Vercel parses a JSON body before the handler runs; here it has to be read by hand.
+          if (req.method === "POST") {
+            const chunks = [];
+            for await (const chunk of req) chunks.push(chunk);
+            try {
+              req.body = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+            } catch {
+              req.body = {};
+            }
+          }
           const { default: handler } = await load();
           await handler(req, res);
         } catch (error) {
