@@ -109,9 +109,6 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
       </a>
       </div>
       <div class="rc__action-group rc__action-group--end">
-    <div class="rc__actions">
-      <button v-if="canManage" type="button" class="app-textbtn" @click.stop="emit('edit', room)">Edit<span class="visually-hidden"> {{ room.name }}</span></button>
-      <button v-if="canManage" type="button" class="app-textbtn" @click.stop="emit('delete', room)">Delete<span class="visually-hidden"> {{ room.name }}</span></button>
       <button
         type="button"
         class="rc__action"

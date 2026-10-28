@@ -6,6 +6,8 @@ import Tabs from "@/app/components/Tabs.vue";
 import AppButton from "@/components/ui/AppButton.vue";
 import Icon from "@/app/components/Icon.vue";
 import RoomCard from "@/app/components/RoomCard.vue";
+// import AdminPending from "@/app/components/admin/AdminPending.vue";
+// import { subscribePendingRooms } from "@/api/roomApproval";
 import RoomFilterPanel from "@/app/components/RoomFilterPanel.vue";
 import OneMapEmbed from "@/app/components/OneMapEmbed.vue";
 import { loadBmsgRooms } from "@/api/bmsgRooms";
@@ -77,6 +79,9 @@ const allRooms = computed(() => mergeRooms(applyRoomOverrides(
   [...prepareCommunityRooms(roomsStore.rooms, SEED_COORDS), ...listed.value], overrides.value,
 ), []));
 const visible = computed(() => {
+  // Pending-room view disabled until its state and subscription are restored.
+  // const base = view.value === "pending" && isAdmin.value ? pendingRooms.value
+  //   : view.value === "saved" ? allRooms.value.filter((r) => savedIds.value.includes(r.id)) : allRooms.value;
   const base = view.value === "saved" ? allRooms.value.filter((r) => savedIds.value.includes(r.id)) : allRooms.value;
   const filtered = applyFilters(base, { text: query.value, ...filters.value });
   // Distance only matters once the person has shared their location.
@@ -254,6 +259,13 @@ watch(supportTab, (id) => {
           <OneMapEmbed :lat="embed.lat" :lng="embed.lng" :label="embed.label" />
         </section>
 
+        <div class="pr__foot">
+          <p class="pr__muted pr__note">
+            Verified rooms are from the Breastfeeding Mothers' Support Group directory. Know another room?
+            <button ref="addButton" type="button" class="app-textbtn pr__add" @click="openForm">Add it<span class="visually-hidden"> (add a room)</span></button>.
+          </p>
+        </div>
+
         <div class="pr__views" role="group" aria-label="Show">
           <button type="button" class="app-chip" :aria-pressed="view === 'all' ? 'true' : 'false'" @click="view = 'all'">All rooms</button>
           <button type="button" class="app-chip" :aria-pressed="view === 'saved' ? 'true' : 'false'" @click="view = 'saved'">
@@ -267,6 +279,13 @@ watch(supportTab, (id) => {
         <p v-if="roomsStore.writeError" class="app-error-text pr__pad" role="alert">{{ roomsStore.writeError }}</p>
         <p v-if="roomsError" class="app-error-text pr__pad" role="alert">{{ roomsError }}</p>
 
+        <!-- Pending-room view temporarily disabled.
+        <section v-if="view === 'pending' && isAdmin" class="pr__pending" aria-labelledby="pr-pending-title">
+          <h2 id="pr-pending-title" class="nt-heading nt-heading--sm">Pending room submissions</h2>
+          <p v-if="!pendingLoading && !pendingError && pendingRooms.length && !visible.length" class="pr__muted">No pending submissions match. Try a different search or remove a filter.</p>
+          <AdminPending v-else :rooms="visible" :loading="pendingLoading" :error="pendingError" />
+        </section>
+        -->
         <ul v-if="visible.length" class="pr__list" aria-label="Pumping rooms">
           <RoomCard
             v-for="room in visible"
@@ -289,12 +308,6 @@ watch(supportTab, (id) => {
           </p>
         </div>
 
-        <div class="pr__foot">
-          <p class="pr__muted pr__note">
-            Verified rooms are from the Breastfeeding Mothers' Support Group directory. Know another room?
-            <button ref="addButton" type="button" class="app-textbtn pr__add" @click="openForm">Add it<span class="visually-hidden"> (add a room)</span></button>.
-          </p>
-        </div>
       </div>
 
       <RoomManager v-if="isAdmin" ref="manager" />
@@ -373,13 +386,16 @@ watch(supportTab, (id) => {
 .pr__bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; }
 .pr__count { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
 .pr__views { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 24px 16px; }
+.pr__pending { display: flex; flex-direction: column; gap: 16px; padding: 0 24px; }
+.pr__pending h2 { margin: 0; }
+.pr__pending :deep(.ap) { max-width: none; }
 .pr__status:empty { display: none; }
 .pr__status { padding: 0 24px 12px; }
 .pr__pad { padding: 0 24px; }
 .pr__muted { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-muted); }
 .pr__list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
 .pr__empty { display: flex; flex-direction: column; gap: 8px; padding: 32px 24px; border-top: 1px solid var(--nt-line); }
-.pr__foot { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px 24px 8px; }
+.pr__foot { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 0 24px 16px; }
 .pr__note { font-size: 0.875rem; }
 .pr__add { font-size: 0.875rem; }
 .pr__add:focus-visible, .pr__x:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
