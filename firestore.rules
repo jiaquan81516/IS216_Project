@@ -41,7 +41,11 @@ service cloud.firestore {
           (request.resource.data.deleted == true
             && request.resource.data.keys().hasOnly(['deleted', 'updatedBy', 'updatedAt']))
           || (request.resource.data.deleted == false
-            && request.resource.data.keys().hasOnly(['name', 'address', 'details', 'lat', 'lng', 'features', 'status', 'verifiedAt', 'deleted', 'updatedBy', 'updatedAt'])
+            && request.resource.data.keys().hasOnly(['name', 'address', 'details', 'roomType', 'feedback', 'lat', 'lng', 'features', 'status', 'verifiedAt', 'deleted', 'updatedBy', 'updatedAt'])
+            && request.resource.data.get('roomType', '') is string
+            && request.resource.data.get('roomType', '').size() <= 80
+            && request.resource.data.get('feedback', '') is string
+            && request.resource.data.get('feedback', '').size() <= 400
             && request.resource.data.name is string
             && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80
             && request.resource.data.address is string
@@ -62,6 +66,50 @@ service cloud.firestore {
             && request.resource.data.status in ['verified', 'unverified']
             && (request.resource.data.verifiedAt == null || request.resource.data.verifiedAt is timestamp))
         );
+      allow delete: if false;
+    }
+
+    function validGuideStep(steps, index) {
+      return steps.size() <= index || (steps[index] is map
+        && steps[index].keys().hasAll(['title', 'body'])
+        && steps[index].keys().hasOnly(['title', 'body'])
+        && steps[index].title is string && steps[index].title.size() > 0 && steps[index].title.size() <= 120
+        && steps[index].body is string && steps[index].body.size() > 0 && steps[index].body.size() <= 2000);
+    }
+    match /supportGuides/{guideId} {
+      allow read: if signedIn();
+      allow create, update: if roomAdmin()
+        && request.resource.data.keys().hasAll(['title', 'blurb', 'intro', 'steps', 'callIf', 'createdBy', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['title', 'blurb', 'intro', 'steps', 'callIf', 'createdBy', 'createdAt'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 120
+        && request.resource.data.blurb is string && request.resource.data.blurb.size() > 0 && request.resource.data.blurb.size() <= 300
+        && request.resource.data.intro is string && request.resource.data.intro.size() > 0 && request.resource.data.intro.size() <= 2000
+        && request.resource.data.steps is list && request.resource.data.steps.size() > 0 && request.resource.data.steps.size() <= 6
+        && validGuideStep(request.resource.data.steps, 0)
+        && validGuideStep(request.resource.data.steps, 1)
+        && validGuideStep(request.resource.data.steps, 2)
+        && validGuideStep(request.resource.data.steps, 3)
+        && validGuideStep(request.resource.data.steps, 4)
+        && validGuideStep(request.resource.data.steps, 5)
+        && request.resource.data.callIf is list && request.resource.data.callIf.size() > 0 && request.resource.data.callIf.size() <= 10
+        && (request.resource.data.callIf.size() <= 0 || (request.resource.data.callIf[0] is string && request.resource.data.callIf[0].size() > 0 && request.resource.data.callIf[0].size() <= 400))
+        && (request.resource.data.callIf.size() <= 1 || (request.resource.data.callIf[1] is string && request.resource.data.callIf[1].size() > 0 && request.resource.data.callIf[1].size() <= 400))
+        && (request.resource.data.callIf.size() <= 2 || (request.resource.data.callIf[2] is string && request.resource.data.callIf[2].size() > 0 && request.resource.data.callIf[2].size() <= 400))
+        && (request.resource.data.callIf.size() <= 3 || (request.resource.data.callIf[3] is string && request.resource.data.callIf[3].size() > 0 && request.resource.data.callIf[3].size() <= 400))
+        && (request.resource.data.callIf.size() <= 4 || (request.resource.data.callIf[4] is string && request.resource.data.callIf[4].size() > 0 && request.resource.data.callIf[4].size() <= 400))
+        && (request.resource.data.callIf.size() <= 5 || (request.resource.data.callIf[5] is string && request.resource.data.callIf[5].size() > 0 && request.resource.data.callIf[5].size() <= 400))
+        && (request.resource.data.callIf.size() <= 6 || (request.resource.data.callIf[6] is string && request.resource.data.callIf[6].size() > 0 && request.resource.data.callIf[6].size() <= 400))
+        && (request.resource.data.callIf.size() <= 7 || (request.resource.data.callIf[7] is string && request.resource.data.callIf[7].size() > 0 && request.resource.data.callIf[7].size() <= 400))
+        && (request.resource.data.callIf.size() <= 8 || (request.resource.data.callIf[8] is string && request.resource.data.callIf[8].size() > 0 && request.resource.data.callIf[8].size() <= 400))
+        && (request.resource.data.callIf.size() <= 9 || (request.resource.data.callIf[9] is string && request.resource.data.callIf[9].size() > 0 && request.resource.data.callIf[9].size() <= 400));
+      allow create, update: if roomAdmin()
+        && request.resource.data.keys().hasAll(['deleted', 'createdBy', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['deleted', 'createdBy', 'createdAt'])
+        && request.resource.data.deleted == true
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdAt == request.time;
       allow delete: if false;
     }
 

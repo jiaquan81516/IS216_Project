@@ -109,7 +109,16 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
       </a>
       </div>
       <div class="rc__action-group rc__action-group--end">
+      <button v-if="canManage" type="button" class="rc__action" @click.stop="emit('edit', room)">
+        <Icon name="edit" :size="16" />
+        Edit<span class="visually-hidden"> {{ room.name }}</span>
+      </button>
+      <button v-if="canManage" type="button" class="rc__action" @click.stop="emit('delete', room)">
+        <Icon name="trash" :size="16" />
+        Delete<span class="visually-hidden"> {{ room.name }}</span>
+      </button>
       <button
+        v-if="!canManage"
         type="button"
         class="rc__action"
         :class="{ 'rc__action--active': saved }"

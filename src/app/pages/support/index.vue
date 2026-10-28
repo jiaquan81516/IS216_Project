@@ -4,10 +4,19 @@ import { ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Icon from "@/app/components/Icon.vue";
 import Tabs from "@/app/components/Tabs.vue";
-import { SUPPORT_GUIDES, TRUSTED_RESOURCES } from "@/app/data/support";
+import { TRUSTED_RESOURCES } from "@/app/data/support";
+import AppButton from "@/components/ui/AppButton.vue";
+import GuideManager from "@/app/components/GuideManager.vue";
+import { useAdmin } from "@/composables/useAdmin";
+import { useSupportGuides } from "@/composables/useSupportGuides";
 import { ROUTES } from "@/app/routes";
 
 defineOptions({ name: "SupportPage" });
+
+const { isAdmin } = useAdmin();
+const { guides, guidesError } = useSupportGuides();
+const guideManager = ref(null);
+const guideMessage = ref("");
 
 const TABS = [
   { id: "guides", label: "Guides" },
@@ -44,7 +53,10 @@ function toggleGuide(slug) {
 <template>
   <div class="sp">
     <header class="sp__head">
-      <h1 class="nt-title sp__title">Support</h1>
+      <div class="sp__heading-row">
+        <h1 class="nt-title sp__title">Support</h1>
+        <AppButton v-if="isAdmin && tab === 'guides'" size="sm" class="sp__add-guide" @click="guideManager?.open()">Add a guide</AppButton>
+      </div>
       <p class="sp__sub">Guides and trusted contacts.</p>
     </header>
 
@@ -52,8 +64,10 @@ function toggleGuide(slug) {
 
     <!-- Guides -->
     <div v-if="tab === 'guides'" id="support-panel-guides" class="sp__guides" role="tabpanel" aria-labelledby="support-tab-guides">
+      <p v-if="guidesError" class="app-error-text" role="alert">{{ guidesError }}</p>
+      <p v-if="guideMessage" class="sp__muted" role="status">{{ guideMessage }}</p>
       <ul class="sp__acc">
-        <li v-for="g in SUPPORT_GUIDES" :key="g.slug" class="sp__acc-item">
+        <li v-for="g in guides" :key="g.slug" class="sp__acc-item">
           <h2 class="sp__acc-h">
             <button
               :id="`guide-btn-${g.slug}`"
@@ -90,6 +104,10 @@ function toggleGuide(slug) {
             <ul class="sp__bullets">
               <li v-for="c in g.callIf" :key="c">{{ c }}</li>
             </ul>
+            <div v-if="isAdmin" class="sp__guide-actions">
+              <button type="button" class="sp__guide-action" @click="guideManager?.edit(g)"><Icon name="edit" :size="16" /> Edit<span class="visually-hidden"> { g.title }</span></button>
+              <button type="button" class="sp__guide-action" @click="guideManager?.remove(g)"><Icon name="trash" :size="16" /> Delete<span class="visually-hidden"> { g.title }</span></button>
+            </div>
           </div>
         </li>
       </ul>
@@ -123,11 +141,15 @@ function toggleGuide(slug) {
       </ul>
       <p class="sp__muted">General guidance only, not medical advice.</p>
     </div>
+    <GuideManager v-if="isAdmin" ref="guideManager" @saved="guideMessage = $event" />
   </div>
 </template>
 
 <style scoped>
 .sp { display: flex; flex-direction: column; gap: 24px; font-size: 1rem; }
+.sp__heading-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.sp__heading-row h1 { margin: 0; }
+.sp__add-guide { flex-shrink: 0; white-space: nowrap; }
 .sp__head { display: flex; flex-direction: column; gap: 8px; }
 .sp__title { font-size: 2.5rem; line-height: 1.2; }
 .sp__sub { margin: 0; color: var(--nt-muted); }
@@ -135,6 +157,13 @@ function toggleGuide(slug) {
 .sp__text { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-ink); }
 .sp__strong { font-weight: 600; }
 .sp__guides, .sp__resources { display: flex; flex-direction: column; gap: 16px; }
+.sp__guide-action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 40px; padding: 8px 12px; border: 1px solid var(--nt-line); border-radius: 999px; background: var(--nt-white); color: var(--nt-ink); font: inherit; font-size: 0.875rem; font-weight: 500; line-height: 1.4; text-decoration: none; cursor: pointer; transition: background-color 150ms, border-color 150ms, color 150ms; }
+.sp__guide-action :deep(svg) { flex-shrink: 0; color: var(--nt-muted); }
+.sp__guide-action:hover { border-color: var(--nt-plum); background: #f3eef4; color: var(--nt-plum); }
+.sp__guide-action:hover :deep(svg) { color: var(--nt-plum); }
+.sp__guide-action:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .sp__guide-action { transition: none; } }
+.sp__guide-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 .sp__guides-note { padding-top: 4px; }
 
 .sp__acc { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; margin: 0; padding: 0; list-style: none; }

@@ -176,21 +176,14 @@ function openForm() {
   message.value = "";
   roomsStore.writeError = "";
   formOpen.value = true;
-  nextTick(() => panel.value?.focus?.());
+  nextTick(() => panel.value?.showModal());
 }
 function closeForm() {
   if (saving.value) return;
+  panel.value?.close();
   formOpen.value = false;
   nextTick(() => addButton.value?.focus());
 }
-function onKeydown(event) {
-  if (event.key === "Escape" && formOpen.value) closeForm();
-}
-watch(formOpen, (open) => {
-  if (open) window.addEventListener("keydown", onKeydown);
-  else window.removeEventListener("keydown", onKeydown);
-});
-onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
 const router = useRouter();
 const SUPPORT_TABS = [
@@ -207,6 +200,10 @@ watch(supportTab, (id) => {
 
 <template>
   <div class="pr pr--list">
+    <!-- <header class="pr__head">
+      <h1 class="nt-title pr__title">Support</h1>
+      <p class="sp__sub">Guides and trusted contacts.</p>
+    </header> -->
     <section class="pr__side" aria-label="Pumping room list">
       <div class="pr__scroll">
         <Tabs
@@ -217,6 +214,7 @@ watch(supportTab, (id) => {
         />
         <header class="pr__head">
           <h1 class="nt-title pr__title">Find a pumping room</h1>
+          <AppButton v-if="isAdmin" class="pr__header-add" size="sm" @click="openForm">Add a room</AppButton>
         </header>
 
         <div class="pr__field pr__field--plain">
@@ -259,7 +257,7 @@ watch(supportTab, (id) => {
           <OneMapEmbed :lat="embed.lat" :lng="embed.lng" :label="embed.label" />
         </section>
 
-        <div class="pr__foot">
+        <div v-if="!isAdmin" class="pr__foot">
           <p class="pr__muted pr__note">
             Verified rooms are from the Breastfeeding Mothers' Support Group directory. Know another room?
             <button ref="addButton" type="button" class="app-textbtn pr__add" @click="openForm">Add it<span class="visually-hidden"> (add a room)</span></button>.
@@ -311,7 +309,7 @@ watch(supportTab, (id) => {
       </div>
 
       <RoomManager v-if="isAdmin" ref="manager" />
-      <section v-if="formOpen" ref="panel" class="pr__panel" tabindex="-1" aria-labelledby="pr-add-title">
+      <dialog v-if="formOpen" ref="panel" class="pr__panel" aria-labelledby="pr-add-title" @cancel.prevent="closeForm">
         <div class="pr__panel-head">
           <h2 id="pr-add-title" class="nt-heading nt-heading--sm">Add a pumping room</h2>
           <button type="button" class="pr__x" aria-label="Close add a room" @click="closeForm"><Icon name="close" :size="18" /></button>
@@ -323,8 +321,12 @@ watch(supportTab, (id) => {
             <input id="pr-name" v-model.trim="draft.name" class="form-control" required maxlength="80" :disabled="saving" />
           </div>
           <div class="pr__f">
-            <label class="pr__flabel" for="pr-address">Full address</label>
-            <textarea id="pr-address" v-model.trim="draft.address" class="form-control" required maxlength="200" rows="2" :disabled="saving" />
+            <label class="pr__flabel" for="pr-address">Address (including postal code)</label>
+            <input id="pr-address" v-model.trim="draft.address" class="form-control" required maxlength="200" placeholder="e.g. 1 Example Road, Singapore 012345" :disabled="saving" />
+          </div>
+          <div class="pr__f">
+            <label class="pr__flabel" for="pr-details">Location details</label>
+            <textarea id="pr-details" v-model.trim="draft.details" class="form-control" required maxlength="200" placeholder="Level and directions to the room" :disabled="saving" />
           </div>
           <div class="pr__f">
             <label class="pr__flabel" for="pr-type">Room type</label>
@@ -337,7 +339,7 @@ watch(supportTab, (id) => {
             </select>
           </div>
           <fieldset class="pr__f pr__features" :disabled="saving" aria-describedby="pr-features-hint">
-            <legend class="pr__flabel">Feature tags</legend>
+            <legend class="pr__flabel">Features</legend>
             <p id="pr-features-hint" class="pr__muted">Select all the features available.</p>
             <div class="pr__chips">
               <label v-for="[key, label] in ROOM_FEATURES" :key="key" class="pr__feature">
@@ -350,10 +352,6 @@ watch(supportTab, (id) => {
             </div>
           </fieldset>
           <div class="pr__f">
-            <label class="pr__flabel" for="pr-details">Description of features</label>
-            <textarea id="pr-details" v-model.trim="draft.details" class="form-control" required maxlength="200" rows="3" :disabled="saving" />
-          </div>
-          <div class="pr__f">
             <label class="pr__flabel" for="pr-feedback">Parent feedback (optional)</label>
             <textarea id="pr-feedback" v-model.trim="draft.feedback" class="form-control" maxlength="400" rows="3" :disabled="saving" />
           </div>
@@ -363,7 +361,7 @@ watch(supportTab, (id) => {
             <AppButton variant="outline" size="sm" :disabled="saving" @click="closeForm">Cancel</AppButton>
           </div>
         </form>
-      </section>
+      </dialog>
     </section>
 
   </div>
@@ -374,7 +372,15 @@ watch(supportTab, (id) => {
 .pr__side { position: relative; min-width: 0; border-right: 1px solid var(--nt-line); overflow: hidden; }
 .pr__scroll { height: 100%; overflow-y: auto; padding: 32px 0 24px; }
 .pr__scroll > :deep(.apptabs) { margin: 0 24px; }
-.pr__head { padding: 24px 24px 0; }
+/* .pr__head { display: flex; flex-direction: column; gap: 8px; } */
+
+/* .sp { display: flex; flex-direction: column; gap: 24px; font-size: 1rem; }
+.sp__head { display: flex; flex-direction: column; gap: 8px; }
+.sp__title { font-size: 2.5rem; line-height: 1.2; }
+.sp__sub { margin: 0; color: var(--nt-muted); }
+.sp__muted { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); } */
+.pr__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px 24px 0; }
+.pr__header-add { flex-shrink: 0; white-space: nowrap; }
 .pr__title { margin: 0; font-size: 1.75rem; line-height: 1.25; }
 .pr__field { position: relative; margin: 24px 24px 8px; }
 .pr__input { width: 100%; padding: 24px 44px 8px 16px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 8px; font: inherit; font-size: 0.875rem; color: var(--nt-ink); }
@@ -400,20 +406,24 @@ watch(supportTab, (id) => {
 .pr__add { font-size: 0.875rem; }
 .pr__add:focus-visible, .pr__x:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 
-.pr__panel { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; gap: 12px; padding: 32px 24px; overflow-y: auto; background: var(--nt-white); }
+.pr__panel { display: flex; flex-direction: column; gap: 16px; padding: 24px; overflow-y: auto; color: var(--nt-ink); background: var(--nt-white); }
+.pr__panel::backdrop { background: rgb(0 0 0 / 35%); }
 .pr__panel:focus { outline: none; }
 .pr__panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .pr__panel-head h2 { margin: 0; }
 .pr__x { display: inline-flex; padding: 6px; background: transparent; border: 0; border-radius: 8px; color: var(--nt-muted); cursor: pointer; }
 .pr__x:hover { background: var(--nt-gray); color: var(--nt-ink); }
-.pr__form { display: flex; flex-direction: column; gap: 16px; }
-.pr__f { display: flex; flex-direction: column; gap: 6px; }
+.pr__form { display: flex; flex-direction: column; gap: 16px; margin: 0; }
+.pr__f { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.pr__f > label { margin: 0; }
+.pr__f > input, .pr__f > select, .pr__f > textarea { margin: 0; padding: 10px 12px; }
+.pr__form > p { margin: 0; }
 .pr__flabel { font-size: 0.875rem; font-weight: 600; color: var(--nt-ink); }
 .pr__picked { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; background: var(--nt-gray); border-radius: 8px; font-size: 0.875rem; }
 .pr__picked span { color: var(--nt-muted); }
 .pr__features { margin: 0; padding: 0; border: 0; min-width: 0; }
-.pr__features legend { float: none; width: auto; margin-bottom: 0; }
-.pr__chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.pr__features legend { float: none; width: auto; margin: 0 0 8px; }
+.pr__chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
 .pr__feature { position: relative; cursor: pointer; }
 .pr__feature-input { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .pr__feature-pill { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--nt-line); border-radius: 999px; background: var(--nt-white); color: var(--nt-muted); font-size: 0.875rem; font-weight: 500; line-height: 1.4; transition: background-color 150ms, border-color 150ms, color 150ms; }
@@ -437,7 +447,7 @@ watch(supportTab, (id) => {
 .pr--list .pr__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 24px; border-top: 0; }
 .pr--list .pr__list :deep(.rc) { background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
 .pr--list .pr__list :deep(.rc--on) { border-left: 3px solid var(--nt-plum); }
-.pr--list .pr__panel { position: fixed; inset: auto; top: 10vh; left: 50%; transform: translateX(-50%); width: min(480px, calc(100vw - 32px)); max-height: 80vh; border: 1px solid var(--nt-line); border-radius: 12px; }
+.pr--list .pr__panel { position: fixed; inset: 0; margin: auto; width: min(480px, calc(100vw - 32px)); max-height: 85vh; border: 1px solid var(--nt-line); border-radius: 12px; }
 
 @media (max-width: 991px) {
   .pr--list .pr__list { grid-template-columns: minmax(0, 1fr); }
