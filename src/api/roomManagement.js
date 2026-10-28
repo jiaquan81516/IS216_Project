@@ -22,8 +22,10 @@ export async function saveManagedRoom(uid, room, deleted = false) {
   const name = String(room.name ?? "").trim();
   const address = String(room.address ?? "").trim();
   const details = String(room.details ?? "").trim();
+  const roomType = String(room.roomType ?? "").trim();
+  const feedback = String(room.feedback ?? "").trim();
   if (!uid || !name || name.length > 80 || !address || address.length > 200 ||
-      !details || details.length > 200) {
+      !details || details.length > 200 || roomType.length > 80 || feedback.length > 400) {
     const error = new Error("Enter a name, address and location details within the field limits.");
     error.code = "rooms/invalid-input";
     throw error;
@@ -32,7 +34,7 @@ export async function saveManagedRoom(uid, room, deleted = false) {
   const { lat, lng } = await resolveRoomLocation(address);
   const target = room.id ? doc(rooms(), room.id) : doc(rooms());
   await setDoc(target, {
-    name, address, details, lat, lng,
+    name, address, details, roomType, feedback, lat, lng,
     features: featureMap(room.features),
     status: room.status === "verified" ? "verified" : "unverified",
     verifiedAt: room.status === "verified" ? (room.verifiedAt || serverTimestamp()) : null,

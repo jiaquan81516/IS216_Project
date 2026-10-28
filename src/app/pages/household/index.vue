@@ -289,23 +289,12 @@ async function copyCode() {
         </div>
       </div>
 
-      <aside class="hh__aside" aria-labelledby="shared-title">
-        <h2 id="shared-title" class="hh__aside-title">What is shared?</h2>
-        <div class="hh__shared">
-          <p class="hh__shared-label">Shared</p>
-          <p class="hh__shared-text">Care logs, tasks, appointments and return-to-work plans.</p>
-        </div>
-        <div class="hh__private">
-          <p class="hh__private-label">Private</p>
-          <p class="hh__private-text">Wellness check-ins and personal reflections.</p>
-        </div>
-      </aside>
     </div>
   </main>
 </template>
 
 <style scoped>
-.hh { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 32px; align-items: start; }
+.hh { width: 100%; }
 .hh__card { width: 100%; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
 .hh__main { min-width: 0; }
 .hh__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: 100%; }
@@ -313,14 +302,6 @@ async function copyCode() {
 .hh__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .hh__code-text { margin: 0; font-family: var(--nt-serif); font-size: 40px; line-height: normal; letter-spacing: 0.8px; color: var(--nt-plum); }
 
-.hh__aside { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 20px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
-.hh__aside-title { margin: 0; font-size: 1.125rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
-.hh__shared { display: flex; flex-direction: column; gap: 4px; padding-bottom: 20px; border-bottom: 1px solid var(--nt-line); }
-.hh__shared-label { margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--nt-ink); }
-.hh__shared-text { margin: 0; font-size: 0.875rem; line-height: 21px; color: var(--nt-muted); }
-.hh__private { display: flex; flex-direction: column; gap: 6px; padding: 16px 16px 18px; background: var(--nt-butter); border: 1.5px dashed var(--nt-butter-d); border-radius: 8px; font-size: 0.875rem; }
-.hh__private-label { margin: 0; font-weight: 600; color: var(--nt-butter-d); }
-.hh__private-text { margin: 0; line-height: 21px; color: var(--nt-ink); }
 .hh__baby { width: 100%; padding: 20px 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
 .hh__baby-title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.4; color: var(--nt-ink); }
 @media (max-width: 575px) { .hh__baby { padding: 16px; } }
@@ -328,10 +309,6 @@ async function copyCode() {
 .hh__babies { display: flex; flex-direction: column; gap: 12px; width: 100%; }
 .hh__babies-title { margin: 0; font-size: 1rem; font-weight: 600; color: var(--nt-ink); }
 
-@media (max-width: 1099px) {
-  .hh { grid-template-columns: minmax(0, 1fr); gap: 32px; }
-  .hh__aside { position: static; }
-}
 @media (max-width: 575px) {
   .hh__options { grid-template-columns: minmax(0, 1fr); }
   .hh__code { padding: 24px; }

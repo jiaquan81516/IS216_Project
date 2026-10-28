@@ -161,6 +161,19 @@ export async function notifyPartner(householdId, type, id) {
   }
 }
 
+// Administrator side: tells the server a room was just rejected so it can notify whoever
+// suggested it. Carries only the room id. Fire and forget, like notifyPartner.
+export async function notifyRoomRejected(roomId) {
+  if (!roomId) return false;
+  try {
+    await callServer("rooms/notify", { body: { roomId } });
+    return true;
+  } catch (cause) {
+    if (!isServerUnreachable(cause)) console.error(TAG, cause?.code, cause);
+    return false;
+  }
+}
+
 // Messages the service worker hands to a visible tab: { source: "nt-push", title, body, url,
 // type } when a push arrives, { source: "nt-push-open", url, type } after a tap on a system
 // notification. Returns a function that stops listening.

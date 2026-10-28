@@ -12,6 +12,26 @@ import { takeLimit } from "@/app/utils/limits";
 // src/app/data/pumpingRooms.js, which are clearly marked as seed data and cannot be reported.
 export const useRoomsStore = defineStore("app-rooms", () => {
   const docs = ref([]);
+  // Rejected rooms the parent has closed the message for. Kept on this device, per account.
+  const dismissed = ref([]);
+  const dismissKey = () => `nt.app.rooms-dismissed:${uid() || "guest"}`;
+  function loadDismissed() {
+    try {
+      const list = JSON.parse(localStorage.getItem(dismissKey()) ?? "[]");
+      dismissed.value = Array.isArray(list) ? list.filter((id) => typeof id === "string") : [];
+    } catch {
+      dismissed.value = [];
+    }
+  }
+  function dismissSubmission(roomId) {
+    if (!roomId || dismissed.value.includes(roomId)) return;
+    dismissed.value = [...dismissed.value, roomId].slice(-100);
+    try {
+      localStorage.setItem(dismissKey(), JSON.stringify(dismissed.value));
+    } catch {
+      // The message still closes for this visit.
+    }
+  }
   const loading = ref(true);
   const error = ref(null);
   const writeError = ref("");
@@ -21,11 +41,27 @@ export const useRoomsStore = defineStore("app-rooms", () => {
   const fromFirestore = computed(() =>
     docs.value.filter((d) => d.approval !== "pending" && d.approval !== "rejected").map((d) => roomView(d.id, d)),
   );
+  // The signed-in parent's own suggestions that are not live: waiting, or rejected with a reason.
+  const submissions = computed(() =>
+    docs.value
+      .filter((d) => d.createdBy && d.createdBy === uid() && (d.approval === "pending" || (d.approval === "rejected" && !dismissed.value.includes(d.id))))
+      .map((d) => ({
+        id: d.id,
+        name: String(d.name ?? ""),
+        address: String(d.address ?? ""),
+        approval: d.approval,
+        reviewNote: String(d.reviewNote ?? "").trim(),
+        reviewedAt: d.reviewedAt ?? null,
+        createdAt: d.createdAt ?? null,
+      }))
+      .sort((a, b) => (a.approval === b.approval ? 0 : a.approval === "rejected" ? -1 : 1)),
+  );
   const usingSeed = computed(() => fromFirestore.value.length === 0);
   const rooms = computed(() => (usingSeed.value ? SEED_ROOMS : fromFirestore.value));
 
   function bind() {
     if (stop) return;
+    loadDismissed();
     loading.value = true;
     error.value = null;
     stop = subscribeRooms(
@@ -98,5 +134,5 @@ export const useRoomsStore = defineStore("app-rooms", () => {
     }
   }
 
-  return { rooms, docs, usingSeed, loading, error, writeError, bind, unbind, addRoom, reportRoom };
+  return { rooms, submissions, dismissSubmission, docs, usingSeed, loading, error, writeError, bind, unbind, addRoom, reportRoom };
 });

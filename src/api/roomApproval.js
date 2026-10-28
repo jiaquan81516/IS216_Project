@@ -5,6 +5,7 @@
 // feature have no approval field and count as approved.
 import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
 import { db } from "./db";
+import { notifyRoomRejected } from "./push";
 
 export const REVIEW_NOTE_MAX = 200;
 
@@ -49,4 +50,6 @@ export async function reviewRoom(uid, roomId, decision, note = "") {
   const cleanNote = String(note ?? "").trim().slice(0, REVIEW_NOTE_MAX);
   if (decision === "rejected" && cleanNote) data.reviewNote = cleanNote;
   await updateDoc(doc(roomsRef(), roomId), data);
+  // Tell the parent who suggested it. A failed or skipped notification never undoes the review.
+  if (decision === "rejected") notifyRoomRejected(roomId);
 }

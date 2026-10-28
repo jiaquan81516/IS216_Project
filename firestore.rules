@@ -55,13 +55,17 @@ service cloud.firestore {
           (request.resource.data.deleted == true
             && request.resource.data.keys().hasOnly(['deleted', 'updatedBy', 'updatedAt']))
           || (request.resource.data.deleted == false
-            && request.resource.data.keys().hasOnly(['name', 'address', 'details', 'lat', 'lng', 'features', 'status', 'verifiedAt', 'deleted', 'updatedBy', 'updatedAt'])
+            && request.resource.data.keys().hasOnly(['name', 'address', 'details', 'roomType', 'feedback', 'lat', 'lng', 'features', 'status', 'verifiedAt', 'deleted', 'updatedBy', 'updatedAt'])
             && request.resource.data.name is string
             && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80
             && request.resource.data.address is string
             && request.resource.data.address.size() > 0 && request.resource.data.address.size() <= 200
             && request.resource.data.details is string
             && request.resource.data.details.size() > 0 && request.resource.data.details.size() <= 200
+            && request.resource.data.roomType is string
+            && request.resource.data.roomType.size() <= 80
+            && request.resource.data.feedback is string
+            && request.resource.data.feedback.size() <= 400
             && request.resource.data.lat is number
             && request.resource.data.lat >= -90 && request.resource.data.lat <= 90
             && request.resource.data.lng is number
