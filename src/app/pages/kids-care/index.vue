@@ -1,4 +1,5 @@
 <script setup>
+import SkeletonList from "@/app/components/SkeletonList.vue";
 import "@/app/app.css";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -224,7 +225,7 @@ const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
     </ul>
     <div v-else class="kc__empty">
       <template v-if="view === 'clinics' && clinicsState === 'loading'">
-        <p class="kc__muted">Loading clinics.</p>
+        <SkeletonList :rows="3" :height="88" label="Loading clinics" />
       </template>
       <template v-else-if="view === 'clinics' && !clinics.length">
         <h2 class="nt-heading nt-heading--sm">The clinic list is not available yet</h2>

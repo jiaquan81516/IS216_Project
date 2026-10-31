@@ -1,4 +1,5 @@
 <script setup>
+import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
 import { computed, inject, nextTick, reactive, ref } from "vue";
 import { RouterLink } from "vue-router";
@@ -198,7 +199,7 @@ function confirmDelete(task) {
     <Tabs v-model="tab" :tabs="TABS" label="Return to work sections" id-base="rtw" />
 
     <div aria-live="polite">
-      <p v-if="loading" class="rw__muted">Loading the plan...</p>
+      <LoadingScreen v-if="loading" variant="inline" label="Loading the plan" />
     </div>
 
     <div v-if="!loading && errorInfo" class="rw__error alert alert-danger" role="alert">

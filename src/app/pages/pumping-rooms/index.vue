@@ -1,4 +1,6 @@
 <script setup>
+import Collapse from "@/app/components/Collapse.vue";
+import SkeletonList from "@/app/components/SkeletonList.vue";
 import "@/app/app.css";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -22,6 +24,7 @@ import { SEED_COORDS } from "@/app/data/pumpingRooms";
 import { BASEMENT_FLOORS, ROOM_FEATURES, UPPER_FLOORS, roomDetails } from "@/app/utils/roomHelpers";
 import { useRoomsStore } from "@/app/stores/rooms";
 import { useSavedPlaces } from "@/app/composables/useSavedPlaces";
+import { useToast } from "@/app/composables/useToast";
 import { useLocate } from "@/app/composables/useLocate";
 import { useAuth } from "@/composables/useAuth";
 import RoomManager from "@/app/components/RoomManager.vue";
@@ -32,6 +35,8 @@ import { resolveRoomLocation, searchPlaces } from "@/api/roomLocation";
 import { applyRoomOverrides } from "@/app/utils/roomManagement";
 
 defineOptions({ name: "PumpingRoomsPage" });
+// Inside the Support page the header and tabs belong to that page, so this one leaves them out.
+defineProps({ embedded: { type: Boolean, default: false } });
 
 
 const SAVED_ROOMS_KEY = "nurturetrack:saved-pumping-rooms";
@@ -57,6 +62,7 @@ const origin = ref({ ...DEFAULT_CENTER });
 const originLabel = ref("in Singapore");
 
 const { savedIds, toggleSaved } = useSavedPlaces(SAVED_ROOMS_KEY);
+const { showToast } = useToast();
 
 // Rooms: database rooms first, then the BMSG directory rooms, de-duplicated.
 const allRooms = computed(() => mergeRooms(applyRoomOverrides(
@@ -153,7 +159,8 @@ const canConfirm = (room) =>
   !isAdmin.value && !!room.createdBy && room.createdBy !== currentUser.value?.uid && room.approval === "approved" && room.status !== "verified";
 async function confirmRoom(room) {
   message.value = "";
-  if (await roomsStore.reportRoom(room.id, "confirm")) message.value = `Thanks. ${room.name} is now marked as verified.`;
+  if (await roomsStore.reportRoom(room.id, "confirm")) showToast({ title: "Thanks for confirming", text: `${room.name} is now marked as verified.` });
+  else showToast({ kind: "error", title: "Could not confirm", text: "Check your connection and try again." });
 }
 
 const emptyRoom = () => ({ name: "", address: "", lat: null, lng: null, roomType: "", features: [], floor: "", near: "", feedback: "" });
@@ -182,7 +189,7 @@ async function submitRoom() {
     if (isAdmin.value) {
       await saveManagedRoom(currentUser.value?.uid, { ...payload, status: "unverified" });
       viewAll();
-      message.value = `${payload.name} has been added to the live directory.`;
+      showToast({ title: "Room saved", text: `${payload.name} is now in the live directory.` });
       draft.value = emptyRoom();
       saving.value = false;
       closeForm();
@@ -192,7 +199,7 @@ async function submitRoom() {
     if (!room) return;
     viewAll();
     selectedId.value = room.id;
-    message.value = `${room.name} has been added. An administrator reviews it first; until then only you can see it.`;
+    showToast({ title: "Room saved", text: `${room.name} was added. An administrator reviews it first, and until then only you can see it.` });
     draft.value = emptyRoom();
     saving.value = false;
     closeForm();
@@ -200,6 +207,7 @@ async function submitRoom() {
     roomsStore.writeError = cause?.code === "rooms/invalid-input"
       ? cause.message
       : "We could not save that room. Check the details and your connection, then try again.";
+    showToast({ kind: "error", title: "Room not saved", text: "Check the details and your connection, then try again." });
   } finally {
     saving.value = false;
   }
@@ -244,15 +252,20 @@ watch(supportTab, (id) => {
   <div class="pr pr--list">
     <section class="pr__side" aria-label="Pumping room list">
       <div class="pr__scroll">
+        <!-- Same header and tab strip as the Support page, so the tabs do not move between pages. -->
+        <header v-if="!isAdmin && !embedded" class="pr__page">
+          <h1 class="nt-title pr__pagetitle">Support</h1>
+          <p class="pr__pagesub">Guides and trusted contacts.</p>
+        </header>
         <Tabs
-          v-if="!isAdmin"
+          v-if="!isAdmin && !embedded"
           v-model="supportTab"
           :tabs="SUPPORT_TABS"
           label="Support sections"
           id-base="support"
         />
         <header class="pr__head">
-          <h1 class="nt-title pr__title">Find a pumping room</h1>
+          <component :is="isAdmin ? 'h1' : 'h2'" class="nt-title pr__title">Find a pumping room</component>
         </header>
 
         <div class="pr__field pr__field--plain">
@@ -289,7 +302,7 @@ watch(supportTab, (id) => {
             Filter<template v-if="filterCount"> ({{ filterCount }})</template>
           </AppButton>
         </div>
-        <RoomFilterPanel v-if="filterOpen" id="pr-filters" v-model="filters" />
+        <Collapse><RoomFilterPanel v-if="filterOpen" id="pr-filters" v-model="filters" /></Collapse>
 
         <section class="pr__mapslot" aria-label="Map">
           <OneMapEmbed :lat="embed.lat" :lng="embed.lng" :label="embed.label" />
@@ -315,7 +328,7 @@ watch(supportTab, (id) => {
 
         <section v-if="!isAdmin && roomsStore.submissions.length" class="pr__subs" aria-labelledby="pr-subs-title">
           <h2 id="pr-subs-title" class="nt-heading nt-heading--sm">Your suggestions</h2>
-          <ul class="pr__sublist">
+          <TransitionGroup tag="ul" name="li" class="pr__sublist">
             <li v-for="s in roomsStore.submissions" :key="s.id" class="pr__sub" :class="{ 'pr__sub--no': s.approval === 'rejected' }">
               <div class="pr__subhead">
                 <strong>{{ s.name }}</strong>
@@ -335,10 +348,11 @@ watch(supportTab, (id) => {
                 <template v-else>No reason was given. Check the address and details, then add the room again.</template>
               </p>
             </li>
-          </ul>
+          </TransitionGroup>
         </section>
 
-        <ul v-if="visible.length" class="pr__list" aria-label="Pumping rooms">
+        <div v-if="roomsStore.loading && !roomsError" class="pr__pad pr__skel"><SkeletonList :rows="3" :height="140" label="Loading pumping rooms" /></div>
+        <TransitionGroup tag="ul" name="li" v-else-if="visible.length" class="pr__list" aria-label="Pumping rooms">
           <RoomCard
             v-for="room in visible"
             :key="room.id"
@@ -354,7 +368,7 @@ watch(supportTab, (id) => {
             @toggle-save="toggleSaved"
             @confirm="confirmRoom"
           />
-        </ul>
+        </TransitionGroup>
         <div v-else class="pr__empty">
           <h2 class="nt-heading nt-heading--sm">{{ view === "saved" ? "No saved places yet" : "No rooms match" }}</h2>
           <p class="pr__muted">
@@ -371,6 +385,7 @@ watch(supportTab, (id) => {
       </div>
 
       <RoomManager v-if="isAdmin" ref="manager" />
+      <Transition name="panel-rise">
       <section v-if="formOpen" ref="panel" class="pr__panel" tabindex="-1" aria-labelledby="pr-add-title">
         <div class="pr__panel-head">
           <h2 id="pr-add-title" class="nt-heading nt-heading--sm">Add a pumping room</h2>
@@ -444,6 +459,7 @@ watch(supportTab, (id) => {
           </div>
         </form>
       </section>
+      </Transition>
     </section>
 
   </div>
@@ -470,6 +486,7 @@ watch(supportTab, (id) => {
 .pr__status { padding: 0 24px 12px; }
 .pr__pad { padding: 0 24px; }
 .pr__muted { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-muted); }
+.pr__skel { padding-bottom: 16px; }
 .pr__subs { display: flex; flex-direction: column; gap: 10px; padding: 0 24px 16px; }
 .pr__sublist { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .pr__sub { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
@@ -524,21 +541,36 @@ watch(supportTab, (id) => {
 .pr--list .pr__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 24px; border-top: 0; }
 .pr--list .pr__list :deep(.rc) { background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
 .pr--list .pr__list :deep(.rc--on) { border-left: 3px solid var(--nt-plum); }
+.panel-rise-enter-active, .panel-rise-leave-active { transition: opacity 220ms ease, transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1); }
+.pr--list .pr__panel.panel-rise-enter-from, .pr--list .pr__panel.panel-rise-leave-to { opacity: 0; transform: translateX(-50%) translateY(16px); }
+@media (prefers-reduced-motion: reduce) { .panel-rise-enter-active, .panel-rise-leave-active { transition: none; } }
 .pr--list .pr__panel { position: fixed; inset: auto; top: 10vh; left: 50%; transform: translateX(-50%); width: min(480px, calc(100vw - 32px)); max-height: 80vh; border: 1px solid var(--nt-line); border-radius: 12px; }
+
+/* Line this page up with the Support page: same width, no extra inset, no forced full height,
+   so switching tabs does not move the header, the tabs or the page. */
+.pr--list { min-height: 0; background: none; }
+.pr--list .pr__scroll { max-width: none; margin: 0; padding: 0; }
+.pr--list .pr__scroll > :deep(.apptabs) { margin: 0 0 24px; }
+.pr__page { display: flex; flex-direction: column; gap: 8px; margin: 0 0 24px; }
+.pr__pagetitle { margin: 0; font-size: 2.5rem; line-height: 1.2; }
+.pr__pagesub { margin: 0; color: var(--nt-muted); }
+.pr--list .pr__head { padding: 0; }
+.pr--list .pr__field { margin-left: 0; margin-right: 0; }
+.pr--list .pr__notice { margin-left: 0; margin-right: 0; }
+.pr--list .pr__bar,
+.pr--list .pr__views,
+.pr--list .pr__status,
+.pr--list .pr__pad,
+.pr--list .pr__mapslot,
+.pr--list .pr__subs,
+.pr--list .pr__foot,
+.pr--list .pr__empty,
+.pr--list .pr__list { padding-left: 0; padding-right: 0; }
 
 @media (max-width: 991px) {
   .pr--list .pr__list { grid-template-columns: minmax(0, 1fr); }
   .pr { display: flex; flex-direction: column; height: auto; }
   .pr__side { border-right: 0; border-bottom: 1px solid var(--nt-line); overflow: visible; }
   .pr__scroll { height: auto; overflow: visible; }
-}
-</style>
-
-<style>
-/* Make the page span the whole content area of the app shell (full width, no padding). */
-.appshell__main:has(.pr) { padding: 0; }
-.appshell__main:has(.pr) .appshell__content { max-width: none; }
-@media (max-width: 991px) {
-  .appshell__main:has(.pr) { padding: 0 0 48px; }
 }
 </style>

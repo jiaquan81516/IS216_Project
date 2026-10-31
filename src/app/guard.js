@@ -3,6 +3,9 @@ import { getCaregiverHouseholds, getMember, getUserProfile } from "@/api/profile
 import { withTimeout } from "@/app/utils/timeout";
 import { ROUTES } from "@/app/routes";
 import { hasAdminClaim } from "@/api/adminAccess";
+import { START_LOCATION } from "vue-router";
+import { useOnboarding } from "@/app/stores/onboarding";
+import { directionBetween, routeMotion, setStepDirection } from "@/app/utils/routeMotion";
 
 // App pages that need sign in and a household (same rules as Home).
 const GUARDED_APP_PATHS = new Set([
@@ -24,8 +27,31 @@ const SETUP_PATHS = new Set([
   ROUTES.JOURNEY, ROUTES.ROLE, ROUTES.ACCOUNT, ROUTES.SIGN_IN, ROUTES.HOUSEHOLD,
 ]);
 
+// True when the sign up form on the account step has been filled in (held in memory only).
+function hasAccountDraft() {
+  try {
+    return useOnboarding().hasAccount;
+  } catch {
+    return false;
+  }
+}
+
 // Authentication and household rules for the current app routes.
 export function installGuard(router) {
+  // First in line, so it runs before the checks below wait on Firebase: the app shows a
+  // loading screen while a page change is slow, and the sign up steps know which way to slide.
+  router.beforeEach((to, from) => {
+    routeMotion.initial = from === START_LOCATION;
+    routeMotion.pending = true;
+    setStepDirection(directionBetween(from?.path, to?.path));
+  });
+  router.afterEach?.(() => {
+    routeMotion.pending = false;
+  });
+  router.onError?.(() => {
+    routeMotion.pending = false;
+  });
+
   router.beforeEach(async (to) => {
     // The admin pages: only a signed in administrator sees the admin view, and an administrator
     // who is already signed in does not need the admin sign in page again.
@@ -49,7 +75,12 @@ export function installGuard(router) {
     if (to.path === ROUTES.HOUSEHOLD) {
       await waitForAuthInitialization();
       const { isAuthenticated, currentUser } = useAuth();
-      if (!isAuthenticated.value) return { path: ROUTES.SIGN_IN, query: to.query.code ? { code: to.query.code } : {} };
+      // Sign up creates the account at the last step, so a person with details filled in on the
+      // account step may arrive here before they are signed in.
+      if (!isAuthenticated.value) {
+        if (hasAccountDraft()) return true;
+        return { path: ROUTES.SIGN_IN, query: to.query.code ? { code: to.query.code } : {} };
+      }
       try {
         const profile = await withTimeout(getUserProfile(currentUser.value.uid), 2500);
         let member = null;

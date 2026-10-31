@@ -94,6 +94,7 @@ onBeforeUnmount(() => {
       <span class="visually-hidden">Account menu</span>
     </button>
 
+    <Transition name="um-pop">
     <div v-if="open" id="app-user-menu" ref="panel" class="um__panel" role="menu" aria-label="Account">
       <RouterLink v-for="link in links" :key="link.to" :to="link.to" class="um__item" role="menuitem">
         {{ link.label }}
@@ -102,6 +103,7 @@ onBeforeUnmount(() => {
         Sign out
       </button>
     </div>
+    </Transition>
   </div>
 </template>
 
@@ -176,4 +178,9 @@ onBeforeUnmount(() => {
   outline: 2px solid var(--nt-plum);
   outline-offset: -2px;
 }
+.um-pop-enter-active,
+.um-pop-leave-active { transition: opacity 140ms ease, transform 160ms ease; }
+.um-pop-enter-from,
+.um-pop-leave-to { opacity: 0; transform: translateY(-4px); }
+@media (prefers-reduced-motion: reduce) { .um-pop-enter-active, .um-pop-leave-active { transition: none; } }
 </style>

@@ -1,4 +1,5 @@
 <script setup>
+import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
 import { computed, inject, nextTick, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -114,7 +115,7 @@ async function save() {
       <p class="pf__sub">The name and role your partner sees.</p>
     </header>
 
-    <p v-if="loading" class="pf__muted" aria-live="polite">Loading...</p>
+    <LoadingScreen v-if="loading" variant="inline" label="Loading" />
 
     <div v-else-if="error" role="alert" class="pf__alert">
       <p class="pf__text">{{ error }}</p>

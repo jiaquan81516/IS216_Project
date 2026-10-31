@@ -18,7 +18,7 @@ const router = createRouter({
     ...(ROUTES.ADMIN_SIGN_IN
       ? [{ path: ROUTES.ADMIN_SIGN_IN, name: "admin-sign-in", component: appPage("sign-in-admin"), meta: { public: true } }]
       : []),
-    { path: ROUTES.HOUSEHOLD, name: "household", component: appPage("household"), meta: { requiresAuth: true } },
+    { path: ROUTES.HOUSEHOLD, name: "household", component: appPage("household"), meta: { public: true } },
     { path: ROUTES.CARE_BRIEF, name: "care-brief", component: appPage("care-brief"), meta: { requiresAuth: true } },
 
     // Invitation links remain valid and open the current household flow.
@@ -39,8 +39,10 @@ const router = createRouter({
         { path: "checklist", name: "checklist", component: appPage("checklist") },
         { path: "rota", name: "rota", component: appPage("rota") },
         { path: "wellness", name: "wellness", component: appPage("wellness") },
-        { path: "support", name: "support", component: appPage("support") },
-        { path: "support/rooms", name: "pumping-rooms", component: appPage("pumping-rooms") },
+        // Support and Pumping rooms are tabs of one page, so switching between them keeps the page
+        // (and its header and tabs) in place. pageKey tells the shell they are the same page.
+        { path: "support", name: "support", component: appPage("support"), meta: { pageKey: "support" } },
+        { path: "support/rooms", name: "pumping-rooms", component: appPage("support"), meta: { pageKey: "support" } },
         { path: "support/kids-care", name: "kids-care", component: appPage("kids-care") },
         { path: "return-to-work", name: "return-to-work", component: appPage("return-to-work") },
         { path: "calendar", name: "calendar", component: appPage("calendar") },

@@ -1,4 +1,5 @@
 <script setup>
+import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import { computed, onMounted, ref, watch } from "vue";
 import AppButton from "@/components/ui/AppButton.vue";
 import Toggle from "@/app/components/Toggle.vue";
@@ -233,7 +234,7 @@ onMounted(refresh);
 <template>
   <div class="caregivers">
     <p class="cg__intro">Invite trusted people with a role-based starting point, then choose exactly what they can see. You can add more or change access later.</p>
-    <p v-if="loading" class="cg__muted" aria-live="polite">Loading caregiver access…</p>
+    <LoadingScreen v-if="loading" variant="inline" label="Loading caregiver access" />
     <template v-else>
       <p v-if="error" class="app-error-text" role="alert">{{ error }}</p>
       <p v-if="status" class="cg__muted" role="status">{{ status }}</p>

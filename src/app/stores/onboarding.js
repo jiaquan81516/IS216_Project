@@ -1,4 +1,4 @@
-import { ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { defineStore } from "pinia";
 
 const STORAGE_KEY = "nt.app.draft";
@@ -30,6 +30,11 @@ export const useOnboarding = defineStore("app-onboarding", () => {
   const journey = ref(initial.journey);
   const role = ref(initial.role);
   const name = ref(initial.name);
+  // The email and password are held in memory only, never written to storage, and only until the
+  // account is created at the last setup step.
+  const email = ref("");
+  const password = ref("");
+  const hasAccount = computed(() => Boolean(email.value && password.value));
 
   watch([journey, role, name], () => {
     save({ journey: journey.value, role: role.value, name: name.value });
@@ -43,7 +48,13 @@ export const useOnboarding = defineStore("app-onboarding", () => {
     role.value = value;
   }
 
+  function clearAccount() {
+    email.value = "";
+    password.value = "";
+  }
+
   function reset() {
+    clearAccount();
     journey.value = null;
     role.value = null;
     name.value = "";
@@ -54,5 +65,5 @@ export const useOnboarding = defineStore("app-onboarding", () => {
     }
   }
 
-  return { journey, role, name, setJourney, setRole, reset };
+  return { journey, role, name, email, password, hasAccount, setJourney, setRole, clearAccount, reset };
 });

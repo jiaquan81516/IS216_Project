@@ -50,7 +50,6 @@ const form = reactive({
   owner: "both",
   type: "family",
   notes: "",
-  babyIds: [],
 }); 
 
 const ownerOptions = computed(() => [
@@ -106,13 +105,6 @@ function submit() {
     error.value = problem;
     return;
   } 
-  if (babies.value.length > 1 && !form.babyIds.length) {
-    error.value = "Pick at least one baby.";
-    return;
-  }
-  // All ticked (or only one baby) is saved as [], so a baby added later is included.
-  const babyIds =
-    babies.value.length > 1 && form.babyIds.length < babies.value.length ? [...form.babyIds] : [];
   const payload = {
     id: editId.value || undefined,
     title: draft.title,
@@ -124,7 +116,8 @@ function submit() {
     owner: draft.owner,
     type: draft.type,
     notes: draft.notes.trim(),
-    babyIds: []
+    // Events are not tied to a baby, so they show for the whole household.
+    babyIds: [],
   };
   emit("save", payload);
   cancelForm();
@@ -192,6 +185,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <Transition name="drawer" :duration="{ enter: 320, leave: 240 }">
   <div v-if="open" class="cdp">
     <div class="cdp__backdrop" aria-hidden="true" @click="emit('close')" />
     <section ref="dialog" class="cdp__panel" role="dialog" aria-modal="true" :aria-labelledby="titleId" @keydown="onKeydown">
@@ -211,7 +205,7 @@ onBeforeUnmount(() => {
         <section aria-labelledby="cdp-events">
           <h3 id="cdp-events" class="cdp__sub">Events</h3>
           <p v-if="!events.length" class="cdp__muted">Nothing planned for this day.</p>
-          <ul v-else class="cdp__list">
+          <TransitionGroup tag="ul" name="li" v-else class="cdp__list">
             <li v-for="event in events" :key="event.id" class="cdp__item" :data-event="event.id">
               <div class="cdp__item-main">
                 <p class="cdp__time">{{ eventTimeLabel(event) }}</p>
@@ -243,7 +237,7 @@ onBeforeUnmount(() => {
                 </button>
               </div>
             </li>
-          </ul>
+          </TransitionGroup>
         </section>
 
         <button v-if="!formOpen" type="button" class="btn btn-outline btn-sm cdp__add" @click="startForm()">
@@ -302,14 +296,6 @@ onBeforeUnmount(() => {
             <ChipGroup v-model="form.type" :options="typeOptions" label="Type" />
           </div>
 
-          <fieldset v-if="babies.length > 1" class="cdp__field cdp__babies">
-            <legend class="cdp__label">Which baby?</legend>
-            <label v-for="(b, i) in babies" :key="b.id" class="cdp__check">
-              <input v-model="form.babyIds" type="checkbox" :value="b.id" />
-              <span>{{ babyLabel(b, i) }}</span>
-            </label>
-          </fieldset>
-
           <div class="cdp__field">
             <label class="cdp__label" for="cdp-notes">Notes (optional)</label>
             <textarea id="cdp-notes" v-model="form.notes" class="app-control" rows="2" :maxlength="NOTES_MAX" />
@@ -326,6 +312,7 @@ onBeforeUnmount(() => {
       </div>
     </section>
   </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -369,13 +356,30 @@ onBeforeUnmount(() => {
 .cdp__switch .form-check-label { font-size: 0.9375rem; font-weight: 500; }
 .cdp__count { margin: 0; font-size: 0.875rem; text-align: right; color: var(--nt-muted); }
 .cdp__form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.cdp__babies { margin: 0; padding: 0; border: 0; }
-.cdp__babies .cdp__label { float: none; width: auto; padding: 0; margin: 0; }
-.cdp__check { display: flex; align-items: center; gap: 8px; font-size: 0.9375rem; color: var(--nt-ink); cursor: pointer; }
 
 @media (max-width: 767px) {
   .cdp__panel { top: auto; left: 0; width: 100%; max-height: 92vh; border-left: 0; border-top: 1px solid var(--nt-line); border-radius: 12px 12px 0 0; }
   .cdp__head { padding: 16px; }
   .cdp__body { padding: 16px; }
+}
+/* Slide in from the right and out again, with the backdrop fading, instead of appearing at once. */
+.drawer-enter-active .cdp__panel { transition: transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1); }
+.drawer-leave-active .cdp__panel { transition: transform 240ms cubic-bezier(0.4, 0, 1, 1); }
+.drawer-enter-active .cdp__backdrop { transition: opacity 320ms ease; }
+.drawer-leave-active .cdp__backdrop { transition: opacity 240ms ease; }
+.drawer-enter-from .cdp__panel,
+.drawer-leave-to .cdp__panel { transform: translateX(100%); }
+.drawer-enter-from .cdp__backdrop,
+.drawer-leave-to .cdp__backdrop { opacity: 0; }
+/* On a phone this panel is a bottom sheet, so it rises from the bottom. */
+@media (max-width: 767px) {
+  .drawer-enter-from .cdp__panel,
+  .drawer-leave-to .cdp__panel { transform: translateY(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer-enter-active .cdp__panel,
+  .drawer-leave-active .cdp__panel,
+  .drawer-enter-active .cdp__backdrop,
+  .drawer-leave-active .cdp__backdrop { transition: none; }
 }
 </style>

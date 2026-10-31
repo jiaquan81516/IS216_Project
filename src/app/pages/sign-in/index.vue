@@ -1,12 +1,15 @@
 <script setup>
-import { reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Header from "@/app/components/Header.vue";
 import Field from "@/app/components/Field.vue";
 import GoogleButton from "@/app/components/GoogleButton.vue";
 import OrDivider from "@/app/components/OrDivider.vue";
 import AppLink from "@/components/ui/AppLink.vue";
+import LoadingScreen from "@/app/components/LoadingScreen.vue";
+import { useDelayedFlag } from "@/app/composables/useDelayedFlag";
 import { ROUTES } from "@/app/routes";
+import { SIGN_IN_MESSAGES, WELCOME_MS, waitUntil } from "@/app/utils/pause";
 import { useAuth } from "@/app/composables/useAuth";
 import "@/app/app.css";
 
@@ -15,6 +18,23 @@ defineOptions({ name: "SignInPage" });
 const router = useRouter();
 const route = useRoute();
 const { busy, error, signIn, continueWithGoogle } = useAuth();
+
+// The loading screen stays up through the move to the next page, so there is no blank gap.
+const navigating = ref(false);
+const welcome = ref(false); // the longer "getting ready" screen after a successful sign in
+const working = computed(() => busy.value || navigating.value || welcome.value);
+const showLoader = useDelayedFlag(working);
+async function go(to, startedAt = Date.now()) {
+  navigating.value = true;
+  welcome.value = true;
+  try {
+    await waitUntil(startedAt, WELCOME_MS);
+    await router.push(route.query.code && to === ROUTES.HOUSEHOLD ? { path: to, query: { code: route.query.code } } : to);
+  } finally {
+    navigating.value = false;
+    welcome.value = false;
+  }
+}
 
 const email = ref("");
 const password = ref("");
@@ -30,19 +50,22 @@ async function submit() {
   if (busy.value) return;
   error.value = "";
   if (!validate()) return;
+  const startedAt = Date.now();
   const to = await signIn({ email: email.value.trim(), password: password.value });
-  if (to) router.push(route.query.code && to === ROUTES.HOUSEHOLD ? { path: to, query: { code: route.query.code } } : to);
+  if (to) await go(to, startedAt);
 }
 
 async function google() {
   if (busy.value) return;
   error.value = "";
+  const startedAt = Date.now();
   const to = await continueWithGoogle();
-  if (to) router.push(route.query.code && to === ROUTES.HOUSEHOLD ? { path: to, query: { code: route.query.code } } : to);
+  if (to) await go(to, startedAt);
 }
 </script>
 
 <template>
+  <LoadingScreen v-if="showLoader || welcome" variant="overlay" label="Signing you in" :messages="welcome ? SIGN_IN_MESSAGES : []" subtext="Welcome back." />
   <Header full />
   <main class="app-container app-body signin-wrap">
     <div class="app-stack app-stack--24 signin">

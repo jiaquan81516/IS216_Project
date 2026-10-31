@@ -1,4 +1,5 @@
 <script setup>
+import Collapse from "@/app/components/Collapse.vue";
 import "@/app/app.css";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -11,6 +12,7 @@ import { useAdmin } from "@/composables/useAdmin";
 import { useSupportEditor } from "@/app/composables/useSupportEditor";
 import { useSupportContent } from "@/app/composables/useSupportContent";
 import { ROUTES } from "@/app/routes";
+import PumpingRooms from "@/app/pages/pumping-rooms/index.vue";
 
 defineOptions({ name: "SupportPage" });
 
@@ -29,14 +31,29 @@ const ALL_TABS = [
 const TABS = computed(() => (isAdmin.value ? ALL_TABS.filter((t) => t.id !== "rooms") : ALL_TABS));
 const route = useRoute();
 const router = useRouter();
-const tab = ref(route.query.tab === "resources" ? "resources" : "guides");
-// "Pumping rooms" is its own page; selecting the tab opens it.
+// Guides, Pumping rooms and Trusted resources are three tabs of this one page. The address
+// follows the tab (so links and the back button work), but the page itself is never reloaded.
+function tabFromRoute() {
+  if (route.path === ROUTES.ROOMS && !isAdmin.value) return "rooms";
+  return route.query.tab === "resources" ? "resources" : "guides";
+}
+const tab = ref(tabFromRoute());
+const targetFor = (id) =>
+  id === "rooms" ? ROUTES.ROOMS : id === "resources" ? { path: ROUTES.SUPPORT, query: { tab: "resources" } } : ROUTES.SUPPORT;
+// (On the administrator's workspace the same page sits inside /admin and keeps that address.)
+const ownsAddress = () => route.path.startsWith(ROUTES.SUPPORT);
 watch(tab, (id) => {
-  if (id === "rooms") {
-    tab.value = "guides";
-    router.push(ROUTES.ROOMS);
-  }
+  if (ownsAddress()) router.push(targetFor(id));
 });
+// Back and forward (or a link from elsewhere) change the tab without reloading the page.
+watch(
+  () => [route.path, route.query.tab],
+  () => {
+    if (!ownsAddress()) return;
+    const next = tabFromRoute();
+    if (next !== tab.value) tab.value = next;
+  },
+);
 
 // Links to the child care pages; the pages themselves live under /support/kids-care.
 const CHILD_LINKS = [
@@ -63,8 +80,8 @@ function toggleGuide(slug) {
 
     <Tabs v-model="tab" :tabs="TABS" label="Support sections" id-base="support" />
 
-    <!-- Guides -->
-    <div v-if="tab === 'guides'" id="support-panel-guides" class="sp__guides" role="tabpanel" aria-labelledby="support-tab-guides">
+    <Transition name="sp-swap" mode="out-in">
+    <div v-if="tab === 'guides'" key="guides" id="support-panel-guides" class="sp__guides" role="tabpanel" aria-labelledby="support-tab-guides">
       <div v-if="isAdmin" class="sp__admin-bar">
         <AppButton v-if="!guideEditor.editing.value" variant="outline" size="sm" :disabled="guideEditor.atLimit()" @click="guideEditor.start(-1)">Add guide</AppButton>
         <p v-if="!guideEditor.editing.value && guideEditor.error.value" class="app-error-text" role="alert">{{ guideEditor.error.value }}</p>
@@ -93,6 +110,7 @@ function toggleGuide(slug) {
               <span class="sp__chev" :class="{ 'sp__chev--open': openGuides.has(g.slug) }"><Icon name="chevron-down" :size="20" /></span>
             </button>
           </h2>
+          <Collapse>
           <div
             v-if="openGuides.has(g.slug)"
             :id="`guide-panel-${g.slug}`"
@@ -113,6 +131,7 @@ function toggleGuide(slug) {
             </ul>
             </template>
           </div>
+          </Collapse>
           <SupportItemActions v-if="isAdmin" class="sp__item-actions" :editor="guideEditor" :index="i" :name="g.title" />
         </li>
         </template>
@@ -120,8 +139,11 @@ function toggleGuide(slug) {
       <p class="sp__muted sp__guides-note">General guidance only, not medical advice.</p>
     </div>
 
-    <!-- Trusted resources -->
-    <div v-else id="support-panel-resources" class="sp__resources" role="tabpanel" aria-labelledby="support-tab-resources">
+    <div v-else-if="tab === 'rooms'" key="rooms" id="support-panel-rooms" class="sp__rooms" role="tabpanel" aria-labelledby="support-tab-rooms">
+      <PumpingRooms embedded />
+    </div>
+
+    <div v-else key="resources" id="support-panel-resources" class="sp__resources" role="tabpanel" aria-labelledby="support-tab-resources">
       <p class="sp__muted">Check numbers and hours before you rely on them.</p>
       <h2 class="sp__group">For your child</h2>
       <ul class="sp__res">
@@ -156,6 +178,7 @@ function toggleGuide(slug) {
       </ul>
       <p class="sp__muted">General guidance only, not medical advice.</p>
     </div>
+    </Transition>
   </div>
 </template>
 
@@ -210,4 +233,7 @@ function toggleGuide(slug) {
 @media (max-width: 575px) {
   .sp__res { grid-template-columns: minmax(0, 1fr); }
 }
+.sp-swap-enter-active, .sp-swap-leave-active { transition: opacity 160ms ease; }
+.sp-swap-enter-from, .sp-swap-leave-to { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .sp-swap-enter-active, .sp-swap-leave-active { transition: none; } }
 </style>

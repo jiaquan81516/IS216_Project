@@ -1,4 +1,6 @@
 <script setup>
+import SkeletonList from "@/app/components/SkeletonList.vue";
+import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
 import { computed, inject, onBeforeUnmount, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
@@ -98,7 +100,7 @@ function doneMeta(task) {
 <template>
   <div class="ck">
     <div aria-live="polite">
-      <p v-if="loading" class="ck__status">Loading the checklist...</p>
+      <LoadingScreen v-if="loading" variant="inline" label="Loading the checklist" />
     </div>
 
     <div v-if="!loading && error" class="ck__error alert alert-danger" role="alert">
@@ -114,7 +116,7 @@ function doneMeta(task) {
         </div>
       </header>
 
-      <p v-if="listLoading" class="ck__status">Loading the checklist...</p>
+      <SkeletonList v-if="listLoading" :rows="4" :height="56" label="Loading the checklist" />
       <div v-if="!listLoading && listErrorInfo" class="ck__error alert alert-danger" role="alert">
         <div>
           <p class="mb-0">{{ listErrorInfo.text }}</p>
@@ -176,7 +178,7 @@ function doneMeta(task) {
 
         <section v-for="group in view.groups" :key="group.key" class="ck__group" :aria-labelledby="`ck-g-${group.key}`">
           <h2 :id="`ck-g-${group.key}`" class="ck__h2">{{ group.label }}</h2>
-          <ul class="ck__rows">
+          <TransitionGroup tag="ul" name="li" class="ck__rows">
             <li v-for="task in group.tasks" :key="task.id" class="ck__row">
               <label class="ck__label">
                 <input
@@ -195,7 +197,7 @@ function doneMeta(task) {
                 <span class="ck__chip"><span class="ck__initial" aria-hidden="true">{{ chip(task).initial }}</span>{{ chip(task).name }}</span>
               </div>
             </li>
-          </ul>
+          </TransitionGroup>
         </section>
 
         <section v-if="view.done.length" class="ck__group" aria-labelledby="ck-g-done">
@@ -212,7 +214,7 @@ function doneMeta(task) {
               {{ showDone ? "Hide" : "Show" }}
             </button>
           </div>
-          <ul v-if="showDone" id="ck-done-list" class="ck__rows">
+          <TransitionGroup tag="ul" name="li" v-if="showDone" id="ck-done-list" class="ck__rows">
             <li v-for="task in view.done" :key="task.id" class="ck__row ck__row--done">
               <label class="ck__label">
                 <input type="checkbox" class="ck__box" checked :disabled="busy === task.id" @change="toggle(task)" />
@@ -220,7 +222,7 @@ function doneMeta(task) {
               </label>
               <span class="ck__muted">{{ doneMeta(task) }}</span>
             </li>
-          </ul>
+          </TransitionGroup>
         </section>
       </section>
     </template>

@@ -1,6 +1,7 @@
 import { ref } from "vue";
 import { useAuth } from "@/composables/useAuth";
 import { SUPPORT_MAX_ITEMS, saveSupportList } from "@/api/supportContent";
+import { useToast } from "@/app/composables/useToast";
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -51,6 +52,8 @@ export function useSupportEditor(kind, items) {
   const strip = (list) =>
     isGuides ? list : list.map((c) => ({ id: c.id, name: c.name, purpose: c.purpose, telLabel: c.telLabel ?? "" }));
 
+  const { showToast } = useToast();
+
   async function persist(next, after) {
     if (busy.value) return;
     busy.value = true;
@@ -78,13 +81,19 @@ export function useSupportEditor(kind, items) {
     const next = clone(items.value);
     if (editing.value.index < 0) next.push(item);
     else next[editing.value.index] = item;
-    persist(next, () => (editing.value = null));
+    persist(next, () => {
+      editing.value = null;
+      showToast({ title: isGuides ? "Guide saved" : "Contact saved" });
+    });
   }
 
   function remove(index) {
     const next = clone(items.value);
     next.splice(index, 1);
-    persist(next, () => (confirming.value = -1));
+    persist(next, () => {
+      confirming.value = -1;
+      showToast({ title: isGuides ? "Guide deleted" : "Contact deleted" });
+    });
   }
 
   const atLimit = () => items.value.length >= SUPPORT_MAX_ITEMS;

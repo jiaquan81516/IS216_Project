@@ -1,4 +1,7 @@
 <script setup>
+import { useToast } from "@/app/composables/useToast";
+import SkeletonList from "@/app/components/SkeletonList.vue";
+import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -188,6 +191,7 @@ async function closePanel() {
   if (trigger && document.contains(trigger)) trigger.focus();
   trigger = null;
 }
+const { showToast } = useToast();
 async function onSave(payload) {
   if (saving.value || !householdId.value) return;
   saving.value = true;
@@ -210,7 +214,9 @@ async function onSave(payload) {
       if (!Number.isNaN(when.getTime()) && isNightHour(when.getHours())) notifyPartner(householdId.value, "heavy", id);
     }
     saving.value = false;
+    const wasEdit = Boolean(editing.value);
     await closePanel();
+    showToast({ title: wasEdit ? "Log updated" : "Log saved" });
   } catch (cause) {
     console.error("[app care log]", cause?.code, cause);
     saveError.value = "Could not save. Check your connection and try again.";
@@ -281,7 +287,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 <template>
   <div class="cl">
     <div aria-live="polite">
-      <p v-if="loading" class="cl__status">Loading the log...</p>
+      <LoadingScreen v-if="loading" variant="inline" label="Loading the log" />
     </div>
 
     <div v-if="!loading && error" class="cl__error alert alert-danger" role="alert">
@@ -333,7 +339,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
           </div>
 
           <div aria-live="polite">
-            <p v-if="entriesLoading" class="cl__status">Loading the log...</p>
+            <SkeletonList v-if="entriesLoading" :rows="4" :height="64" label="Loading the log" />
           </div>
 
           <div v-if="!entriesLoading && entriesErrorInfo" class="cl__error alert alert-danger" role="alert">
@@ -352,7 +358,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 
             <section v-for="group in groups" :key="group.key" class="cl__day" :aria-label="group.label">
               <h3 class="cl__day-title">{{ group.label }}</h3>
-              <ul class="cl__rows">
+              <TransitionGroup tag="ul" name="li" class="cl__rows">
                 <li v-for="entry in group.entries" :key="entry.id" class="cl__row">
                   <span class="cl__time">{{ prefTime(entry.at) }}</span>
                   <span class="cl__icon">
@@ -404,7 +410,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
                     </template>
                   </div>
                 </li>
-              </ul>
+              </TransitionGroup>
             </section>
 
             <p v-if="moreError" class="cl__muted" role="alert">{{ moreError }}</p>

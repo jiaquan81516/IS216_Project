@@ -1,4 +1,6 @@
 <script setup>
+import LoadingScreen from "@/app/components/LoadingScreen.vue";
+import SkeletonList from "@/app/components/SkeletonList.vue";
 import "@/app/app.css";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -303,7 +305,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 <template>
   <div class="hp">
     <div aria-live="polite">
-      <p v-if="loading" class="hp__status">Loading your household...</p>
+      <LoadingScreen v-if="loading" variant="inline" label="Loading your household" />
     </div>
 
     <div v-if="!loading && error" class="hp__error alert alert-danger" role="alert">
@@ -433,7 +435,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 
       <div class="hp__lower">
       <section class="hp__stream" aria-label="Household stream">
-        <p v-if="streamLoading" class="hp__status">Loading...</p>
+        <SkeletonList v-if="streamLoading" :rows="3" :height="64" label="Loading" />
         <div v-else-if="streamError" class="hp__notice" role="alert">
           <p class="hp__muted">{{ streamError.text }}</p>
           <p v-if="streamError.detail" class="hp__muted">{{ streamError.detail }}</p>

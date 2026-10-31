@@ -45,6 +45,12 @@
   --bs-border-radius-lg: 12px;
 }
 
+/* Keep the scrollbar space reserved, so a page that is short or long does not shift the layout
+   sideways (including the sidebar) when you move between pages. */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   min-width: 320px;
   -webkit-font-smoothing: antialiased;

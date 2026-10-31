@@ -1,6 +1,8 @@
 <script setup>
+import { useToast } from "@/app/composables/useToast";
+import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
-import { computed, inject, nextTick, onMounted, reactive, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import CalendarDayPanel from "@/app/components/CalendarDayPanel.vue";
 import Icon from "@/app/components/Icon.vue";
 import {
@@ -11,14 +13,13 @@ import {
   formatClock,
   layoutWeekEvents,
   monthGrid,
-  monthTitle,
+  monthLabel,
   nightOwner,
   shiftMonth,
   sortDayEvents,
   weekdayLabels,
   weekDays,
   weekStartOf,
-  weekTitle,
   isBarEvent,
 } from "@/app/utils/calendarHelpers";
 import { addDays, parseIso, toIso } from "@/app/utils/rotaHelpers";
@@ -71,39 +72,80 @@ function retry() {
 }
 
 const todayIso = toIso(new Date());
-const now = parseIso(todayIso);
+const todayNum = parseIso(todayIso).getDate();
 
 const VIEWS = [
-  { value: "month", label: "Monthly" },
-  { value: "week", label: "Weekly" },
+  { value: "day", label: "Day", key: "D" },
+  { value: "week", label: "Week", key: "W" },
+  { value: "month", label: "Month", key: "M" },
 ];
 const view = ref("month");
-const cursor = reactive({ year: now.getFullYear(), month: now.getMonth() });
+// One date drives every view, like Google Calendar: the month, the week and the day
+// are all worked out from it, so switching views keeps you where you were.
+const focusIso = ref(todayIso);
+const cursor = computed(() => {
+  const d = parseIso(focusIso.value);
+  return { year: d.getFullYear(), month: d.getMonth() };
+});
 
 // The week start comes from Settings (Display), so changing it there changes these grids.
 const { weekStart } = usePrefs();
 const weekdays = computed(() => weekdayLabels(weekStart.value));
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const weekdayNames = computed(() => weekdays.value.map((_, i) => WEEKDAY_NAMES[(weekStart.value + i) % 7]));
-const isSunday = (iso) => parseIso(iso).getDay() === 0;
+const DOW = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+const dowOf = (iso) => DOW[parseIso(iso).getDay()];
 
-const weekAnchor = ref(weekStartOf(todayIso, weekStart.value));
-watch(weekStart, (value) => {
-  weekAnchor.value = weekStartOf(weekAnchor.value, value);
+const weekIsos = computed(() => weekDays(weekStartOf(focusIso.value, weekStart.value)));
+// The columns of the time grid: seven for a week, one for a day.
+const colIsos = computed(() => (view.value === "day" ? [focusIso.value] : weekIsos.value));
+
+const monthName = (m) => monthLabel(2000, m).split(" ")[0];
+const label = computed(() => {
+  if (view.value === "month") return monthLabel(cursor.value.year, cursor.value.month);
+  const a = parseIso(colIsos.value[0]);
+  if (view.value === "day") return `${a.getDate()} ${monthName(a.getMonth())} ${a.getFullYear()}`;
+  const b = parseIso(colIsos.value[colIsos.value.length - 1]);
+  if (a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()) return monthLabel(a.getFullYear(), a.getMonth());
+  const short = (d) => monthName(d.getMonth()).slice(0, 3);
+  if (a.getFullYear() === b.getFullYear()) return `${short(a)} – ${short(b)} ${b.getFullYear()}`;
+  return `${short(a)} ${a.getFullYear()} – ${short(b)} ${b.getFullYear()}`;
 });
-const weekIsos = computed(() => weekDays(weekAnchor.value));
-
-const label = computed(() => (view.value === "month" ? monthTitle(cursor.year, cursor.month) : weekTitle(weekIsos.value)));
-const grid = computed(() => monthGrid(cursor.year, cursor.month, weekStart.value));
+const stepNoun = computed(() => VIEWS.find((v) => v.value === view.value).label.toLowerCase());
+const grid = computed(() => monthGrid(cursor.value.year, cursor.value.month, weekStart.value));
+const dayNumber = (day) => {
+  if (day.day !== 1 || day.iso === todayIso) return String(day.day);
+  return `1 ${monthName(parseIso(day.iso).getMonth()).slice(0, 3)}`;
+};
 
 // Calendar list: which layers are shown.
 const layers = reactive({ me: true, partner: true, both: true, night: true });
-const allOn = computed(() => Object.values(layers).every(Boolean));
-function toggleAll() {
-  const next = !allOn.value;
-  for (const key of Object.keys(layers)) layers[key] = next;
+
+// Mini month in the sidebar. It pages on its own, and snaps back when the main view moves.
+const mini = reactive({ year: cursor.value.year, month: cursor.value.month });
+watch(cursor, (c) => {
+  mini.year = c.year;
+  mini.month = c.month;
+});
+const miniGrid = computed(() => monthGrid(mini.year, mini.month, weekStart.value).flat());
+const miniTitle = computed(() => monthLabel(mini.year, mini.month));
+function stepMini(delta) {
+  const next = shiftMonth(mini.year, mini.month, delta);
+  mini.year = next.year;
+  mini.month = next.month;
 }
-const listOpen = ref(false);
+function pickMini(iso) {
+  focusIso.value = iso;
+  selectedDay.value = iso;
+}
+
+// View menu
+const viewMenu = ref(false);
+const menuRoot = ref(null);
+const viewLabel = computed(() => VIEWS.find((v) => v.value === view.value).label);
+function onDocClick(event) {
+  if (viewMenu.value && !menuRoot.value?.contains(event.target)) viewMenu.value = false;
+}
 
 // Search
 const searchOpen = ref(false);
@@ -126,7 +168,7 @@ const visibleEvents = computed(() => {
   return [...own, ...google];
 });
 
-const shownIsos = computed(() => (view.value === "month" ? grid.value.flat().map((d) => d.iso) : weekIsos.value));
+const shownIsos = computed(() => (view.value === "month" ? grid.value.flat().map((d) => d.iso) : colIsos.value));
 const dayEvents = computed(() => {
   const map = {};
   for (const iso of shownIsos.value) map[iso] = sortDayEvents(eventsOnDay(visibleEvents.value, iso));
@@ -175,35 +217,42 @@ function eventLabel(event) {
 }
 const startClock = (event) => (isBarEvent(event) ? "" : formatClock(event.start));
 
+const inMonthOf = (iso, m) => {
+  const d = parseIso(iso);
+  return d.getFullYear() === m.year && d.getMonth() === m.month;
+};
 function step(delta) {
   if (view.value === "month") {
-    const next = shiftMonth(cursor.year, cursor.month, delta);
-    cursor.year = next.year;
-    cursor.month = next.month;
+    const next = shiftMonth(cursor.value.year, cursor.value.month, delta);
+    focusIso.value = inMonthOf(todayIso, next) ? todayIso : toIso(new Date(next.year, next.month, 1));
   } else {
-    weekAnchor.value = addDays(weekAnchor.value, delta * 7);
+    focusIso.value = addDays(focusIso.value, view.value === "week" ? delta * 7 : delta);
   }
 }
 function goToday() {
-  cursor.year = now.getFullYear();
-  cursor.month = now.getMonth();
-  weekAnchor.value = weekStartOf(todayIso, weekStart.value);
+  focusIso.value = todayIso;
 }
 function setView(next) {
-  if (next === view.value) return;
-  if (next === "week") {
-    const pick = selectedDay.value && inMonth(selectedDay.value) ? selectedDay.value : inMonth(todayIso) ? todayIso : toIso(new Date(cursor.year, cursor.month, 1));
-    weekAnchor.value = weekStartOf(pick, weekStart.value);
-  } else {
-    const mid = parseIso(addDays(weekAnchor.value, 3));
-    cursor.year = mid.getFullYear();
-    cursor.month = mid.getMonth();
-  }
+  viewMenu.value = false;
   view.value = next;
 }
 function inMonth(iso) {
-  const d = parseIso(iso);
-  return d.getFullYear() === cursor.year && d.getMonth() === cursor.month;
+  return inMonthOf(iso, cursor.value);
+}
+
+// Swipe sideways to move on, like the phone app.
+let touch = null;
+function onTouchStart(event) {
+  const t = event.touches[0];
+  touch = { x: t.clientX, y: t.clientY };
+}
+function onTouchEnd(event) {
+  if (!touch) return;
+  const t = event.changedTouches[0];
+  const dx = t.clientX - touch.x;
+  const dy = t.clientY - touch.y;
+  touch = null;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) step(dx < 0 ? 1 : -1);
 }
 
 // Weekly: all day row, then an hour grid.
@@ -212,13 +261,13 @@ const HOURS = Array.from({ length: 24 }, (_, h) => (h === 0 ? "" : `${h % 12 ===
 const allDayLayout = computed(() =>
   layoutWeekEvents(
     visibleEvents.value.filter(isBarEvent),
-    weekIsos.value,
+    colIsos.value,
     Infinity,
   ),
 );
 const blocks = computed(() => {
   const map = {};
-  for (const iso of weekIsos.value) map[iso] = dayBlocks(visibleEvents.value, iso);
+  for (const iso of colIsos.value) map[iso] = dayBlocks(visibleEvents.value, iso);
   return map;
 });
 const blockStyle = (b) => ({
@@ -228,12 +277,64 @@ const blockStyle = (b) => ({
   width: `calc(${100 / b.cols}% - 4px)`,
 });
 const scroller = ref(null);
-async function scrollToMorning() {
+// The hour grid keeps its scroll position when you move to another week or day.
+let savedScroll = 7 * HOUR_PX;
+async function restoreScroll() {
   await nextTick();
-  if (scroller.value) scroller.value.scrollTop = 7 * HOUR_PX;
+  if (scroller.value) scroller.value.scrollTop = savedScroll;
 }
-watch(view, (v) => v === "week" && scrollToMorning());
-onMounted(() => view.value === "week" && scrollToMorning());
+function onHoursScroll(event) {
+  savedScroll = event.target.scrollTop;
+}
+
+// Moving on slides the grid the way you went; changing the view just fades.
+const slide = ref("fade");
+const stageKey = computed(() => (view.value === "month" ? `m-${cursor.value.year}-${cursor.value.month}` : `${view.value}-${colIsos.value[0]}`));
+watch(focusIso, (next, prev) => {
+  slide.value = next > prev ? "next" : "prev";
+});
+watch(view, () => {
+  slide.value = "fade";
+});
+// The red "now" line on today's column, moved once a minute.
+const minutesNow = () => {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes();
+};
+const nowMin = ref(minutesNow());
+const nowTop = computed(() => `${(nowMin.value / 60) * HOUR_PX}px`);
+let clock = 0;
+function onKey(event) {
+  if (event.key === "Escape") {
+      viewMenu.value = false;
+    return;
+  }
+  if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented || panelOpen.value) return;
+  const t = event.target;
+  if (t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  const k = event.key.toLowerCase();
+  if (k === "t") goToday();
+  else if (k === "d") setView("day");
+  else if (k === "w") setView("week");
+  else if (k === "m") setView("month");
+  else if (k === "j" || k === "n") step(1);
+  else if (k === "k" || k === "p") step(-1);
+  else if (k === "c") {
+    event.preventDefault();
+    openDay(defaultAddDate(), null, true);
+  }
+}
+onMounted(() => {
+  if (view.value !== "month") restoreScroll();
+  clock = window.setInterval(() => (nowMin.value = minutesNow()), 60000);
+  document.addEventListener("click", onDocClick);
+  document.addEventListener("keydown", onKey);
+});
+onBeforeUnmount(() => {
+  window.clearInterval(clock);
+  document.removeEventListener("click", onDocClick);
+  document.removeEventListener("keydown", onKey);
+});
 
 // Day panel
 const panelOpen = ref(false);
@@ -262,13 +363,14 @@ function onCellKey(iso, event) {
   openDay(iso, event.currentTarget);
 }
 function defaultAddDate() {
+  if (view.value === "day") return focusIso.value;
   if (view.value === "week") {
     if (selectedDay.value && weekIsos.value.includes(selectedDay.value)) return selectedDay.value;
     return weekIsos.value.includes(todayIso) ? todayIso : weekIsos.value[0];
   }
   if (selectedDay.value && inMonth(selectedDay.value)) return selectedDay.value;
   if (inMonth(todayIso)) return todayIso;
-  return toIso(new Date(cursor.year, cursor.month, 1));
+  return toIso(new Date(cursor.value.year, cursor.value.month, 1));
 }
 function openAdd(event) {
   openDay(defaultAddDate(), event.currentTarget, true);
@@ -276,17 +378,16 @@ function openAdd(event) {
 function closePanel() {
   panelOpen.value = false;
 }
+const { showToast } = useToast();
 async function onSave(payload) {
   const { id, owner, ...rest } = payload;
   const data = { ...rest, owner: ownerUid(owner, myUid.value, rota.partnerUid || store.partnerUid) ?? "both" };
   const saved = id ? await store.updateEvent(id, data) : await store.addEvent(data);
   if (!saved) return;
+  showToast({ title: id ? "Event updated" : "Event saved", text: saved.title ?? "" });
   panelDate.value = saved.date;
   selectedDay.value = saved.date;
-  const d = parseIso(saved.date);
-  cursor.year = d.getFullYear();
-  cursor.month = d.getMonth();
-  weekAnchor.value = weekStartOf(saved.date, weekStart.value);
+  focusIso.value = saved.date;
 }
 function onDelete(id) {
   store.removeEvent(id);
@@ -295,49 +396,23 @@ function onDelete(id) {
 
 <template>
   <div class="cal">
-    <header class="cal__head">
-      <h1 class="nt-title cal__title">Calendar</h1>
-      <p class="cal__sub">Appointments, family plans and who is on duty. You both see the same calendar.</p>
-      <p v-if="googleSynced" class="cal__synced">Synced with Google Calendar</p>
-    </header>
+    <h1 class="visually-hidden">Calendar</h1>
 
-    <section class="cal__toolbar" aria-label="Calendar controls">
-      <div class="cal__nav">
-        <button type="button" class="cal__today" @click="goToday">Today</button>
-        <div class="cal__steps">
-          <button type="button" class="cal__step" :aria-label="view === 'month' ? 'Previous month' : 'Previous week'" @click="step(-1)">
-            <Icon name="chevron-left" :size="18" />
-          </button>
-          <button type="button" class="cal__step" :aria-label="view === 'month' ? 'Next month' : 'Next week'" @click="step(1)">
-            <Icon name="chevron" :size="18" />
-          </button>
-        </div>
-        <h2 id="cal-month" class="cal__month" aria-live="polite">{{ label }}</h2>
-      </div>
-      <div class="cal__tools">
-        <button
-          type="button"
-          class="cal__listbtn"
-          :aria-expanded="listOpen ? 'true' : 'false'"
-          aria-controls="cal-layers"
-          @click="listOpen = !listOpen"
-        >
-          <span>Calendars</span>
-          <Icon name="chevron-down" :size="16" />
+    <section class="cal__toolbar" :class="{ 'cal__toolbar--searching': searchOpen }" aria-label="Calendar controls">
+      <button type="button" class="cal__today" aria-label="Today" @click="goToday">
+        <span class="cal__todaytxt">Today</span>
+        <span class="cal__todaynum" aria-hidden="true">{{ todayNum }}</span>
+      </button>
+      <div class="cal__steps">
+        <button type="button" class="cal__icon" :aria-label="`Previous ${stepNoun}`" @click="step(-1)">
+          <Icon name="chevron-left" :size="20" />
         </button>
-        <div class="cal__seg" role="radiogroup" aria-label="Calendar view">
-          <button
-            v-for="option in VIEWS"
-            :key="option.value"
-            type="button"
-            role="radio"
-            class="cal__segbtn"
-            :aria-checked="view === option.value ? 'true' : 'false'"
-            @click="setView(option.value)"
-          >
-            {{ option.label }}
-          </button>
-        </div>
+        <button type="button" class="cal__icon" :aria-label="`Next ${stepNoun}`" @click="step(1)">
+          <Icon name="chevron" :size="20" />
+        </button>
+      </div>
+      <h2 id="cal-month" class="cal__month" aria-live="polite">{{ label }}</h2>
+      <div class="cal__tools">
         <input
           v-if="searchOpen"
           ref="searchInput"
@@ -350,28 +425,45 @@ function onDelete(id) {
         />
         <button
           type="button"
-          class="cal__sq"
+          class="cal__icon"
           :aria-label="searchOpen ? 'Close search' : 'Search events'"
           :aria-expanded="searchOpen ? 'true' : 'false'"
           @click="toggleSearch"
         >
-          <Icon :name="searchOpen ? 'x' : 'search'" :size="18" />
+          <Icon :name="searchOpen ? 'x' : 'search'" :size="20" />
         </button>
-        <button type="button" class="cal__sq" aria-label="Add event" @click="openAdd">
-          <Icon name="plus" :size="18" />
-        </button>
+        <div ref="menuRoot" class="cal__viewwrap">
+          <button
+            type="button"
+            class="cal__view"
+            aria-haspopup="menu"
+            :aria-expanded="viewMenu ? 'true' : 'false'"
+            aria-label="Calendar view"
+            @click="viewMenu = !viewMenu"
+          >
+            <span>{{ viewLabel }}</span>
+            <Icon name="chevron-down" :size="16" />
+          </button>
+          <ul v-if="viewMenu" class="cal__menulist" role="menu" aria-label="Calendar view">
+            <li v-for="option in VIEWS" :key="option.value" role="none">
+              <button
+                type="button"
+                role="menuitemradio"
+                class="cal__menuitem"
+                :aria-checked="view === option.value ? 'true' : 'false'"
+                @click="setView(option.value)"
+              >
+                <span>{{ option.label }}</span>
+                <kbd class="cal__kbd" aria-hidden="true">{{ option.key }}</kbd>
+              </button>
+            </li>
+          </ul>
+        </div>
       </div>
     </section>
 
-    <ul class="cal__legend" aria-label="Legend">
-      <li><span class="cal__swatch" data-owner="me" aria-hidden="true"></span>{{ names.me }}</li>
-      <li><span class="cal__swatch" data-owner="partner" aria-hidden="true"></span>{{ names.partner }}</li>
-      <li><span class="cal__swatch" data-owner="both" aria-hidden="true"></span>Both</li>
-      <li>The thin line under a day is who is on duty at night</li>
-    </ul>
-
     <div aria-live="polite">
-      <p v-if="loading" class="cal__status">Loading the calendar...</p>
+      <LoadingScreen v-if="loading" variant="inline" label="Loading the calendar" />
     </div>
 
     <div v-if="!loading && errorInfo" class="cal__error alert alert-danger" role="alert">
@@ -383,58 +475,86 @@ function onDelete(id) {
     <p v-if="store.writeError" class="app-error-text" role="alert">{{ store.writeError }}</p>
 
     <div class="cal__layout">
-      <aside id="cal-layers" class="cal__layers" :class="{ 'cal__layers--open': listOpen }" aria-labelledby="cal-layers-h">
-        <h2 id="cal-layers-h" class="cal__layers-h">Calendars</h2>
-        <ul class="cal__layerlist">
-          <li>
-            <label class="cal__layer">
-              <input type="checkbox" class="visually-hidden" :checked="allOn" @change="toggleAll" />
-              <span class="cal__box" :class="{ 'cal__box--on': allOn }" style="--c: var(--nt-plum)" aria-hidden="true">
-                <Icon v-if="allOn" name="check" :size="12" />
-              </span>
-              <span class="cal__avs" aria-hidden="true">
-                <span class="cal__av" data-owner="me">{{ names.me.charAt(0).toUpperCase() }}</span>
-                <span class="cal__av" data-owner="partner">{{ names.partner.charAt(0).toUpperCase() }}</span>
-              </span>
-              <span class="cal__lname">Everything</span>
-            </label>
-          </li>
-          <li v-for="item in [
-            { key: 'me', text: `${names.me}'s events`, tone: 'me' },
-            { key: 'partner', text: `${names.partner}'s events`, tone: 'partner' },
-            { key: 'both', text: 'Shared events', tone: 'both' },
-            { key: 'night', text: 'Night duty', tone: 'night' },
-          ]" :key="item.key">
-            <label class="cal__layer">
-              <input v-model="layers[item.key]" type="checkbox" class="visually-hidden" />
-              <span class="cal__box" :class="{ 'cal__box--on': layers[item.key] }" :data-owner="item.tone" aria-hidden="true">
-                <Icon v-if="layers[item.key]" name="check" :size="12" />
-              </span>
-              <span class="cal__lname">{{ item.text }}</span>
-            </label>
-          </li>
-          <li v-if="gcal.state.connected">
-            <label class="cal__layer">
-              <input
-                type="checkbox"
-                class="visually-hidden"
-                :checked="gcal.state.toggles.show"
-                @change="setGoogleToggle('show', $event.target.checked)"
-              />
-              <span class="cal__box" :class="{ 'cal__box--on': gcal.state.toggles.show }" data-owner="google" aria-hidden="true">
-                <Icon v-if="gcal.state.toggles.show" name="check" :size="12" />
-              </span>
-              <span class="cal__lname">Show Google events</span>
-            </label>
-          </li>
-        </ul>
+      <aside id="cal-side" class="cal__side" aria-label="Dates and calendars">
+        <button type="button" class="cal__create" @click="openAdd">
+          <Icon name="plus" :size="24" />
+          <span>Create</span>
+        </button>
+
+        <section class="cal__mini" aria-label="Choose a date">
+          <div class="cal__minihead">
+            <h2 class="cal__minititle">{{ miniTitle }}</h2>
+            <button type="button" class="cal__icon cal__icon--sm" aria-label="Previous month in the date picker" @click="stepMini(-1)">
+              <Icon name="chevron-left" :size="16" />
+            </button>
+            <button type="button" class="cal__icon cal__icon--sm" aria-label="Next month in the date picker" @click="stepMini(1)">
+              <Icon name="chevron" :size="16" />
+            </button>
+          </div>
+          <div class="cal__minigrid">
+            <span v-for="w in weekdays" :key="w" class="cal__minidow" aria-hidden="true">{{ w.charAt(0) }}</span>
+            <button
+              v-for="d in miniGrid"
+              :key="d.iso"
+              type="button"
+              class="cal__miniday"
+              :class="{
+                'cal__miniday--today': d.iso === todayIso,
+                'cal__miniday--focus': d.iso === focusIso && d.iso !== todayIso && view !== 'month',
+              }"
+              :aria-label="dayHeading(d.iso)"
+              :aria-current="d.iso === todayIso ? 'date' : undefined"
+              @click="pickMini(d.iso)"
+            >
+              {{ d.day }}
+            </button>
+          </div>
+        </section>
+
+        <section class="cal__layers" aria-labelledby="cal-layers-h">
+          <h2 id="cal-layers-h" class="cal__layers-h">Calendars</h2>
+          <ul class="cal__layerlist">
+            <li v-for="item in [
+              { key: 'me', text: `${names.me}'s events`, tone: 'me' },
+              { key: 'partner', text: `${names.partner}'s events`, tone: 'partner' },
+              { key: 'both', text: 'Shared events', tone: 'both' },
+              { key: 'night', text: 'Night duty', tone: 'night' },
+            ]" :key="item.key">
+              <label class="cal__layer">
+                <input v-model="layers[item.key]" type="checkbox" class="visually-hidden" />
+                <span class="cal__box" :class="{ 'cal__box--on': layers[item.key] }" :data-owner="item.tone" aria-hidden="true">
+                  <Icon v-if="layers[item.key]" name="check" :size="14" />
+                </span>
+                <span class="cal__lname">{{ item.text }}</span>
+              </label>
+            </li>
+            <li v-if="gcal.state.connected">
+              <label class="cal__layer">
+                <input
+                  type="checkbox"
+                  class="visually-hidden"
+                  :checked="gcal.state.toggles.show"
+                  @change="setGoogleToggle('show', $event.target.checked)"
+                />
+                <span class="cal__box" :class="{ 'cal__box--on': gcal.state.toggles.show }" data-owner="google" aria-hidden="true">
+                  <Icon v-if="gcal.state.toggles.show" name="check" :size="14" />
+                </span>
+                <span class="cal__lname">Google Calendar</span>
+              </label>
+            </li>
+          </ul>
+          <p class="cal__hint">The thin line under a day shows who is on duty that night.</p>
+          <p v-if="googleSynced" class="cal__hint">Synced with Google Calendar.</p>
+        </section>
       </aside>
 
-      <div class="cal__main">
+      <div class="cal__main" @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd">
+        <Transition :name="`cal-${slide}`" mode="out-in" @enter="restoreScroll">
+        <div :key="stageKey" class="cal__stage">
         <!-- Month -->
         <div v-if="view === 'month' && !loading && !errorInfo" class="cal__grid" role="grid" aria-labelledby="cal-month">
-          <div class="cal__dow" role="row">
-            <div v-for="(w, i) in weekdays" :key="w" role="columnheader" :aria-label="weekdayNames[i]" class="cal__dowcell">{{ w }}</div>
+          <div class="cal__dow visually-hidden" role="row">
+            <div v-for="(w, i) in weekdays" :key="w" role="columnheader" :aria-label="weekdayNames[i]">{{ w }}</div>
           </div>
           <div v-for="(week, wi) in grid" :key="week[0].iso" class="cal__week" role="presentation">
             <div class="cal__row" role="row">
@@ -445,7 +565,6 @@ function onDelete(id) {
                 tabindex="0"
                 class="cal__cell"
                 :class="{
-                  'cal__cell--out': !day.inMonth,
                   'cal__cell--today': day.iso === todayIso,
                   'cal__cell--selected': panelOpen && selectedDay === day.iso,
                 }"
@@ -470,20 +589,17 @@ function onDelete(id) {
                 </span>
               </div>
             </div>
-            <div class="cal__fg" role="presentation">
+            <div class="cal__fg" :class="{ 'cal__fg--first': wi === 0 }" role="presentation">
               <span
                 v-for="(day, i) in week"
                 :key="day.iso"
-                class="cal__num"
-                :class="{
-                  'cal__num--today': day.iso === todayIso,
-                  'cal__num--out': !day.inMonth,
-                  'cal__num--sun': isSunday(day.iso),
-                }"
+                class="cal__d"
                 :style="{ gridColumn: i + 1, gridRow: 1 }"
                 aria-hidden="true"
-                >{{ day.day }}</span
               >
+                <span v-if="wi === 0" class="cal__dname" :class="{ 'cal__dname--today': day.iso === todayIso }">{{ dowOf(day.iso) }}</span>
+                <span class="cal__num" :class="{ 'cal__num--today': day.iso === todayIso }">{{ dayNumber(day) }}</span>
+              </span>
               <button
                 v-for="item in layouts[wi].items"
                 :key="item.event.id + ':' + item.start"
@@ -491,7 +607,7 @@ function onDelete(id) {
                 class="cal__item"
                 :class="[
                   item.bar ? 'cal__bar' : 'cal__ev',
-                  { 'cal__bar--l': item.contLeft, 'cal__bar--r': item.contRight, 'cal__item--out': !week[item.start].inMonth && !week[item.end].inMonth },
+                  { 'cal__bar--l': item.contLeft, 'cal__bar--r': item.contRight },
                 ]"
                 :data-owner="tone(item.event)"
                 :data-event="item.event.id"
@@ -500,8 +616,8 @@ function onDelete(id) {
                 @click="openEvent(item.event, $event.currentTarget)"
               >
                 <span v-if="!item.bar" class="cal__evdot" aria-hidden="true"></span>
-                <span class="cal__evtitle">{{ item.event.title }}</span>
                 <span v-if="!item.bar" class="cal__evtime">{{ startClock(item.event) }}</span>
+                <span class="cal__evtitle">{{ item.event.title }}</span>
               </button>
               <button
                 v-for="(count, i) in layouts[wi].hidden"
@@ -513,26 +629,26 @@ function onDelete(id) {
                 :style="{ gridColumn: i + 1, gridRow: MAX_LANES + 2 }"
                 @click="openDay(week[i].iso, $event.currentTarget)"
               >
-                +{{ count }}
+                {{ count }} more
               </button>
             </div>
           </div>
         </div>
 
-        <!-- Week -->
-        <div v-else-if="!loading && !errorInfo" class="cal__wk" role="grid" aria-labelledby="cal-month">
+        <!-- Week and day -->
+        <div v-else-if="!loading && !errorInfo" class="cal__wk" role="grid" aria-labelledby="cal-month" :style="{ '--cols': colIsos.length }">
           <div class="cal__wkhead" role="row">
             <div class="cal__gutter" role="presentation"></div>
             <div
-              v-for="(iso, i) in weekIsos"
+              v-for="iso in colIsos"
               :key="iso"
               role="columnheader"
               class="cal__wkday"
               :aria-label="dayHeading(iso)"
               :aria-current="iso === todayIso ? 'date' : undefined"
             >
-              <span class="cal__wkname">{{ weekdays[i] }}</span>
-              <span class="cal__wknum" :class="{ 'cal__num--today': iso === todayIso, 'cal__num--sun': isSunday(iso) }">{{ parseIso(iso).getDate() }}</span>
+              <span class="cal__wkname" :class="{ 'cal__wkname--today': iso === todayIso }">{{ dowOf(iso) }}</span>
+              <span class="cal__wknum" :class="{ 'cal__num--today': iso === todayIso }">{{ parseIso(iso).getDate() }}</span>
               <span v-if="nightMarker(iso)" class="cal__night" role="img" :aria-label="nightMarker(iso).text" :title="nightMarker(iso).text">
                 <span class="cal__nightpart" :data-who="nightMarker(iso).who"></span>
                 <span v-if="nightMarker(iso).second" class="cal__nightpart" :data-who="nightMarker(iso).second"></span>
@@ -543,7 +659,7 @@ function onDelete(id) {
             <div class="cal__gutter cal__gutter--label" role="presentation">All day</div>
             <div class="cal__wkallarea" role="presentation">
               <div class="cal__wkallbg" role="presentation">
-                <span v-for="iso in weekIsos" :key="iso" class="cal__wkallcol"></span>
+                <span v-for="iso in colIsos" :key="iso" class="cal__wkallcol"></span>
               </div>
               <div
                 class="cal__wkallfg"
@@ -567,7 +683,7 @@ function onDelete(id) {
               </div>
             </div>
           </div>
-          <div ref="scroller" class="cal__wkscroll">
+          <div ref="scroller" class="cal__wkscroll" @scroll.passive="onHoursScroll">
             <div class="cal__wkbody" :style="{ height: `${24 * HOUR_PX}px` }">
               <div class="cal__gutter cal__hours" role="presentation">
                 <span v-for="(h, i) in HOURS" :key="i" class="cal__hour" :style="{ top: `${i * HOUR_PX}px` }">{{ h }}</span>
@@ -578,18 +694,18 @@ function onDelete(id) {
                 </div>
                 <div class="cal__wkcols" role="row">
                   <div
-                    v-for="iso in weekIsos"
+                    v-for="iso in colIsos"
                     :key="iso"
                     role="gridcell"
                     tabindex="0"
                     class="cal__wkcol"
-                    :class="{ 'cal__wkcol--today': iso === todayIso }"
                     :data-date="iso"
                     :aria-label="dayLabel(iso)"
                     @click="openDay(iso, $event.currentTarget)"
                     @keydown.enter.self.prevent="onCellKey(iso, $event)"
                     @keydown.space.self.prevent="onCellKey(iso, $event)"
                   >
+                    <span v-if="iso === todayIso" class="cal__now" :style="{ top: nowTop }" aria-hidden="true"></span>
                     <button
                       v-for="b in blocks[iso]"
                       :key="b.event.id"
@@ -610,8 +726,14 @@ function onDelete(id) {
             </div>
           </div>
         </div>
+        </div>
+        </Transition>
       </div>
     </div>
+
+    <button type="button" class="cal__fab" aria-label="Create event" @click="openAdd">
+      <Icon name="plus" :size="26" />
+    </button>
 
     <CalendarDayPanel
       :open="panelOpen"
@@ -630,170 +752,240 @@ function onDelete(id) {
 </template>
 
 <style scoped>
+/* Styled after Google Calendar so people who link their own calendar feel at home. */
 .cal {
+  --g-blue: #0b57d0;
+  --g-blue-soft: #d3e3fd;
+  --g-blue-ink: #041e49;
+  --g-ink: #1f1f1f;
+  --g-mute: #444746;
+  --g-line: #dadce0;
+  --g-hover: #f1f3f4;
+  --g-red: #ea4335;
   --cal-me: var(--nt-apricot-d);
   --cal-partner: var(--nt-powder-d);
   --cal-both: #3f7d5c;
-  --cal-google: #9ca3af;
-  --cal-google-bg: #f3f4f6;
-  --cal-today: #f3f4f3;
+  --cal-google: #0b8043;
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 4px;
   width: 100%;
-  min-height: calc(100vh - 140px);
-  font-size: 1rem;
+  font-size: 0.875rem;
+  color: var(--g-ink);
 }
-.cal__head { display: flex; flex-direction: column; gap: 4px; }
-.cal__title { font-size: 2rem; line-height: 1.2; }
-.cal__sub { margin: 0; color: var(--nt-muted); }
-.cal__synced { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
+button { font-family: inherit; }
 
 /* Toolbar */
-.cal__toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
-.cal__nav { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.cal__today { height: 32px; padding: 0 14px; background: #fff; border: 1px solid var(--nt-line); border-radius: 6px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-ink); cursor: pointer; }
-.cal__today:hover, .cal__step:hover, .cal__sq:hover, .cal__listbtn:hover { background: var(--nt-gray); }
-.cal__steps { display: inline-flex; border: 1px solid var(--nt-line); border-radius: 6px; background: #fff; overflow: hidden; }
-.cal__step { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 30px; padding: 0; background: #fff; border: 0; color: var(--nt-ink); cursor: pointer; }
-.cal__step + .cal__step { border-left: 1px solid var(--nt-line); }
-.cal__month { margin: 0; font-family: inherit; font-size: 1.5rem; font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; color: var(--nt-ink); }
-.cal__tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.cal__seg { display: inline-flex; padding: 2px; background: var(--nt-gray); border-radius: 8px; }
-.cal__segbtn { height: 30px; padding: 0 16px; background: transparent; border: 0; border-radius: 6px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-muted); cursor: pointer; }
-.cal__segbtn[aria-checked="true"] { background: var(--nt-plum); color: #fff; }
-.cal__sq { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; background: #fff; border: 1px solid var(--nt-line); border-radius: 6px; color: var(--nt-ink); cursor: pointer; }
-.cal__search { height: 34px; width: 200px; max-width: 100%; padding: 0 10px; background: #fff; border: 1px solid var(--nt-line); border-radius: 6px; font-family: inherit; font-size: 0.875rem; color: var(--nt-ink); }
-.cal__listbtn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; background: #fff; border: 1px solid var(--nt-line); border-radius: 6px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-ink); cursor: pointer; }
-.cal__today:focus-visible, .cal__step:focus-visible, .cal__segbtn:focus-visible, .cal__sq:focus-visible, .cal__search:focus-visible, .cal__listbtn:focus-visible, .cal__item:focus-visible, .cal__more:focus-visible, .cal__block:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
+.cal__toolbar { display: flex; align-items: center; gap: 4px; min-height: 64px; }
+.cal__icon { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; background: transparent; border: 0; border-radius: 50%; color: var(--g-mute); cursor: pointer; }
+.cal__icon--sm { width: 32px; height: 32px; }
+.cal__icon:hover { background: var(--g-hover); }
+.cal__today { display: inline-flex; align-items: center; justify-content: center; height: 40px; margin: 0 12px 0 8px; padding: 0 20px; background: transparent; border: 1px solid #747775; border-radius: 20px; font-size: 0.875rem; font-weight: 500; color: var(--g-ink); cursor: pointer; }
+.cal__today:hover { background: var(--g-hover); }
+.cal__todaynum { display: none; }
+.cal__steps { display: inline-flex; gap: 4px; }
+.cal__month { flex: 1 1 auto; min-width: 0; margin: 0 0 0 8px; overflow: hidden; font-family: inherit; font-size: 1.375rem; font-weight: 400; line-height: 1.2; color: var(--g-ink); white-space: nowrap; text-overflow: ellipsis; }
+.cal__tools { display: flex; flex: none; align-items: center; gap: 4px; }
+.cal__search { width: 220px; max-width: 100%; height: 40px; padding: 0 16px; background: var(--g-hover); border: 1px solid transparent; border-radius: 20px; font-family: inherit; font-size: 0.875rem; color: var(--g-ink); }
+.cal__viewwrap { position: relative; margin-left: 8px; }
+.cal__view { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px 0 20px; background: transparent; border: 1px solid #747775; border-radius: 20px; font-size: 0.875rem; font-weight: 500; color: var(--g-ink); cursor: pointer; }
+.cal__view:hover, .cal__view[aria-expanded="true"] { background: var(--g-hover); }
+.cal__menulist { position: absolute; top: 44px; right: 0; z-index: 25; min-width: 160px; margin: 0; padding: 8px 0; list-style: none; background: #fff; border-radius: 8px; box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3), 0 2px 6px 2px rgba(60, 64, 67, 0.15); }
+.cal__menuitem { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; height: 36px; padding: 0 16px; background: transparent; border: 0; font-size: 0.875rem; color: var(--g-ink); text-align: left; cursor: pointer; }
+.cal__menuitem:hover { background: var(--g-hover); }
+.cal__menuitem[aria-checked="true"] { color: var(--g-blue); font-weight: 600; }
+.cal__kbd { font-family: inherit; font-size: 0.75rem; color: var(--g-mute); }
+.cal__today:focus-visible, .cal__icon:focus-visible, .cal__view:focus-visible, .cal__menuitem:focus-visible, .cal__search:focus-visible, .cal__item:focus-visible, .cal__more:focus-visible, .cal__block:focus-visible, .cal__create:focus-visible, .cal__miniday:focus-visible, .cal__fab:focus-visible { outline: 2px solid var(--g-blue); outline-offset: 2px; }
 
-.cal__status { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
+.cal__status { margin: 0; font-size: 0.875rem; color: var(--g-mute); }
 .cal__error { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-width: 720px; }
-.cal__legend { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 0; padding: 0; list-style: none; font-size: 0.875rem; color: var(--nt-muted); }
-.cal__legend li { display: inline-flex; align-items: center; gap: 8px; }
-.cal__swatch { width: 12px; height: 12px; border-radius: 3px; }
-.cal__swatch[data-owner="me"] { background: var(--cal-me); }
-.cal__swatch[data-owner="partner"] { background: var(--cal-partner); }
-.cal__swatch[data-owner="both"] { background: var(--cal-both); }
-.cal__box[data-owner="google"] { --c: var(--cal-google); }
-.cal__bar[data-owner="google"], .cal__block[data-owner="google"] { background: var(--cal-google-bg); color: var(--nt-ink); border: 1px solid var(--nt-line); font-weight: 400; }
-.cal__ev[data-owner="google"] .cal__evdot, .cal__dot[data-owner="google"] { background: var(--cal-google); }
 
-/* Layout and calendar list */
-.cal__layout { display: flex; flex-direction: column; flex: 1 1 auto; gap: 16px; }
-.cal__main { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
-.cal__layers { display: none; padding: 12px 16px; background: #fff; border: 1px solid var(--nt-line); border-radius: 8px; }
-.cal__layers--open { display: block; }
-.cal__layers-h { margin: 0 0 8px; font-family: inherit; font-size: 0.875rem; font-weight: 600; color: var(--nt-muted); }
+/* Sidebar */
+.cal__layout { position: relative; display: flex; align-items: flex-start; gap: 16px; }
+.cal__side { display: flex; flex-direction: column; gap: 24px; flex: none; width: 256px; }
+.cal__create { display: inline-flex; align-self: flex-start; align-items: center; gap: 12px; height: 56px; padding: 0 24px 0 16px; background: #fff; border: 0; border-radius: 16px; box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15); font-size: 0.875rem; font-weight: 500; color: var(--g-ink); cursor: pointer; transition: box-shadow 0.2s ease, background-color 0.2s ease; }
+.cal__create:hover { background: #f8f9fa; box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3), 0 6px 10px 4px rgba(60, 64, 67, 0.15); }
+
+.cal__mini { padding: 0 4px; }
+.cal__minihead { display: flex; align-items: center; margin-bottom: 4px; }
+.cal__minititle { flex: 1; margin: 0; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--g-ink); }
+.cal__minigrid { display: grid; grid-template-columns: repeat(7, 1fr); justify-items: center; row-gap: 2px; }
+.cal__minidow { display: flex; align-items: center; justify-content: center; height: 24px; font-size: 0.6875rem; font-weight: 500; color: var(--g-mute); }
+.cal__miniday { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; background: transparent; border: 0; border-radius: 50%; font-size: 0.6875rem; font-weight: 500; color: var(--g-ink); cursor: pointer; }
+.cal__miniday:hover { background: var(--g-hover); }
+.cal__miniday--focus, .cal__miniday--focus:hover { background: var(--g-blue-soft); color: var(--g-blue-ink); }
+.cal__miniday--today, .cal__miniday--today:hover { background: var(--g-blue); color: #fff; }
+
+.cal__layers-h { margin: 0 0 4px; padding: 0 8px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--g-ink); }
 .cal__layerlist { margin: 0; padding: 0; list-style: none; }
-.cal__layer { position: relative; display: flex; align-items: center; gap: 10px; min-height: 40px; cursor: pointer; font-size: 0.9375rem; color: var(--nt-ink); }
-.cal__layer:has(input:focus-visible) .cal__box { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
-.cal__box { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 18px; height: 18px; border: 1px solid var(--nt-muted); border-radius: 4px; background: #fff; color: #fff; }
-.cal__box--on { background: var(--c, var(--nt-plum)); border-color: var(--c, var(--nt-plum)); }
+.cal__layer { position: relative; display: flex; align-items: center; gap: 14px; min-height: 36px; padding: 0 8px; border-radius: 8px; cursor: pointer; font-size: 0.875rem; color: var(--g-ink); }
+.cal__layer:hover { background: var(--g-hover); }
+.cal__layer:has(input:focus-visible) .cal__box { outline: 2px solid var(--g-blue); outline-offset: 2px; }
+.cal__box { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 18px; height: 18px; border: 2px solid var(--c, var(--g-mute)); border-radius: 3px; background: #fff; color: #fff; }
+.cal__box--on { background: var(--c, var(--g-blue)); border-color: var(--c, var(--g-blue)); }
 .cal__box[data-owner="me"] { --c: var(--cal-me); color: var(--nt-ink); }
 .cal__box[data-owner="partner"] { --c: var(--cal-partner); }
 .cal__box[data-owner="both"] { --c: var(--cal-both); }
-.cal__box[data-owner="night"] { --c: var(--nt-plum); }
-.cal__avs { display: inline-flex; }
-.cal__av { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff; font-size: 0.75rem; font-weight: 600; color: var(--nt-ink); background: var(--nt-gray); }
-.cal__av + .cal__av { margin-left: -8px; }
-.cal__av[data-owner="me"] { background: var(--nt-apricot); }
-.cal__av[data-owner="partner"] { background: var(--nt-powder); }
+.cal__box[data-owner="night"] { --c: var(--g-mute); }
+.cal__box[data-owner="google"] { --c: var(--cal-google); }
 .cal__lname { min-width: 0; overflow-wrap: anywhere; }
+.cal__hint { margin: 8px 8px 0; font-size: 0.75rem; line-height: 1.4; color: var(--g-mute); }
+
+/* Main panel */
+.cal__main { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; background: #fff; border: 1px solid var(--g-line); border-radius: 16px; overflow: hidden; }
+
+/* Moving between months, weeks and days */
+.cal__stage { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+.cal-next-enter-active, .cal-prev-enter-active { transition: opacity 0.22s ease, transform 0.26s cubic-bezier(0.22, 0.61, 0.36, 1); }
+.cal-next-leave-active, .cal-prev-leave-active { transition: opacity 0.14s ease, transform 0.16s ease-in; }
+.cal-fade-enter-active { transition: opacity 0.2s ease; }
+.cal-fade-leave-active { transition: opacity 0.12s ease; }
+.cal-next-enter-from { opacity: 0; transform: translateX(28px); }
+.cal-next-leave-to { opacity: 0; transform: translateX(-28px); }
+.cal-prev-enter-from { opacity: 0; transform: translateX(-28px); }
+.cal-prev-leave-to { opacity: 0; transform: translateX(28px); }
+.cal-fade-enter-from, .cal-fade-leave-to { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .cal-next-enter-active, .cal-prev-enter-active, .cal-next-leave-active, .cal-prev-leave-active, .cal-fade-enter-active, .cal-fade-leave-active { transition: none; }
+}
 
 /* Month grid */
-.cal__grid { display: flex; flex-direction: column; flex: 1 1 auto; min-height: calc(100vh - 260px); background: #fff; border-top: 1px solid var(--nt-line); border-left: 1px solid var(--nt-line); }
-.cal__dow { flex: none; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.cal__dowcell { display: flex; align-items: center; justify-content: center; height: 44px; border-right: 1px solid var(--nt-line); border-bottom: 1px solid var(--nt-line); font-size: 0.875rem; font-weight: 500; color: var(--nt-muted); }
-.cal__week { position: relative; flex: 1 1 0; min-height: 130px; }
+.cal__grid { display: flex; flex-direction: column; flex: 1 1 auto; min-height: calc(100dvh - 150px); }
+.cal__week { position: relative; flex: 1 1 0; min-height: 112px; }
 .cal__row { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.cal__cell { position: relative; border-right: 1px solid var(--nt-line); border-bottom: 1px solid var(--nt-line); cursor: pointer; }
-.cal__cell:hover { background: var(--nt-bg); }
-.cal__cell--today, .cal__cell--today:hover { background: var(--cal-today); }
-.cal__cell--selected { outline: 1px solid var(--nt-plum); outline-offset: -1px; }
-.cal__cell:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: -2px; z-index: 1; }
+.cal__cell { position: relative; border-right: 1px solid var(--g-line); border-bottom: 1px solid var(--g-line); cursor: pointer; }
+.cal__cell:nth-child(7n) { border-right: 0; }
+.cal__week:first-of-type .cal__cell { border-top: 0; }
+.cal__week:last-child .cal__cell { border-bottom: 0; }
+.cal__cell--selected { background: #f6f9fe; }
+.cal__cell:focus-visible { outline: 2px solid var(--g-blue); outline-offset: -2px; z-index: 1; }
 .cal__night { position: absolute; left: 0; right: 0; bottom: 0; display: flex; height: 3px; }
-.cal__nightpart { flex: 1; background: var(--nt-muted); }
+.cal__nightpart { flex: 1; background: var(--g-mute); }
 .cal__nightpart[data-who="me"] { background: var(--cal-me); }
 .cal__nightpart[data-who="partner"] { background: var(--cal-partner); }
 .cal__dots { display: none; }
 
-.cal__fg { position: relative; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: 36px repeat(3, 22px) 22px; row-gap: 2px; min-height: 130px; padding-bottom: 8px; pointer-events: none; }
+.cal__fg { position: relative; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: 28px repeat(3, 22px) 20px; row-gap: 2px; min-height: 112px; padding-bottom: 4px; pointer-events: none; }
+.cal__fg--first { grid-template-rows: 46px repeat(3, 22px) 20px; }
 .cal__fg > * { pointer-events: auto; }
-.cal__num { display: flex; align-items: center; justify-content: center; justify-self: center; align-self: center; min-width: 26px; height: 26px; border-radius: 50%; font-size: 0.875rem; font-weight: 500; color: var(--nt-ink); pointer-events: none; }
-.cal__fg > .cal__num { pointer-events: none; }
-.cal__num--sun { color: var(--nt-coral); }
-.cal__num--out { color: var(--nt-muted); }
-.cal__num--today { background: var(--nt-plum); color: #fff; }
+.cal__d { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 4px; pointer-events: none; }
+.cal__fg > .cal__d { pointer-events: none; }
+.cal__dname { margin-bottom: 2px; font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.04em; color: var(--g-mute); }
+.cal__dname--today { color: var(--g-blue); }
+.cal__num { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 6px; border-radius: 12px; font-size: 0.75rem; font-weight: 500; color: var(--g-ink); }
+.cal__num--today { background: var(--g-blue); color: #fff; }
 
-.cal__item { min-width: 0; height: 22px; padding: 0; border: 0; font-family: inherit; font-size: 0.8125rem; line-height: 22px; text-align: left; cursor: pointer; }
-.cal__item--out { opacity: 0.6; }
-.cal__bar { display: flex; align-items: center; margin: 0 2px; padding: 0 6px; border-radius: 4px; background: var(--cal-both); color: #fff; font-weight: 700; }
+.cal__item { min-width: 0; height: 22px; padding: 0; border: 0; font-family: inherit; font-size: 0.75rem; line-height: 22px; text-align: left; cursor: pointer; }
+.cal__bar { display: flex; align-items: center; margin: 0 4px 0 2px; padding: 0 8px; border-radius: 4px; background: var(--cal-both); color: #fff; font-weight: 500; }
 .cal__bar[data-owner="me"] { background: var(--cal-me); color: var(--nt-ink); }
 .cal__bar[data-owner="partner"] { background: var(--cal-partner); }
+.cal__bar[data-owner="google"], .cal__block[data-owner="google"] { background: var(--cal-google); color: #fff; }
 .cal__bar--l { margin-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .cal__bar--r { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .cal__bar .cal__evtitle { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.cal__ev { container-type: inline-size; display: flex; align-items: center; gap: 4px; margin: 0 2px; padding: 0 4px; border-radius: 4px; background: transparent; color: var(--nt-ink); }
-.cal__ev:hover { background: var(--nt-gray); }
+.cal__ev { container-type: inline-size; display: flex; align-items: center; gap: 4px; margin: 0 4px 0 2px; padding: 0 4px; border-radius: 4px; background: transparent; color: var(--g-ink); }
+.cal__ev:hover { background: var(--g-hover); }
 .cal__evdot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--cal-both); }
 .cal__ev[data-owner="me"] .cal__evdot { background: var(--cal-me); }
 .cal__ev[data-owner="partner"] .cal__evdot { background: var(--cal-partner); }
-.cal__ev .cal__evtitle { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 500; }
-.cal__evtime { flex: none; font-size: 0.8125rem; color: var(--nt-muted); }
-@container (max-width: 119px) {
+.cal__ev[data-owner="google"] .cal__evdot, .cal__dot[data-owner="google"] { background: var(--cal-google); }
+.cal__ev .cal__evtitle { flex: 1; min-width: 0; overflow: hidden; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; }
+.cal__evtime { flex: none; font-size: 0.75rem; color: var(--g-ink); }
+.cal__evtime:empty { display: none; }
+@container (max-width: 99px) {
   .cal__evtime { display: none; }
 }
-.cal__more { justify-self: end; align-self: center; height: 20px; margin-right: 4px; padding: 0 6px; background: #fff; border: 1px solid var(--nt-line); border-radius: 4px; font-family: inherit; font-size: 0.8125rem; line-height: 18px; color: var(--nt-muted); cursor: pointer; }
-.cal__more:hover { background: var(--nt-gray); }
+.cal__more { justify-self: start; align-self: center; height: 20px; margin-left: 2px; padding: 0 6px; background: transparent; border: 0; border-radius: 4px; font-size: 0.75rem; font-weight: 500; line-height: 20px; color: var(--g-mute); white-space: nowrap; cursor: pointer; }
+.cal__more:hover { background: var(--g-hover); }
 
-/* Week */
-.cal__wk { background: #fff; border-top: 1px solid var(--nt-line); border-left: 1px solid var(--nt-line); }
+/* Week and day */
+.cal__wk { --cols: 7; display: flex; flex-direction: column; min-height: 0; }
 .cal__wkhead, .cal__wkall, .cal__wkbody { display: grid; grid-template-columns: 56px minmax(0, 1fr); }
-.cal__wkhead { grid-template-columns: 56px repeat(7, minmax(0, 1fr)); }
-.cal__gutter { border-right: 1px solid var(--nt-line); border-bottom: 1px solid var(--nt-line); }
-.cal__gutter--label { display: flex; align-items: center; justify-content: center; font-size: 0.875rem; color: var(--nt-muted); }
-.cal__wkday { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0 10px; border-right: 1px solid var(--nt-line); border-bottom: 1px solid var(--nt-line); }
-.cal__wkname { font-size: 0.875rem; font-weight: 500; color: var(--nt-muted); }
-.cal__wknum { display: flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; border-radius: 50%; font-size: 1rem; font-weight: 500; color: var(--nt-ink); }
-.cal__wkall .cal__wkallarea { position: relative; border-bottom: 1px solid var(--nt-line); min-height: 26px; }
-.cal__wkallbg { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.cal__wkallcol { border-right: 1px solid var(--nt-line); }
-.cal__wkallfg { position: relative; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); row-gap: 2px; padding: 2px 0; }
-.cal__wkscroll { max-height: 576px; overflow-y: auto; border-bottom: 1px solid var(--nt-line); }
+.cal__wkhead { grid-template-columns: 56px repeat(var(--cols), minmax(0, 1fr)); }
+.cal__gutter { border-right: 1px solid var(--g-line); }
+.cal__wkhead .cal__gutter { border-bottom: 1px solid var(--g-line); }
+.cal__gutter--label { display: flex; align-items: flex-end; justify-content: center; padding-bottom: 4px; font-size: 0.625rem; color: var(--g-mute); }
+.cal__wkday { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 0 12px; border-right: 1px solid var(--g-line); border-bottom: 1px solid var(--g-line); }
+.cal__wkday:last-child { border-right: 0; }
+.cal__wkname { font-size: 0.6875rem; font-weight: 500; letter-spacing: 0.06em; color: var(--g-mute); }
+.cal__wkname--today { color: var(--g-blue); }
+.cal__wknum { display: flex; align-items: center; justify-content: center; min-width: 44px; height: 44px; border-radius: 50%; font-size: 1.5rem; font-weight: 400; color: var(--g-ink); }
+.cal__wknum.cal__num--today { color: #fff; }
+.cal__wkall .cal__wkallarea { position: relative; min-height: 28px; border-bottom: 1px solid var(--g-line); }
+.cal__wkallbg { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); }
+.cal__wkallcol { border-right: 1px solid var(--g-line); }
+.cal__wkallcol:last-child { border-right: 0; }
+.cal__wkallfg { position: relative; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); row-gap: 2px; padding: 3px 0; }
+.cal__wkscroll { max-height: calc(100dvh - 330px); min-height: 320px; overflow-y: auto; }
 .cal__wkbody { position: relative; }
-.cal__hours { position: relative; border-bottom: 0; }
-.cal__hour { position: absolute; right: 8px; transform: translateY(-50%); font-size: 0.875rem; color: var(--nt-muted); white-space: nowrap; }
+.cal__hours { position: relative; }
+.cal__hour { position: absolute; right: 8px; transform: translateY(-50%); font-size: 0.625rem; color: var(--g-mute); white-space: nowrap; }
 .cal__wkgrid { position: relative; }
 .cal__wklines { position: absolute; inset: 0; }
-.cal__wkline { display: block; box-sizing: border-box; border-bottom: 1px solid var(--nt-line); }
-.cal__wkcols { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
-.cal__wkcol { position: relative; border-right: 1px solid var(--nt-line); cursor: pointer; }
-.cal__wkcol--today { background: var(--cal-today); }
-.cal__wkcol:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: -2px; }
-.cal__block { position: absolute; display: flex; flex-direction: column; align-items: flex-start; overflow: hidden; padding: 2px 6px; border: 0; border-radius: 4px; background: var(--cal-both); color: #fff; font-family: inherit; font-size: 0.8125rem; line-height: 1.3; text-align: left; cursor: pointer; }
+.cal__wkline { display: block; box-sizing: border-box; border-bottom: 1px solid var(--g-line); }
+.cal__wkcols { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); }
+.cal__wkcol { position: relative; border-right: 1px solid var(--g-line); cursor: pointer; }
+.cal__wkcol:last-child { border-right: 0; }
+.cal__wkcol:focus-visible { outline: 2px solid var(--g-blue); outline-offset: -2px; }
+.cal__now { position: absolute; left: 0; right: 0; z-index: 2; height: 2px; margin-top: -1px; background: var(--g-red); pointer-events: none; }
+.cal__now::before { content: ""; position: absolute; left: -6px; top: -5px; width: 12px; height: 12px; border-radius: 50%; background: var(--g-red); }
+.cal__block { position: absolute; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; overflow: hidden; padding: 2px 8px; border: 1px solid #fff; border-radius: 6px; background: var(--cal-both); color: #fff; font-family: inherit; font-size: 0.75rem; line-height: 1.3; text-align: left; cursor: pointer; }
 .cal__block[data-owner="me"] { background: var(--cal-me); color: var(--nt-ink); }
 .cal__block[data-owner="partner"] { background: var(--cal-partner); }
-.cal__blocktitle { max-width: 100%; overflow: hidden; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; }
+.cal__blocktitle { max-width: 100%; overflow: hidden; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; }
 .cal__blocktime { max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
-@media (min-width: 1200px) {
-  .cal__layout { flex-direction: row; align-items: stretch; gap: 24px; }
-  .cal__layers { display: block; flex: none; align-self: flex-start; width: 240px; }
-  .cal__listbtn { display: none; }
-}
-@media (max-width: 767px) {
-  .cal__title { font-size: 1.75rem; }
+/* The floating create button is for phones and tablets, where the sidebar is a drawer. */
+.cal__fab { display: none; position: fixed; right: 24px; bottom: 96px; z-index: 29; align-items: center; justify-content: center; width: 56px; height: 56px; padding: 0; background: var(--g-blue-soft); border: 0; border-radius: 16px; box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15); color: var(--g-blue-ink); cursor: pointer; }
+
+@media (max-width: 1023px) {
+  .cal__layout { display: block; }
+  .cal__fab { display: inline-flex; }
+  .cal__side { display: none; }
   .cal__month { font-size: 1.25rem; }
-  .cal__grid { min-height: 0; }
-  .cal__week { flex: none; min-height: 64px; }
-  .cal__fg { grid-template-rows: 32px; min-height: 64px; padding-bottom: 0; }
+  .cal__grid { min-height: calc(100dvh - 200px); }
+}
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .cal__side { width: 220px; }
+}
+
+/* Phones: Google's compact layout. Dots instead of chips, swipe to move on. */
+@media (max-width: 599px) {
+  .cal__toolbar { min-height: 56px; }
+  .cal__steps { display: none; }
+  .cal__today { width: 36px; height: 36px; margin: 0 0 0 4px; padding: 0; border-radius: 8px; }
+  .cal__todaytxt { display: none; }
+  .cal__todaynum { display: inline; font-size: 0.9375rem; font-weight: 500; }
+  .cal__month { margin-left: 4px; font-size: 1.0625rem; }
+  .cal__view { padding: 0 8px 0 14px; }
+  .cal__viewwrap { margin-left: 0; }
+  .cal__toolbar--searching .cal__today,
+  .cal__toolbar--searching .cal__month,
+  .cal__toolbar--searching .cal__viewwrap { display: none; }
+  .cal__toolbar--searching .cal__tools { flex: 1; }
+  .cal__toolbar--searching .cal__search { flex: 1; width: auto; }
+  .cal__main { border-radius: 12px; }
+  .cal__grid { min-height: calc(100dvh - 190px); }
+  .cal__week { min-height: 72px; }
+  .cal__fg, .cal__fg--first { grid-template-rows: 28px; min-height: 72px; padding-bottom: 0; }
+  .cal__fg--first { grid-template-rows: 46px; }
   .cal__item, .cal__more { display: none; }
   .cal__dots { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; }
   .cal__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cal-both); }
   .cal__dot[data-owner="me"] { background: var(--cal-me); }
   .cal__dot[data-owner="partner"] { background: var(--cal-partner); }
-  .cal__wkhead, .cal__wkall, .cal__wkbody { grid-template-columns: 44px minmax(0, 1fr); }
-  .cal__wkhead { grid-template-columns: 44px repeat(7, minmax(0, 1fr)); }
+  .cal__num { padding: 0 4px; font-size: 0.6875rem; }
+  .cal__wkhead, .cal__wkall, .cal__wkbody { grid-template-columns: 40px minmax(0, 1fr); }
+  .cal__wkhead { grid-template-columns: 40px repeat(var(--cols), minmax(0, 1fr)); }
+  .cal__wknum { min-width: 32px; height: 32px; font-size: 1rem; }
+  .cal__wkday { padding: 8px 0 8px; }
+  .cal__hour { right: 4px; }
+  .cal__wkscroll { max-height: calc(100dvh - 300px); }
+  .cal__fab { right: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cal__create { transition: none; }
 }
 </style>

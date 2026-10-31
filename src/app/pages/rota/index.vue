@@ -1,4 +1,5 @@
 <script setup>
+import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
 import { computed, inject, ref } from "vue";
 import Icon from "@/app/components/Icon.vue";
@@ -464,7 +465,7 @@ async function finishSetup() {
     />
 
     <div aria-live="polite">
-      <p v-if="loading" class="rt__muted">Loading the rota...</p>
+      <LoadingScreen v-if="loading" variant="inline" label="Loading the rota" />
     </div>
 
     <div

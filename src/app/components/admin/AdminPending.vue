@@ -1,4 +1,7 @@
 <script setup>
+import { useToast } from "@/app/composables/useToast";
+import SkeletonList from "@/app/components/SkeletonList.vue";
+import Collapse from "@/app/components/Collapse.vue";
 import { ref } from "vue";
 import AppButton from "@/components/ui/AppButton.vue";
 import AdminRoomCard from "@/app/components/admin/AdminRoomCard.vue";
@@ -16,6 +19,7 @@ defineProps({
 });
 
 const { currentUser } = useAuth();
+const { showToast } = useToast();
 const rejecting = ref("");
 const note = ref("");
 const busyId = ref("");
@@ -27,6 +31,7 @@ async function decide(room, decision) {
   actionError.value = "";
   try {
     await reviewRoom(currentUser.value?.uid, room.id, decision, note.value);
+    showToast({ title: decision === "approved" ? "Room accepted" : "Room rejected", text: room.name });
     rejecting.value = "";
     note.value = "";
   } catch (cause) {
@@ -49,14 +54,15 @@ function startReject(room) {
 
 <template>
   <div class="ap">
-    <p v-if="loading" class="ap__muted" role="status">Loading...</p>
+    <SkeletonList v-if="loading" :rows="3" :height="96" label="Loading" />
     <p v-else-if="error" class="app-error-text" role="alert">{{ error }}</p>
     <p v-else-if="!rooms.length" class="ap__muted">No rooms waiting for review.</p>
     <p v-if="actionError" class="app-error-text" role="alert">{{ actionError }}</p>
 
-    <ul v-if="rooms.length" class="ap__list" aria-label="Rooms waiting for review">
+    <TransitionGroup tag="ul" name="li" v-if="rooms.length" class="ap__list" aria-label="Rooms waiting for review">
       <AdminRoomCard v-for="room in rooms" :key="room.id" :room="room">
         <p v-if="formatDate(room.createdAt)" class="ap__muted">Submitted {{ formatDate(room.createdAt) }}</p>
+        <Collapse>
         <div v-if="rejecting === room.id" class="ap__reject">
           <label :for="`ap-note-${room.id}`" class="ap__label">Reason (optional)</label>
           <textarea :id="`ap-note-${room.id}`" v-model="note" class="form-control" rows="2" :maxlength="REVIEW_NOTE_MAX" :disabled="busyId === room.id"></textarea>
@@ -65,12 +71,13 @@ function startReject(room) {
             <AppButton variant="outline" size="sm" :disabled="busyId === room.id" @click="rejecting = ''">Cancel</AppButton>
           </div>
         </div>
-        <div v-else class="arc__actions">
+        </Collapse>
+        <div v-if="rejecting !== room.id" class="arc__actions">
           <AppButton variant="outline" size="sm" :disabled="!!busyId" @click="startReject(room)">Reject</AppButton>
           <AppButton size="sm" :disabled="!!busyId" @click="decide(room, 'approved')">{{ busyId === room.id ? "Saving..." : "Accept" }}</AppButton>
         </div>
       </AdminRoomCard>
-    </ul>
+    </TransitionGroup>
   </div>
 </template>
 

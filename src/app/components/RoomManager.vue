@@ -30,6 +30,18 @@ function open(room, remove = false) {
   };
   nextTick(() => dialog.value.showModal());
 }
+// Closing eases out (the same way it eased in) before the dialog is really closed.
+const closing = ref(false);
+function closeDialog() {
+  const el = dialog.value;
+  if (!el?.open || closing.value) return;
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return el.close();
+  closing.value = true;
+  window.setTimeout(() => {
+    closing.value = false;
+    el.close();
+  }, 180);
+}
 defineExpose({ edit: (room) => open(room), remove: (room) => open(room, true) });
 
 async function save() {
@@ -39,7 +51,7 @@ async function save() {
   try {
     await saveManagedRoom(currentUser.value?.uid, draft.value, deleting.value);
     message.value = deleting.value ? "Room deleted." : "Room saved.";
-    dialog.value.close();
+    closeDialog();
   } catch (cause) {
     // The real reason goes to the console and, for an unknown failure, onto the screen.
     console.error("[app room manager]", cause?.code, cause?.message, cause);
@@ -58,7 +70,7 @@ async function save() {
 
 <template>
   <p v-if="message" class="manager-message" role="status">{{ message }}</p>
-  <dialog ref="dialog" class="manager" aria-labelledby="room-manager-title" @cancel="busy && $event.preventDefault()">
+  <dialog ref="dialog" class="manager" :class="{ 'manager--closing': closing }" aria-labelledby="room-manager-title" @cancel.prevent="!busy && closeDialog()">
     <h2 id="room-manager-title" class="nt-heading nt-heading--sm">{{ deleting ? 'Delete pumping room' : draft.id ? 'Edit pumping room' : 'Add pumping room' }}</h2>
     <form @submit.prevent="save">
       <fieldset :disabled="busy" class="manager-fields">
@@ -76,7 +88,7 @@ async function save() {
         <p v-if="error" class="app-error-text" role="alert">{{ error }}</p>
         <div class="manager-actions">
           <AppButton type="submit">{{ busy ? 'Saving…' : deleting ? 'Delete room' : 'Save room' }}</AppButton>
-          <AppButton type="button" variant="outline" @click="dialog.close()">Cancel</AppButton>
+          <AppButton type="button" variant="outline" @click="closeDialog">Cancel</AppButton>
         </div>
       </fieldset>
     </form>
@@ -86,6 +98,15 @@ async function save() {
 <style scoped>
 .manager { width: min(480px, calc(100vw - 32px)); max-height: 85vh; padding: 24px; border: 1px solid var(--nt-line); border-radius: 12px; color: var(--nt-ink); background: var(--nt-white); }
 .manager::backdrop { background: rgb(0 0 0 / 35%); }
+.manager[open] { animation: manager-in 240ms cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+.manager[open]::backdrop { animation: manager-fade 240ms ease-out both; }
+.manager--closing[open] { animation: manager-out 180ms ease-in both; }
+.manager--closing[open]::backdrop { animation: manager-fade-out 180ms ease-in both; }
+@keyframes manager-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(10px) scale(0.98); } }
+@keyframes manager-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes manager-in { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes manager-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .manager[open], .manager[open]::backdrop, .manager--closing[open], .manager--closing[open]::backdrop { animation: none; } }
 .manager-fields { display: grid; gap: 14px; padding: 0; border: 0; }
 label { display: grid; gap: 6px; }
 input:not([type=checkbox]), textarea, select { width: 100%; padding: 10px; border: 1px solid var(--nt-line); border-radius: 6px; font: inherit; }
