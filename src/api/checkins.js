@@ -2,7 +2,8 @@
 // week as a pair and the summary can tell you when your partner is having a hard time.
 //
 // households/{hid}/checkins/{uid}_{yyyy-mm-dd}
-//   { uid, date, mood, stress, energy, closeness, concerns, body, lifts, savedAt, updatedAt }
+//   { uid, date, mood, stress, energy, closeness, concerns, body, lifts, savedAt, moodStage, need, updatedAt }
+//   moodStage: budding | opening | bloom | drooping | wilted.  need: coverTonight | checkOnMe | giveSpace.
 //   One document per person per day. Saving again the same day replaces it. Only its owner writes.
 import { collection, doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "./db";
@@ -26,20 +27,26 @@ export function subscribeCheckins(hid, onData, onError) {
 }
 
 export async function saveCheckin(hid, uid, entry) {
-  const { date, mood, stress, energy, closeness, concerns, body, lifts, savedAt } = entry;
-  await withTimeout(
-    setDoc(doc(db, "households", hid, "checkins", checkinId(uid, date)), {
-      uid,
-      date,
-      mood,
-      stress,
-      energy: energy ?? null,
-      closeness: closeness ?? null,
-      concerns: concerns ?? [],
-      body: body ?? [],
-      lifts: lifts ?? [],
-      savedAt,
-      updatedAt: serverTimestamp(),
-    }),
-  );
+  const { date, mood, stress, energy, closeness, concerns, body, lifts, savedAt, moodStage, need } = entry;
+  const ref = doc(db, "households", hid, "checkins", checkinId(uid, date));
+  const base = {
+    uid,
+    date,
+    mood,
+    stress,
+    energy: energy ?? null,
+    closeness: closeness ?? null,
+    concerns: concerns ?? [],
+    body: body ?? [],
+    lifts: lifts ?? [],
+    savedAt,
+  };
+  try {
+    await withTimeout(setDoc(ref, { ...base, moodStage, need, updatedAt: serverTimestamp() }));
+  } catch (error) {
+    // Database rules published before moodStage and need existed turn those two fields away. Save
+    // without them: the stage is worked out again from the answers whenever the check-in is read.
+    if (error?.code !== "permission-denied") throw error;
+    await withTimeout(setDoc(ref, { ...base, updatedAt: serverTimestamp() }));
+  }
 }

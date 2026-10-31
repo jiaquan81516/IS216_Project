@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { reactive, toRefs, watch } from "vue";
 import { saveCheckin, subscribeCheckins } from "@/api/checkins";
+import { DEFAULT_NEED, MOOD_STAGES, NEEDS, moodStageFor } from "@/app/utils/moodStage";
 
 export const CHECKINS_KEY = "nt.app.checkins";
 const OWNER_KEY = "nt.app.checkins-owner";
@@ -27,6 +28,10 @@ function clean(date, value) {
     body: cleanList(value.body, 8),
     lifts: cleanList(value.lifts, 8),
     savedAt: String(value.savedAt ?? ""),
+    // The stage of the flower, and what this person would like from their partner. Older check-ins
+    // have neither, so both are worked out (the stage) or assumed (a kind check-in).
+    moodStage: MOOD_STAGES.includes(value.moodStage) ? value.moodStage : moodStageFor({ mood: clamp(value.mood), stress: clamp(value.stress) }),
+    need: NEEDS.includes(value.need) ? value.need : DEFAULT_NEED,
   };
 }
 
@@ -127,13 +132,22 @@ export const useCheckinsStore = defineStore("app-checkins", () => {
           }
           // Anything saved here before the household loaded goes up once, so it is not lost.
           const first = !state.loaded;
-          state.items = { ...state.items, ...mine };
+          // The newest version of each day wins, so an older copy in the database never replaces a
+          // check-in that was just made here.
+          const timeOf = (e) => new Date(e?.savedAt ?? 0).getTime() || 0;
+          const merged = { ...state.items };
+          const newerHere = [];
+          for (const [date, remote] of Object.entries(mine)) {
+            const here = merged[date];
+            if (!here || timeOf(remote) >= timeOf(here)) merged[date] = remote;
+            else newerHere.push(date);
+          }
+          state.items = merged;
           state.partnerItems = theirs;
           state.loaded = true;
-          if (first) {
-            for (const [date, entry] of Object.entries(state.items)) {
-              if (!mine[date]) saveCheckin(id, uid, entry).catch(() => {});
-            }
+          // Anything saved here that the database does not have yet, or has an older copy of, goes up.
+          for (const [date, entry] of Object.entries(merged)) {
+            if ((first && !mine[date]) || newerHere.includes(date)) saveCheckin(id, uid, entry).catch(() => {});
           }
         },
         () => {
@@ -183,5 +197,14 @@ export const useCheckinsStore = defineStore("app-checkins", () => {
     return newestWithin(state.items, now);
   }
 
-  return { ...toRefs(state), save, forDate, lastSeven, partnerLastSeven, recent, bind, unbind, setPartnerUid };
+  // Support has been arranged (the partner accepted a cover offer), so the flower settles back to a
+  // bud. It never jumps straight to a bloom: nobody is suddenly fine because a shift was covered.
+  function resetStage(now = new Date()) {
+    const entry = newestWithin(state.items, now);
+    if (!entry) return;
+    state.items[entry.date] = { ...entry, moodStage: "budding" };
+    if (householdId && meUid) saveCheckin(householdId, meUid, state.items[entry.date]).catch(() => {});
+  }
+
+  return { ...toRefs(state), save, forDate, lastSeven, partnerLastSeven, recent, resetStage, bind, unbind, setPartnerUid };
 });

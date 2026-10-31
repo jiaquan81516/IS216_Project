@@ -301,12 +301,29 @@ service cloud.firestore {
         allow delete: if isPrimaryParent() && feelingId == request.auth.uid;
       }
 
+      // The family photo on Home. One document, "frame", shrunk to a small JPEG in the browser
+      // (under 400 KB as text) so it stays well inside the 1 MB document limit. Both parents read,
+      // add, change or remove it, and every write names who made it.
+      match /photo/{docId} {
+        allow read: if sharedMember();
+        allow create, update: if sharedMember()
+          && docId == 'frame'
+          && request.resource.data.keys().hasOnly(['image', 'caption', 'updatedBy', 'updatedAt'])
+          && request.resource.data.image is string
+          && request.resource.data.image.size() < 400000
+          && request.resource.data.caption is string
+          && request.resource.data.caption.size() <= 40
+          && request.resource.data.updatedBy == request.auth.uid
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if sharedMember() && docId == 'frame';
+      }
+
       // Wellness check-ins. Both parents read them, so the week can be shown as a pair. One
       // document per person per day, named uid_yyyy-mm-dd, and only its owner writes it.
       match /checkins/{checkinId} {
         allow read: if sharedMember();
         allow create, update: if sharedMember()
-          && request.resource.data.keys().hasOnly(['uid', 'date', 'mood', 'stress', 'energy', 'closeness', 'concerns', 'body', 'lifts', 'savedAt', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['uid', 'date', 'mood', 'stress', 'energy', 'closeness', 'concerns', 'body', 'lifts', 'savedAt', 'moodStage', 'need', 'updatedAt'])
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.date is string
           && request.resource.data.date.size() == 10
@@ -317,6 +334,8 @@ service cloud.firestore {
           && request.resource.data.body is list && request.resource.data.body.size() <= 8
           && request.resource.data.lifts is list && request.resource.data.lifts.size() <= 8
           && request.resource.data.savedAt is string
+          && request.resource.data.moodStage in ['budding', 'opening', 'bloom', 'drooping', 'wilted']
+          && request.resource.data.need in ['coverTonight', 'checkOnMe', 'giveSpace']
           && request.resource.data.updatedAt == request.time;
         allow delete: if false;
       }

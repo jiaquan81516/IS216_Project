@@ -2,6 +2,7 @@
 import "@/app/app.css";
 import { computed, h, inject, nextTick, ref, watch } from "vue";
 import AppButton from "@/components/ui/AppButton.vue";
+import Face from "@/app/components/MoodFace";
 import WeekTogether from "@/app/components/WeekTogether.vue";
 import { NUDGES_KEY } from "@/app/composables/useNudges";
 import { dateKey, useCheckinsStore } from "@/app/stores/checkins";
@@ -15,6 +16,7 @@ import {
   LIFTS,
   MAX_CONCERNS,
   MOODS,
+  NEED_OPTIONS,
   REFLECT,
   STRESS,
   kindWords,
@@ -22,8 +24,6 @@ import {
 } from "@/app/data/wellness";
 import { isHardCheckin, needsSupport } from "@/app/utils/loadHelpers";
 import { ROUTES } from "@/app/routes";
-import { setFeeling } from "@/api/team";
-import { notifyPartner } from "@/api/push";
 
 defineOptions({ name: "WellnessPage" });
 
@@ -31,34 +31,6 @@ defineOptions({ name: "WellnessPage" });
    text beside it. Their styles are at the bottom of this file under :deep(). */
 const svg = (cls, viewBox, children) => h("svg", { class: cls, viewBox, "aria-hidden": "true", focusable: "false" }, children);
 
-// Mood as a simple drawn face, from very low (1) to great (5).
-const FACE_FILL = ["#dfe3ea", "#e9e5ec", "#f3efe6", "#f6e3d3", "#f6d8c6"];
-const FACE_EYES = [
-  ["M18 21 L27 18", "M46 21 L37 18", "dots"],
-  ["M19 29 h8", "M37 29 h8"],
-  ["dots"],
-  ["dots"],
-  ["M19 30 q4 -5 8 0", "M37 30 q4 -5 8 0"],
-];
-const FACE_MOUTH = ["M22 47 Q32 38 42 47", "M24 46 Q32 42 40 46", "M24 44 h16", "M22 41 Q32 50 42 41", "M20 39 Q32 55 44 39 Z"];
-function Face({ level }) {
-  const i = (level || 3) - 1;
-  const line = { fill: "none", stroke: "#3b2f3f", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round" };
-  const eyes = FACE_EYES[i].flatMap((d) =>
-    d === "dots"
-      ? [h("circle", { cx: 23, cy: 29, r: 2.4, fill: "#3b2f3f" }), h("circle", { cx: 41, cy: 29, r: 2.4, fill: "#3b2f3f" })]
-      : [h("path", { ...line, d })],
-  );
-  return svg(["pic-face", { "is-faded": !level }], "0 0 64 64", [
-    h("circle", { cx: 32, cy: 32, r: 28, fill: FACE_FILL[i], stroke: "#3b2f3f", "stroke-width": 1.5 }),
-    ...eyes,
-    i === 0 ? h("path", { d: "M20 34 q-2.5 4 0 5.5 q2.5 -1.5 0 -5.5 z", fill: "#5c7a9e" }) : null,
-    i === 4 ? h("circle", { cx: 16, cy: 38, r: 4, fill: "#e3a584", opacity: 0.5 }) : null,
-    i === 4 ? h("circle", { cx: 48, cy: 38, r: 4, fill: "#e3a584", opacity: 0.5 }) : null,
-    h("path", { ...line, d: FACE_MOUTH[i], fill: i === 4 ? "#3b2f3f" : "none" }),
-  ]);
-}
-Face.props = ["level"];
 
 // Energy as a jar that fills from 1 (empty) to 5 (full). `clip` keeps clip path ids unique.
 const JAR = "M38 14 h44 v14 c0 6 14 10 14 26 v92 c0 10 -8 16 -18 16 h-36 c-10 0 -18 -6 -18 -16 v-92 c0 -16 14 -20 14 -26 z";
@@ -176,6 +148,7 @@ const bodyNone = ref(false);
 const closeness = ref(existing?.closeness ?? null);
 const concerns = ref([...(existing?.concerns ?? [])]);
 const lifts = ref([...(existing?.lifts ?? [])]);
+const need = ref(existing?.need ?? null);
 const answers = () => ({
   mood: mood.value,
   energy: energy.value,
@@ -184,11 +157,12 @@ const answers = () => ({
   body: [...body.value],
   concerns: [...concerns.value],
   lifts: [...lifts.value],
+  need: need.value,
 });
 
 // "steps" is the check-in, "summary" the reading of the saved answers.
 const view = ref(store.recent() ? "summary" : "steps");
-const STEPS = ["light", "tank", "stones", "body", "close", "weigh", "review"];
+const STEPS = ["light", "tank", "stones", "body", "close", "weigh", "need", "review"];
 const REQUIRED = { light: () => mood.value, stones: () => stress.value };
 const step = ref(0);
 const current = computed(() => STEPS[step.value]);
@@ -200,6 +174,7 @@ const titles = computed(() => ({
   body: "Where are you holding it?",
   close: `How close do you feel to ${partnerName.value} today?`,
   weigh: "What took the most out of you, and what gave a little back?",
+  need: "If today is hard, what would help most?",
   review: "Here is today",
 }));
 const HINTS = {
@@ -209,6 +184,7 @@ const HINTS = {
   body: "Close your eyes for a breath. Where do you feel tight, heavy or sore?",
   close: "Pick the pair that looks most like the two of you today.",
   weigh: "Pick what fits. It is fine if nothing gave back yet.",
+  need: "Optional. It only shapes the suggestion your partner sees. If you skip it, we assume a kind check-in.",
   review: "Look it over. Tap any part to change it.",
 };
 
@@ -313,24 +289,9 @@ async function save() {
   error.value = "";
   const entry = store.save(answers());
   savedEntry.value = entry;
-  // Your partner sees the check-in itself, so a hard day also reaches their phone, once a day.
-  if (partnerName.value && isHardCheckin(entry)) {
-    shareHardDay(entry);
-  }
+  // Your partner sees the check-in on their dashboard the next time they open it. A hard day is never
+  // pushed to their phone or popped up in front of them.
   await showSummary();
-}
-
-// The server reads households/{hid}/feelings/{uid} to word the push, so write it first.
-async function shareHardDay(entry) {
-  const hid = home?.householdId?.value;
-  const uid = home?.me?.value?.uid;
-  if (!hid || !uid) return;
-  try {
-    await setFeeling(hid, uid, { level: "hard", date: entry.date });
-    notifyPartner(hid, "feeling", uid);
-  } catch (cause) {
-    console.error("[app wellness]", cause?.code, cause);
-  }
 }
 
 // Hydrate from the household once it has loaded: a check-in made on another device, or before a
@@ -629,7 +590,23 @@ const highFirst = (list) => [...list].reverse();
         </fieldset>
       </div>
 
-      <!-- 7. Review -->
+      <!-- 7. What would help -->
+      <div v-else-if="current === 'need'" class="wl__options wl__options--wide" role="radiogroup" aria-label="What would help most">
+        <button
+          v-for="o in NEED_OPTIONS"
+          :key="o.value"
+          type="button"
+          role="radio"
+          class="wl__option"
+          :aria-checked="need === o.value ? 'true' : 'false'"
+          @click="need = need === o.value ? null : o.value"
+        >
+          <span class="wl__option-label">{{ o.label }}</span>
+          <span class="wl__option-sub">{{ o.sub }}</span>
+        </button>
+      </div>
+
+      <!-- 8. Review -->
       <div v-else class="wl__review">
         <ul class="wl__ledger">
           <li>
@@ -690,6 +667,16 @@ const highFirst = (list) => [...list].reverse();
                 <span class="wl__tile-value" :class="{ 'is-skipped': !concerns.length }">{{ labelsOf(CONCERNS, concerns) || "Nothing picked" }}</span>
                 <span class="wl__tile-name wl__tile-name--gap">Gave back</span>
                 <span class="wl__tile-value" :class="{ 'is-skipped': !lifts.length }">{{ labelsOf(LIFTS, lifts) || "Nothing yet" }}</span>
+              </span>
+              <span class="wl__change">Change</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="wl__tile" @click="goTo('need')">
+              <span class="wl__tile-pic" />
+              <span class="wl__tile-text">
+                <span class="wl__tile-name">If today is hard</span>
+                <span class="wl__tile-value" :class="{ 'is-skipped': !need }">{{ labelOf(NEED_OPTIONS, need) || "Check on me (the default)" }}</span>
               </span>
               <span class="wl__change">Change</span>
             </button>
@@ -929,7 +916,7 @@ const highFirst = (list) => [...list].reverse();
 .wl__sub { margin: 0; color: var(--nt-muted); }
 
 /* The butter "Yours alone" box, for the check-in and its summary. */
-.wl__box { display: flex; flex-direction: column; gap: 16px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.wl__box { display: flex; flex-direction: column; gap: 16px; padding: 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
 .wl__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; }
 .wl__label { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
 .wl__count-step { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
@@ -945,7 +932,7 @@ const highFirst = (list) => [...list].reverse();
 .wl__picture { display: flex; justify-content: center; width: 100%; max-width: 280px; margin: 0 auto; }
 .wl__picture--narrow { max-width: 170px; }
 .wl__options { display: flex; flex-direction: column; gap: 8px; }
-.wl__option { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-height: 48px; padding: 10px 16px; background: #fff; border: 1px solid var(--nt-line); border-radius: 8px; font-family: inherit; text-align: left; color: var(--nt-ink); cursor: pointer; transition: background-color 0.15s, border-color 0.15s; }
+.wl__option { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-height: 48px; padding: 10px 16px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 8px; font-family: inherit; text-align: left; color: var(--nt-ink); cursor: pointer; transition: background-color 0.15s, border-color 0.15s; }
 .wl__option:hover { background: var(--nt-gray); }
 .wl__option[aria-checked="true"] { background: var(--nt-gray); border-color: var(--nt-plum); box-shadow: inset 0 0 0 0.5px var(--nt-plum); }
 .wl__option[aria-checked="true"] .wl__option-label { color: var(--nt-plum); font-weight: 600; }
@@ -962,7 +949,7 @@ const highFirst = (list) => [...list].reverse();
 .wl__swatch--you { background: var(--nt-powder); border: 1.5px solid var(--nt-powder-d); }
 .wl__swatch--them { margin-left: 12px; background: var(--nt-apricot); border: 1.5px solid var(--nt-apricot-d); }
 .wl__pairs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-.wl__pair { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 8px 12px; background: #fff; border: 1px solid var(--nt-line); border-radius: 8px; font-family: inherit; color: var(--nt-ink); cursor: pointer; }
+.wl__pair { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 8px 12px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 8px; font-family: inherit; color: var(--nt-ink); cursor: pointer; }
 .wl__pair:hover { background: var(--nt-gray); }
 .wl__pair[aria-checked="true"] { background: var(--nt-gray); border-color: var(--nt-plum); }
 .wl__pair[aria-checked="true"] .wl__option-label { color: var(--nt-plum); font-weight: 600; }
@@ -971,6 +958,8 @@ const highFirst = (list) => [...list].reverse();
 .wl__face :deep(svg) { width: 100%; max-width: 72px; transition: transform 0.2s ease; }
 .wl__face:hover :deep(svg), .wl__face[aria-checked="true"] :deep(svg) { transform: scale(1.08); }
 
+.wl__options--wide { max-width: 34rem; }
+.wl__option-sub { text-align: right; }
 .wl__weigh { display: flex; flex-direction: column; gap: 20px; }
 .wl__group { display: flex; flex-direction: column; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .wl__legend { float: none; width: auto; margin: 0 0 10px; padding: 0; font-size: 0.9375rem; font-weight: 600; color: var(--nt-ink); }
@@ -980,7 +969,7 @@ const highFirst = (list) => [...list].reverse();
 
 .wl__review { display: flex; flex-direction: column; gap: 20px; }
 /* The review reads like a receipt: one panel, a row per answer. */
-.wl__ledger { margin: 0; padding: 0 16px; list-style: none; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.wl__ledger { margin: 0; padding: 0 16px; list-style: none; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
 .wl__ledger li + li { border-top: 1px solid var(--nt-line); }
 .wl__tile { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 16px; width: 100%; padding: 12px 0; background: none; border: 0; font-family: inherit; text-align: left; color: var(--nt-ink); cursor: pointer; }
 .wl__tile-pic { display: flex; align-items: center; justify-content: center; height: 48px; }
@@ -1012,24 +1001,24 @@ const highFirst = (list) => [...list].reverse();
 .wl__summary { display: flex; flex-direction: column; gap: 16px; }
 .wl__chip { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 4px 10px; border-radius: 999px; font-size: 0.875rem; font-weight: 500; }
 .wl__chip--done { background: #ccfbf1; color: #115e59; }
-.wl__hero { flex-direction: row; align-items: center; gap: 24px; background: #f4f7fb; }
+.wl__hero { flex-direction: row; align-items: center; gap: 24px; background: rgb(92 122 158 / 18%); }
 .wl__hero-face { flex: none; width: 96px; }
 .wl__hero-text { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-width: 0; }
 .wl__story { margin: 0; font-size: 1.0625rem; line-height: 1.6; }
 .wl__hero-note { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-muted); }
 .wl__sec { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 1.25rem; line-height: 1.3; }
 .wl__tone { background: var(--tint); border-color: var(--edge); }
-.wl__tone--glance { --tint: #f3f7fc; --edge: #dce6f2; --accent: #dbeafe; --ink: #1e40af; }
-.wl__tone--mean { --tint: #fdf5ef; --edge: #f6d8c6; --accent: #f6d8c6; --ink: #7a3f1f; }
-.wl__tone--plan { --tint: #f1fcfa; --edge: #ccfbf1; --accent: #ccfbf1; --ink: #115e59; }
-.wl__tone--partner { --tint: #f7f3f8; --edge: #e6dce9; --accent: #e6dce9; --ink: #3b2f3f; }
-.wl__tone--week { --tint: #f8f9fb; --edge: #e5e7eb; --accent: #e5e7eb; --ink: #374151; }
+.wl__tone--glance { --tint: rgb(92 122 158 / 14%); --edge: rgb(92 122 158 / 40%); --accent: #dbeafe; --ink: #1e40af; }
+.wl__tone--mean { --tint: rgb(227 165 132 / 12%); --edge: rgb(227 165 132 / 38%); --accent: #f6d8c6; --ink: #7a3f1f; }
+.wl__tone--plan { --tint: rgb(20 184 166 / 12%); --edge: rgb(20 184 166 / 38%); --accent: #ccfbf1; --ink: #115e59; }
+.wl__tone--partner { --tint: rgb(230 216 234 / 9%); --edge: rgb(230 216 234 / 30%); --accent: #e6dce9; --ink: #3b2f3f; }
+.wl__tone--week { --tint: rgb(255 255 255 / 5%); --edge: rgb(255 255 255 / 16%); --accent: #e5e7eb; --ink: #374151; }
 .wl__sec-icon { display: grid; flex: none; place-items: center; width: 32px; height: 32px; background: var(--accent, var(--nt-gray)); border-radius: 8px; color: var(--ink, var(--nt-plum)); }
-.wl__tone .wl__stat, .wl__tone .wl__plan-item.is-done, .wl__tone .wl__say, .wl__tone .wl__trend { background: #fff; }
-.wl__tone .wl__insight { background: #fff; }
-.wl__tone .wl__plan-item { background: #fff; border-color: var(--edge); }
-.wl__tone .wl__plan-item.is-done { background: rgb(255 255 255 / 55%); }
-.wl__tone .wl__meter { background: #fff; }
+.wl__tone .wl__stat, .wl__tone .wl__plan-item.is-done, .wl__tone .wl__say, .wl__tone .wl__trend { background: var(--nt-surface, #fff); }
+.wl__tone .wl__insight { background: var(--nt-surface, #fff); }
+.wl__tone .wl__plan-item { background: var(--nt-surface, #fff); border-color: var(--edge); }
+.wl__tone .wl__plan-item.is-done { background: rgb(255 255 255 / 35%); }
+.wl__tone .wl__meter { background: var(--nt-surface, #fff); }
 .wl__tone--plan .wl__meter span { background: #14b8a6; }
 .wl__tone .wl__insight-from { background: var(--accent); color: var(--ink); }
 .wl__tone .wl__insight-tip strong { color: var(--ink); }
@@ -1056,7 +1045,7 @@ const highFirst = (list) => [...list].reverse();
 .wl__insight:nth-child(2) { border-left-color: #e3a584; }
 .wl__insight:nth-child(3) { border-left-color: #14b8a6; }
 .wl__insight-title { font-size: 1rem; }
-.wl__insight-from { align-self: flex-start; padding: 2px 10px; background: #fff; border-radius: 999px; font-size: 0.875rem; color: var(--nt-muted); }
+.wl__insight-from { align-self: flex-start; padding: 2px 10px; background: var(--nt-surface, #fff); border-radius: 999px; font-size: 0.875rem; color: var(--nt-muted); }
 .wl__insight-tip { padding-top: 8px; border-top: 1px solid var(--nt-line); font-size: 0.9375rem; line-height: 1.55; }
 .wl__insight-tip strong { margin-right: 4px; color: var(--nt-plum); }
 .wl__insight-body { font-size: 0.9375rem; line-height: 1.55; color: var(--nt-ink); }
@@ -1070,27 +1059,27 @@ const highFirst = (list) => [...list].reverse();
 .wl__plan-item.is-done .wl__plan-title { text-decoration: line-through; }
 .wl__plan-body { display: flex; flex-direction: column; gap: 2px; font-size: 0.9375rem; line-height: 1.55; }
 .wl__plan-body .app-link { align-self: flex-start; margin-top: 2px; }
-.wl__tone.wl__partner.is-hard { --tint: #fff6ef; --edge: #e3a584; --accent: #f6d8c6; --ink: #7a3f1f; }
+.wl__tone.wl__partner.is-hard { --tint: rgb(227 165 132 / 18%); --edge: #e3a584; --accent: #f6d8c6; --ink: #7a3f1f; }
 .wl__partner-row { display: flex; align-items: center; gap: 14px; }
 .wl__partner-face { flex: none; width: 52px; }
 .wl__partner-name { margin: 0; font-weight: 600; }
 .wl__partner-text { margin: 0; font-size: 0.9375rem; line-height: 1.5; }
-.wl__reach { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: #fff; border: 1px solid #e3a584; border-radius: 8px; }
+.wl__reach { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: var(--nt-surface, #fff); border: 1px solid #e3a584; border-radius: 8px; }
 .wl__reach-text { flex: 1 1 14rem; margin: 0; font-size: 0.9375rem; line-height: 1.5; }
 .wl__say { margin: 0; padding: 14px 16px; background: var(--nt-gray); border-radius: 8px; }
 .wl__say figcaption { margin-bottom: 6px; font-size: 0.875rem; color: var(--nt-muted); }
 .wl__say blockquote { margin: 0; font-size: 1rem; line-height: 1.6; }
 .wl__trend { display: flex; align-items: center; gap: 12px; margin: 0; padding: 12px 14px; background: var(--nt-gray); border-radius: 8px; font-size: 0.9375rem; line-height: 1.5; }
-.wl__trend-arrow { display: grid; flex: none; place-items: center; width: 28px; height: 28px; background: #fff; border-radius: 50%; font-size: 1.125rem; font-weight: 600; }
+.wl__trend-arrow { display: grid; flex: none; place-items: center; width: 28px; height: 28px; background: var(--nt-surface, #fff); border-radius: 50%; font-size: 1.125rem; font-weight: 600; }
 .wl__trend--lighter .wl__trend-arrow { color: #115e59; }
 .wl__trend--heavier .wl__trend-arrow { color: #c0553b; }
 .wl__callout { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px 16px; border: 1px solid var(--nt-line); border-left: 4px solid #c0553b; border-radius: 8px; font-size: 0.9375rem; line-height: 1.55; }
 .wl__callout p { margin: 0; }
-.wl__tick { display: grid; flex: none; place-items: center; width: 20px; height: 20px; margin-top: 3px; padding: 0; background: #fff; border: 1.5px solid var(--nt-muted); border-radius: 50%; color: #fff; cursor: pointer; }
+.wl__tick { display: grid; flex: none; place-items: center; width: 20px; height: 20px; margin-top: 3px; padding: 0; background: var(--nt-surface, #fff); border: 1.5px solid var(--nt-muted); border-radius: 50%; color: #fff; cursor: pointer; }
 .wl__tick[aria-pressed="true"] { background: var(--nt-plum); border-color: var(--nt-plum); }
 
 /* Cards */
-.wl__card { display: flex; flex-direction: column; gap: 12px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.wl__card { display: flex; flex-direction: column; gap: 12px; padding: 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
 .wl__card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .wl__h { font-size: 1.375rem; line-height: 1.3; }
 .wl__body { margin: 0; font-size: 0.9375rem; line-height: 1.55; color: var(--nt-ink); }

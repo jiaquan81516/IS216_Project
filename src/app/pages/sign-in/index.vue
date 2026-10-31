@@ -89,7 +89,7 @@ async function google() {
 
 <style scoped>
 .signin-wrap { display: flex; justify-content: center; align-items: flex-start; padding-top: clamp(32px, 8vh, 96px); padding-bottom: 64px; }
-.signin { width: 480px; max-width: 100%; box-sizing: border-box; padding: 40px; background: #fff; border: 1px solid var(--nt-line, #e5e7eb); border-radius: 12px; }
+.signin { width: 480px; max-width: 100%; box-sizing: border-box; padding: 40px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line, #e5e7eb); border-radius: 12px; }
 .signin :deep(.app-btn--outline) { color: var(--nt-ink); }
 @media (max-width: 575px) { .signin { padding: 24px 20px; } }
 .signin__title { display: flex; flex-direction: column; gap: 12px; width: 100%; }

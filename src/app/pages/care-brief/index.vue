@@ -321,7 +321,7 @@ async function saveCareEntry(payload) {
 .brief__lead { margin: 10px 0 0; }
 .brief__muted, .brief__foot { margin: 0; font-size: .9rem; }
 .brief__foot { text-align: center; }
-.brief__card { display: flex; flex-direction: column; gap: 16px; padding: 24px; border: 1px solid var(--nt-line); border-radius: 12px; background: #fff; }
+.brief__card { display: flex; flex-direction: column; gap: 16px; padding: 24px; border: 1px solid var(--nt-line); border-radius: 12px; background: var(--nt-surface, #fff); }
 .brief__card h2 { margin: 0; font-size: 1.15rem; }
 .brief__item { display: flex; flex-direction: column; gap: 5px; }
 .brief__item h3 { margin: 0; font-size: .9rem; }

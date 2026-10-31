@@ -60,6 +60,13 @@ export const LIFTS = Object.freeze([
   { value: "friend", label: "Talking to someone" },
 ]);
 
+// What a parent can ask for, on a hard day. Optional. A kind check-in is assumed when nothing is chosen.
+export const NEED_OPTIONS = Object.freeze([
+  { value: "coverTonight", label: "Cover tonight", sub: "Take over tonight's shift so I can sleep" },
+  { value: "checkOnMe", label: "Check on me", sub: "A kind message, and ask how I am" },
+  { value: "giveSpace", label: "Give me space", sub: "Some quiet, and no questions yet" },
+]);
+
 // What each answer says back. The point is to make the parent notice, not to grade them.
 export const REFLECT = Object.freeze({
   mood: {

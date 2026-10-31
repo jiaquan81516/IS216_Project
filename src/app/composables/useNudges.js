@@ -29,7 +29,8 @@ function readLines(uid, day) {
 }
 
 // Things your partner did, sent or chose to share. These can pop up for a moment.
-const TOAST_KINDS = ["partner-logged", "partner-feeling", "partner-heavy"];
+// A partner's hard day is deliberately not here: it shows quietly on Home, and never pops up.
+const TOAST_KINDS = ["partner-logged", "partner-heavy"];
 
 // The chat between the two parents, with the quiet prompts and suggested replies that go with
 // it. Used by the chat button (panel, unread dot, pop up) and by Wellness (the weekly summary).

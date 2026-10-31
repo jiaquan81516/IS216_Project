@@ -75,7 +75,7 @@ export function useHome() {
     const user = currentUser.value;
     const displayName = profile.value?.displayName || user?.displayName || "";
     const email = profile.value?.email || user?.email || "";
-    return { uid: user?.uid ?? "", firstName: firstNameOf(displayName, email), displayName, email };
+    return { uid: user?.uid ?? "", firstName: firstNameOf(displayName, email), displayName, email, role: profile.value?.role ?? null };
   });
 
   const partner = computed(() => {

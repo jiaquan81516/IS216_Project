@@ -224,7 +224,7 @@ async function save() {
 .pf__row--end > * { grid-column: 2; }
 .pf__side { display: flex; flex-direction: column; gap: 4px; }
 .pf__h { margin: 0; font-size: 1.125rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
-.pf__card { display: flex; flex-direction: column; gap: 12px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.pf__card { display: flex; flex-direction: column; gap: 12px; padding: 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
 .pf__field { display: flex; flex-direction: column; gap: 6px; }
 .pf__label { font-size: 0.875rem; font-weight: 600; color: var(--nt-ink); }
 .pf__input { max-width: 360px; }
