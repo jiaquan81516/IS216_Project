@@ -408,7 +408,7 @@ function confirmDelete(task) {
   .rw__rail { position: sticky; top: 24px; }
 }
 
-.rw__card { display: flex; flex-direction: column; gap: 16px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.rw__card { display: flex; flex-direction: column; gap: 16px; padding: 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
 .rw__card-head { display: flex; align-items: center; gap: 12px; }
 .rw__tile { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; color: var(--nt-plum); }
 .rw__tile--apricot { background: var(--nt-apricot); }

@@ -9,6 +9,8 @@ defineOptions({ name: "UserMenu" });
 
 const props = defineProps({
   name: { type: String, required: true },
+  // Where the menu opens: "up" in a sidebar foot, "down" from a top bar.
+  drop: { type: String, default: "up" },
 });
 const emit = defineEmits(["sign-out"]);
 
@@ -21,6 +23,7 @@ const root = ref(null);
 const links = computed(() => [
   { label: "Profile", to: ROUTES.PROFILE },
   { label: "Settings", to: ROUTES.SETTINGS },
+  { label: "Add a baby", to: { path: ROUTES.PROFILE, query: { addBaby: "1" } } },
 ]);
 
 async function focusFirstItem() {
@@ -88,8 +91,8 @@ onBeforeUnmount(() => {
       <span class="visually-hidden">Account menu</span>
     </button>
 
-    <div v-if="open" id="app-user-menu" ref="panel" class="um__panel" role="menu" aria-label="Account">
-      <RouterLink v-for="link in links" :key="link.to" :to="link.to" class="um__item" role="menuitem">
+    <div v-if="open" id="app-user-menu" ref="panel" class="um__panel" :class="`um__panel--${props.drop}`" role="menu" aria-label="Account">
+      <RouterLink v-for="link in links" :key="link.label" :to="link.to" class="um__item" role="menuitem">
         {{ link.label }}
       </RouterLink>
       <button type="button" class="um__item um__item--btn" role="menuitem" @click="close(); emit('sign-out')">
@@ -107,8 +110,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
-  padding: 8px;
+  padding: 6px 8px;
   background: none;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -135,17 +137,17 @@ onBeforeUnmount(() => {
 }
 .um__panel {
   position: absolute;
-  bottom: calc(100% + 4px);
-  left: 0;
-  right: 0;
+  min-width: 180px;
   z-index: 25;
   display: flex;
   flex-direction: column;
   padding: 4px;
-  background: #fff;
+  background: var(--nt-surface, #fff);
   border: 1px solid var(--nt-line);
   border-radius: 8px;
 }
+.um__panel--up { bottom: calc(100% + 4px); left: 0; right: 0; }
+.um__panel--down { top: calc(100% + 4px); right: 0; }
 .um__item {
   padding: 8px 10px;
   border-radius: 8px;

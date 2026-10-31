@@ -237,7 +237,7 @@ function doneMeta(task) {
 .ck__title { font-size: 2.5rem; line-height: 1.2; margin: 0 0 8px; }
 .ck__sub { margin: 0; font-size: 1rem; color: var(--nt-muted); }
 
-.ck__card { display: flex; flex-direction: column; gap: 20px; max-width: 760px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; padding: 24px; }
+.ck__card { display: flex; flex-direction: column; gap: 20px; max-width: 760px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; padding: 24px; }
 
 .ck__tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--nt-line); }
 .ck__tab { padding: 0 0 10px; margin-bottom: -1px; background: none; border: 0; border-bottom: 2px solid transparent; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-muted); cursor: pointer; }
@@ -249,7 +249,7 @@ function doneMeta(task) {
 .ck__add-row .app-control { flex: 1; min-width: 0; }
 .ck__add-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .ck__who { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.ck__opt { min-height: 32px; padding: 4px 14px; font-family: inherit; font-size: 0.875rem; color: var(--nt-ink); background: #fff; border: 1px solid var(--nt-line); border-radius: 8px; cursor: pointer; }
+.ck__opt { min-height: 32px; padding: 4px 14px; font-family: inherit; font-size: 0.875rem; color: var(--nt-ink); background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 8px; cursor: pointer; }
 .ck__opt:hover { border-color: var(--nt-muted); }
 .ck__opt[aria-pressed="true"] { border-color: var(--nt-plum); background: var(--nt-apricot); font-weight: 600; }
 .ck__opt:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }

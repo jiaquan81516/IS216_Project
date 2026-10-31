@@ -105,7 +105,7 @@ const rooms = computed(() => roomsStore.rooms);
 @media (min-width: 1100px) {
   .rtp { grid-template-columns: minmax(0, 1fr) 380px; }
 }
-.rtp__section { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.rtp__section { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
 .rtp__h2 { margin: 0; font-family: inherit; font-size: 1.0625rem; font-weight: 600; color: var(--nt-ink); }
 .rtp__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; width: 100%; }
 .rtp__progress { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }

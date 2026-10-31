@@ -111,7 +111,7 @@ async function google() {
 <style scoped>
 .account { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 64px; align-items: start; }
 .account__intro { min-width: 0; }
-.account__card { width: 100%; padding: 32px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.account__card { width: 100%; padding: 32px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
 .account__signin { display: flex; gap: 6px; margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
 @media (max-width: 991px) {
   .account { grid-template-columns: minmax(0, 1fr); gap: 32px; }

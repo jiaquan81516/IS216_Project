@@ -32,7 +32,7 @@ defineEmits(["select"]);
 </template>
 
 <style scoped>
-.option { display: flex; align-items: flex-start; width: 100%; padding: 24px; text-align: left; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; font-family: inherit; color: var(--nt-ink); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+.option { display: flex; align-items: flex-start; width: 100%; padding: 24px; text-align: left; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; font-family: inherit; color: var(--nt-ink); cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
 .option:hover { border-color: var(--nt-muted); }
 .option--selected, .option--selected:hover { border-color: var(--nt-plum); box-shadow: 0 0 0 1px var(--nt-plum); }
 .option__body { display: flex; flex-direction: column; gap: 8px; min-width: 0; flex: 1; }
@@ -42,6 +42,6 @@ defineEmits(["select"]);
 .option--radio { gap: 14px; padding: 16px; border-radius: 8px; }
 .option--radio .option__body { gap: 2px; }
 .option--radio .option__title { font-weight: 500; }
-.option__dot { flex: none; width: 16px; height: 16px; margin-top: 4px; border-radius: 50%; border: 1px solid var(--nt-line); background: #fff; }
+.option__dot { flex: none; width: 16px; height: 16px; margin-top: 4px; border-radius: 50%; border: 1px solid var(--nt-line); background: var(--nt-surface, #fff); }
 .option--selected .option__dot { border-color: var(--nt-plum); background: radial-gradient(circle, var(--nt-plum) 0 3px, #fff 3.5px 5px, var(--nt-plum) 5.5px); }
 </style>

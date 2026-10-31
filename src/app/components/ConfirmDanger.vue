@@ -120,7 +120,7 @@ function confirm() {
 .cd__danger,
 .cd__cancel {
   padding: 9px 16px;
-  background: #fff;
+  background: var(--nt-surface, #fff);
   border: 1px solid var(--nt-line);
   border-radius: 8px;
   font-family: inherit;

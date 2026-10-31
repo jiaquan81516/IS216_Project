@@ -55,7 +55,7 @@ async function submit() {
 </template>
 
 <style scoped>
-.abf { padding: 20px 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.abf { padding: 20px 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
 .abf__title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.4; color: var(--nt-ink); }
 @media (max-width: 575px) { .abf { padding: 16px; } }
 .abf__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }

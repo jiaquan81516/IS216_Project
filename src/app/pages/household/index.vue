@@ -295,14 +295,14 @@ async function copyCode() {
 
 <style scoped>
 .hh { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 32px; align-items: start; }
-.hh__card { width: 100%; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.hh__card { width: 100%; padding: 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
 .hh__main { min-width: 0; }
 .hh__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: 100%; }
 .hh__code { display: flex; align-items: center; justify-content: center; width: 100%; padding: 32px 48px; background: var(--nt-gray); border-radius: 12px; }
 .hh__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .hh__code-text { margin: 0; font-family: var(--nt-serif); font-size: 40px; line-height: normal; letter-spacing: 0.8px; color: var(--nt-plum); }
 
-.hh__aside { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 20px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.hh__aside { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 20px; padding: 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
 .hh__aside-title { margin: 0; font-size: 1.125rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
 .hh__shared { display: flex; flex-direction: column; gap: 4px; padding-bottom: 20px; border-bottom: 1px solid var(--nt-line); }
 .hh__shared-label { margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--nt-ink); }
@@ -310,7 +310,7 @@ async function copyCode() {
 .hh__private { display: flex; flex-direction: column; gap: 6px; padding: 16px 16px 18px; background: var(--nt-butter); border: 1.5px dashed var(--nt-butter-d); border-radius: 8px; font-size: 0.875rem; }
 .hh__private-label { margin: 0; font-weight: 600; color: var(--nt-butter-d); }
 .hh__private-text { margin: 0; line-height: 21px; color: var(--nt-ink); }
-.hh__baby { width: 100%; padding: 20px 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.hh__baby { width: 100%; padding: 20px 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
 .hh__baby-title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.4; color: var(--nt-ink); }
 @media (max-width: 575px) { .hh__baby { padding: 16px; } }
 .hh__hint { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }

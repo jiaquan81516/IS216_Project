@@ -931,7 +931,7 @@ async function confirmDelete() {
 .st__nav-link:hover { background: var(--nt-gray); color: var(--nt-ink); }
 .st__nav-link:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 .st__cards { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.st__card { display: flex; flex-direction: column; gap: 14px; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; scroll-margin-top: 24px; }
+.st__card { display: flex; flex-direction: column; gap: 14px; padding: 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; scroll-margin-top: 24px; }
 .st__h { margin: 0; font-size: 1.125rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
 .st__card--danger .st__h { color: var(--nt-coral); }
 .st__rows { display: flex; flex-direction: column; gap: 16px; }

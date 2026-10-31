@@ -283,7 +283,7 @@ watch(supportTab, (id) => {
 </template>
 
 <style scoped>
-.pr { display: grid; grid-template-columns: 440px minmax(0, 1fr); height: 100vh; background: var(--nt-bg-care); }
+.pr { display: grid; grid-template-columns: 440px minmax(0, 1fr); height: calc(100vh - 92px); background: var(--nt-bg-care); }
 .pr__side { position: relative; min-width: 0; border-right: 1px solid var(--nt-line); overflow: hidden; }
 .pr__scroll { height: 100%; overflow-y: auto; padding: 32px 0 24px; }
 .pr__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 0 24px; }
@@ -329,7 +329,7 @@ watch(supportTab, (id) => {
 .pr__plainwrap { position: relative; }
 .pr__input--plain { padding: 12px 44px 12px 16px; }
 .pr__off { display: flex; flex-direction: column; gap: 16px; }
-.pr--list { display: block; height: auto; min-height: 100vh; }
+.pr--list { display: block; height: auto; min-height: calc(100vh - 92px); }
 .pr--list .pr__side { border-right: 0; overflow: visible; }
 .pr--list .pr__scroll { height: auto; overflow: visible; max-width: 1120px; margin: 0 auto; }
 .pr--list .pr__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 24px; border-top: 0; }
