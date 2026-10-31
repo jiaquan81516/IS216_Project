@@ -290,6 +290,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <Transition name="drawer" :duration="{ enter: 320, leave: 240 }">
   <div v-if="open" class="clp">
     <div class="clp__backdrop" aria-hidden="true" @click="emit('close')" />
     <section
@@ -456,6 +457,7 @@ onBeforeUnmount(() => {
       </form>
     </section>
   </div>
+  </Transition>
 </template>
 
 <style scoped>
@@ -626,5 +628,20 @@ onBeforeUnmount(() => {
     padding-left: 16px;
     padding-right: 16px;
   }
+}
+/* Slide in from the right and out again, with the backdrop fading, instead of appearing at once. */
+.drawer-enter-active .clp__panel { transition: transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1); }
+.drawer-leave-active .clp__panel { transition: transform 240ms cubic-bezier(0.4, 0, 1, 1); }
+.drawer-enter-active .clp__backdrop { transition: opacity 320ms ease; }
+.drawer-leave-active .clp__backdrop { transition: opacity 240ms ease; }
+.drawer-enter-from .clp__panel,
+.drawer-leave-to .clp__panel { transform: translateX(100%); }
+.drawer-enter-from .clp__backdrop,
+.drawer-leave-to .clp__backdrop { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .drawer-enter-active .clp__panel,
+  .drawer-leave-active .clp__panel,
+  .drawer-enter-active .clp__backdrop,
+  .drawer-leave-active .clp__backdrop { transition: none; }
 }
 </style>

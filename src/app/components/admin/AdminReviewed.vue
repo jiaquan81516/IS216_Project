@@ -1,4 +1,5 @@
 <script setup>
+import SkeletonList from "@/app/components/SkeletonList.vue";
 import AdminRoomCard from "@/app/components/admin/AdminRoomCard.vue";
 import { useAuth } from "@/composables/useAuth";
 import { formatDate } from "@/app/utils/adminHelpers";
@@ -17,7 +18,7 @@ const who = (room) => (room.reviewedBy && room.reviewedBy === currentUser.value?
 
 <template>
   <div class="rv">
-    <p v-if="loading" class="rv__muted" role="status">Loading...</p>
+    <SkeletonList v-if="loading" :rows="3" :height="96" label="Loading" />
     <p v-else-if="error" class="app-error-text" role="alert">{{ error }}</p>
     <p v-else-if="!rooms.length" class="rv__muted">No rooms have been reviewed yet.</p>
 

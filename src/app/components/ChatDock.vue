@@ -84,6 +84,7 @@ function sendSuggestion(s) {
 
 <template>
   <div v-if="partnerName" class="cd">
+    <Transition name="cd-pop">
     <section
       v-show="open"
       id="chat-panel"
@@ -154,6 +155,7 @@ function sendSuggestion(s) {
         <button type="submit" class="cd__send" :disabled="!draft.trim()">Send</button>
       </form>
     </section>
+    </Transition>
 
     <button
       ref="fab"
@@ -227,4 +229,7 @@ function sendSuggestion(s) {
   .cd { right: 16px; bottom: 16px; }
   .cd__panel { height: min(560px, calc(100vh - 96px)); }
 }
+.cd-pop-enter-active, .cd-pop-leave-active { transform-origin: bottom right; transition: opacity 0.2s ease, transform 0.24s cubic-bezier(0.22, 0.61, 0.36, 1); }
+.cd-pop-enter-from, .cd-pop-leave-to { opacity: 0; transform: translateY(14px) scale(0.96); }
+@media (prefers-reduced-motion: reduce) { .cd-pop-enter-active, .cd-pop-leave-active { transition: none; } }
 </style>

@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Header from "@/app/components/Header.vue";
 import StepHeader from "@/app/components/StepHeader.vue";
@@ -7,6 +7,8 @@ import Field from "@/app/components/Field.vue";
 import GoogleButton from "@/app/components/GoogleButton.vue";
 import OrDivider from "@/app/components/OrDivider.vue";
 import AppLink from "@/components/ui/AppLink.vue";
+import LoadingScreen from "@/app/components/LoadingScreen.vue";
+import { useDelayedFlag } from "@/app/composables/useDelayedFlag";
 import { ROUTES } from "@/app/routes";
 import { useAuth } from "@/app/composables/useAuth";
 import { useOnboarding } from "@/app/stores/onboarding";
@@ -17,12 +19,23 @@ defineOptions({ name: "AccountPage" });
 const router = useRouter();
 const route = useRoute();
 const draft = useOnboarding();
-const { busy, error, signUp, continueWithGoogle } = useAuth();
+const { busy, error, continueWithGoogle } = useAuth();
+
+const navigating = ref(false);
+const working = computed(() => busy.value || navigating.value);
+const showLoader = useDelayedFlag(working);
+async function go(to) {
+  navigating.value = true;
+  try {
+    await router.push(to);
+  } finally {
+    navigating.value = false;
+  }
+}
 
 const name = ref(draft.name);
-const email = ref("");
-const password = ref("");
-const accountRole = ref("user");
+const email = ref(draft.email);
+const password = ref(draft.password);
 const errors = reactive({ name: "", email: "", password: "" });
 
 function validate() {
@@ -32,35 +45,34 @@ function validate() {
   return !errors.name && !errors.email && !errors.password;
 }
 
-async function submit() {
+// Nothing is saved here. The details are kept in memory and the account is created at the last step.
+function submit() {
   if (busy.value) return;
   error.value = "";
   if (!validate()) return;
   draft.name = name.value.trim();
-  const to = await signUp({ 
-    name: draft.name, 
-    email: email.value.trim(), 
-    password: password.value,
-    accountRole: accountRole.value });
-  if (to) router.push(to);
+  draft.email = email.value.trim();
+  draft.password = password.value;
+  router.push(route.query.code ? { path: ROUTES.HOUSEHOLD, query: { code: route.query.code } } : ROUTES.HOUSEHOLD);
 }
 
 async function google() {
   if (busy.value) return;
   error.value = "";
-  const to = await continueWithGoogle();
-  if (to) router.push(route.query.code && to === ROUTES.HOUSEHOLD ? { path: to, query: { code: route.query.code } } : to);
+  const to = await continueWithGoogle({ deferProfile: true });
+  if (to) await go(route.query.code && to === ROUTES.HOUSEHOLD ? { path: to, query: { code: route.query.code } } : to);
 }
 </script>
 
 <template>
+  <LoadingScreen v-if="showLoader" variant="overlay" label="Signing you in" subtext="Just a moment." />
   <Header>
     <AppLink :to="route.query.code ? { path: ROUTES.SIGN_IN, query: { code: route.query.code } } : ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
   </Header>
   <main class="app-container app-body">
     <div class="account">
       <div class="app-stack app-stack--24 account__intro">
-        <StepHeader :step="3" title="Create your account" lead="Use an email you can access on your phone." />
+        <StepHeader :step="3" title="Create your account" lead="Use an email you can access on your phone. Nothing is saved until the last step." />
         <p class="app-note">Your wellness responses are private by default. You decide what to share with your partner.</p>
         <AppLink :to="route.query.code ? { path: ROUTES.ROLE, query: { code: route.query.code } } : ROUTES.ROLE" class="app-text-link">Back</AppLink>
       </div>
@@ -99,7 +111,7 @@ async function google() {
           />
           <div v-if="error" class="alert alert-danger app-alert" role="alert">{{ error }}</div>
           <button type="submit" class="app-btn app-btn--primary app-btn--block" :disabled="busy">
-            {{ busy ? "Creating account..." : "Create account" }}
+            {{ busy ? "Please wait..." : "Continue" }}
           </button>
         </form>
         <OrDivider />

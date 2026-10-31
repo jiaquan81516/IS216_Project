@@ -1,4 +1,5 @@
 <script setup>
+import Collapse from "@/app/components/Collapse.vue";
 import { computed, nextTick, ref } from "vue";
 import { formatDistance, verificationText, isVerified } from "@/app/utils/mapHelpers";
 import { oneMapPlaceUrl } from "@/app/utils/oneMapHelpers";
@@ -132,6 +133,7 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
       </button>
       </div>
     </div>
+    <Collapse>
     <section v-if="feedbackOpen" :id="`room-feedback-${room.id}`" class="rc__feedback" :aria-labelledby="`room-feedback-title-${room.id}`" @click.stop @keydown.esc.stop="closeFeedback">
       <h3 :id="`room-feedback-title-${room.id}`" class="rc__feedback-title">Parent feedback</h3>
       <p v-if="feedbackLoading" class="rc__muted" role="status">Loading feedback…</p>
@@ -152,6 +154,7 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
         </div>
       </form>
     </section>
+    </Collapse>
   </li>
 </template>
 

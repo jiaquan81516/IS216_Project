@@ -1,4 +1,5 @@
 <script setup>
+import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -550,7 +551,7 @@ async function confirmDelete() {
       <p class="st__sub">Changes save as you make them.</p>
     </header>
 
-    <p v-if="loading" class="st__muted" aria-live="polite">Loading...</p>
+    <LoadingScreen v-if="loading" variant="inline" label="Loading" />
 
     <div v-else-if="error" role="alert" class="st__retry">
       <p class="st__text">{{ error }}</p>

@@ -2,6 +2,8 @@
 import { onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import Field from "@/app/components/Field.vue";
+import LoadingScreen from "@/app/components/LoadingScreen.vue";
+import { useDelayedFlag } from "@/app/composables/useDelayedFlag";
 import { ROUTES } from "@/app/routes";
 import { useAuth } from "@/composables/useAuth";
 import { signInWithEmail, describeAuthError } from "@/api/emailAuth";
@@ -31,6 +33,7 @@ const password = ref("");
 const errors = reactive({ email: "", password: "" });
 const error = ref("");
 const busy = ref(false);
+const showLoader = useDelayedFlag(busy);
 
 function validate() {
   errors.email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim()) ? "" : "Enter a valid email address.";
@@ -59,7 +62,7 @@ async function submit() {
       return;
     }
     await waitForUser(user.uid);
-    router.push(ROUTES.ADMIN);
+    await router.push(ROUTES.ADMIN);
   } catch (cause) {
     console.error("[app admin sign in]", cause?.code, cause);
     error.value = describeAuthError(cause);
@@ -70,6 +73,7 @@ async function submit() {
 </script>
 
 <template>
+  <LoadingScreen v-if="showLoader" variant="overlay" label="Signing you in" subtext="Checking your admin access." />
   <main class="adm-in">
     <form class="adm-in__card app-stack app-stack--24" novalidate :aria-busy="busy" @submit.prevent="submit">
       <h1 class="adm-in__h1">NurtureTrack Admin</h1>
