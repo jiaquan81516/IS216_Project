@@ -1,7 +1,10 @@
 import { defineStore } from "pinia";
 import { reactive, toRefs, watch } from "vue";
+import { saveCheckin, subscribeCheckins } from "@/api/checkins";
+import { DEFAULT_NEED, MOOD_STAGES, NEEDS, moodStageFor } from "@/app/utils/moodStage";
 
 export const CHECKINS_KEY = "nt.app.checkins";
+const OWNER_KEY = "nt.app.checkins-owner";
 
 export function dateKey(date = new Date()) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -10,6 +13,27 @@ export function dateKey(date = new Date()) {
 }
 
 const clamp = (v) => (Number.isInteger(v) && v >= 1 && v <= 5 ? v : null);
+// Short keys such as "exhausted". Older check-ins have none of the optional fields.
+const cleanList = (list, max) =>
+  Array.isArray(list) ? [...new Set(list.filter((c) => typeof c === "string" && c.length <= 40))].slice(0, max) : [];
+
+function clean(date, value) {
+  return {
+    date,
+    mood: clamp(value.mood),
+    stress: clamp(value.stress),
+    energy: clamp(value.energy),
+    closeness: clamp(value.closeness),
+    concerns: cleanList(value.concerns, 3),
+    body: cleanList(value.body, 8),
+    lifts: cleanList(value.lifts, 8),
+    savedAt: String(value.savedAt ?? ""),
+    // The stage of the flower, and what this person would like from their partner. Older check-ins
+    // have neither, so both are worked out (the stage) or assumed (a kind check-in).
+    moodStage: MOOD_STAGES.includes(value.moodStage) ? value.moodStage : moodStageFor({ mood: clamp(value.mood), stress: clamp(value.stress) }),
+    need: NEEDS.includes(value.need) ? value.need : DEFAULT_NEED,
+  };
+}
 
 function load() {
   try {
@@ -19,7 +43,7 @@ function load() {
     for (const [key, value] of Object.entries(data)) {
       const mood = clamp(value?.mood);
       const stress = clamp(value?.stress);
-      if (mood && stress) out[key] = { date: key, mood, stress, savedAt: String(value.savedAt ?? "") };
+      if (mood && stress) out[key] = clean(key, value);
     }
     return out;
   } catch {
@@ -27,9 +51,37 @@ function load() {
   }
 }
 
-// Private to this device. One check-in per day; saving again the same day replaces it.
+export const DAY_MS = 24 * 60 * 60 * 1000;
+
+function lastSevenOf(items, now) {
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(now);
+    d.setDate(now.getDate() - (6 - i));
+    const date = dateKey(d);
+    return { date, weekday: d.toLocaleDateString("en-GB", { weekday: "short" }), entry: items[date] ?? null };
+  });
+}
+
+// The newest check-in saved in the last 24 hours, or null.
+function newestWithin(items, now) {
+  let best = null;
+  for (const entry of Object.values(items)) {
+    const at = new Date(entry.savedAt).getTime();
+    if (Number.isNaN(at) || at > now.getTime() + 60000 || now.getTime() - at >= DAY_MS) continue;
+    if (!best || at > new Date(best.savedAt).getTime()) best = entry;
+  }
+  return best;
+}
+
+// Check-ins are shared by the two parents: they live under the household in Firestore, one per
+// person per day, and both read them. A copy of your own stays on this device so the page still
+// works before the household loads. Saving again the same day replaces the check-in.
 export const useCheckinsStore = defineStore("app-checkins", () => {
-  const state = reactive({ items: load() });
+  const state = reactive({ items: load(), partnerItems: {}, loaded: false, error: "" });
+  let householdId = "";
+  let meUid = "";
+  let stop = null;
+  let run = 0;
 
   watch(
     () => state.items,
@@ -43,10 +95,89 @@ export const useCheckinsStore = defineStore("app-checkins", () => {
     { deep: true, flush: "sync" },
   );
 
-  function save({ mood, stress }, now = new Date()) {
+  function unbind() {
+    run += 1;
+    stop?.();
+    stop = null;
+    householdId = "";
+    state.partnerItems = {};
+    state.loaded = false;
+  }
+
+  function bind(id, uid = "") {
+    unbind();
+    const current = run;
+    meUid = uid;
+    if (!id || !uid) return;
+    householdId = id;
+    // The device copy belongs to whoever last used it, so a second account never inherits it.
+    try {
+      const owner = localStorage.getItem(OWNER_KEY);
+      if (owner && owner !== uid) state.items = {};
+      localStorage.setItem(OWNER_KEY, uid);
+    } catch {
+      // Storage can be blocked. Nothing else depends on it.
+    }
+    try {
+      stop = subscribeCheckins(
+        id,
+        (docs) => {
+          if (current !== run) return;
+          const mine = {};
+          const theirs = {};
+          for (const d of docs) {
+            if (!clamp(d.mood) || !clamp(d.stress)) continue;
+            const entry = clean(d.date, d);
+            (d.uid === uid ? mine : theirs)[d.date] = entry;
+          }
+          // Anything saved here before the household loaded goes up once, so it is not lost.
+          const first = !state.loaded;
+          // The newest version of each day wins, so an older copy in the database never replaces a
+          // check-in that was just made here.
+          const timeOf = (e) => new Date(e?.savedAt ?? 0).getTime() || 0;
+          const merged = { ...state.items };
+          const newerHere = [];
+          for (const [date, remote] of Object.entries(mine)) {
+            const here = merged[date];
+            if (!here || timeOf(remote) >= timeOf(here)) merged[date] = remote;
+            else newerHere.push(date);
+          }
+          state.items = merged;
+          state.partnerItems = theirs;
+          state.loaded = true;
+          // Anything saved here that the database does not have yet, or has an older copy of, goes up.
+          for (const [date, entry] of Object.entries(merged)) {
+            if ((first && !mine[date]) || newerHere.includes(date)) saveCheckin(id, uid, entry).catch(() => {});
+          }
+        },
+        () => {
+          if (current === run) state.loaded = true;
+        },
+      );
+    } catch (cause) {
+      console.error("[app checkins]", cause?.code, cause);
+      state.loaded = true;
+    }
+  }
+
+  function setPartnerUid() {}
+
+  // Mood and stress are required; energy, closeness, concerns, body and lifts are optional.
+  function save(answers, now = new Date()) {
     const date = dateKey(now);
-    state.items[date] = { date, mood, stress, savedAt: now.toISOString() };
-    return state.items[date];
+    state.items[date] = clean(date, { ...answers, savedAt: now.toISOString() });
+    const entry = state.items[date];
+    state.error = "";
+    if (householdId && meUid) {
+      saveCheckin(householdId, meUid, entry).catch((cause) => {
+        console.error("[app checkins]", cause?.code, cause);
+        state.error =
+          cause?.code === "permission-denied"
+            ? "Your database rules do not allow check-ins yet. Publish the latest firestore.rules in the Firebase console."
+            : "Your check-in is saved on this device, but we could not share it with your partner just now.";
+      });
+    }
+    return entry;
   }
 
   function forDate(date) {
@@ -55,13 +186,25 @@ export const useCheckinsStore = defineStore("app-checkins", () => {
 
   // Six days before `now`, then today, oldest first.
   function lastSeven(now = new Date()) {
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(now);
-      d.setDate(now.getDate() - (6 - i));
-      const date = dateKey(d);
-      return { date, weekday: d.toLocaleDateString("en-GB", { weekday: "short" }), entry: state.items[date] ?? null };
-    });
+    return lastSevenOf(state.items, now);
+  }
+  function partnerLastSeven(now = new Date()) {
+    return lastSevenOf(state.partnerItems, now);
   }
 
-  return { ...toRefs(state), save, forDate, lastSeven };
+  // Your newest check-in from the last 24 hours. While it stands, the quiz is not asked again.
+  function recent(now = new Date()) {
+    return newestWithin(state.items, now);
+  }
+
+  // Support has been arranged (the partner accepted a cover offer), so the flower settles back to a
+  // bud. It never jumps straight to a bloom: nobody is suddenly fine because a shift was covered.
+  function resetStage(now = new Date()) {
+    const entry = newestWithin(state.items, now);
+    if (!entry) return;
+    state.items[entry.date] = { ...entry, moodStage: "budding" };
+    if (householdId && meUid) saveCheckin(householdId, meUid, state.items[entry.date]).catch(() => {});
+  }
+
+  return { ...toRefs(state), save, forDate, lastSeven, partnerLastSeven, recent, resetStage, bind, unbind, setPartnerUid };
 });

@@ -5,6 +5,7 @@ import { tonightDate } from "@/app/utils/homeSummary";
 import { suggestionsFor } from "@/app/utils/chatHelpers";
 import {
   buildNudges,
+  feelingLevel,
   loadSignals,
   needsSupport,
   onDutyRun,
@@ -28,7 +29,8 @@ function readLines(uid, day) {
 }
 
 // Things your partner did, sent or chose to share. These can pop up for a moment.
-const TOAST_KINDS = ["partner-logged", "partner-feeling", "partner-heavy"];
+// A partner's hard day is deliberately not here: it shows quietly on Home, and never pops up.
+const TOAST_KINDS = ["partner-logged", "partner-heavy"];
 
 // The chat between the two parents, with the quiet prompts and suggested replies that go with
 // it. Used by the chat button (panel, unread dot, pop up) and by Wellness (the weekly summary).
@@ -67,6 +69,8 @@ export function useNudges({ home, entries, shared }) {
     });
   const partnerSignals = computed(() => (partnerUid.value ? signalsFor(partnerUid.value, "partner") : null));
 
+  const partnerToday = computed(() => checkins.partnerItems?.[todayKey.value] ?? null);
+
   // The quiet prompts at the top of the chat.
   const nudges = computed(() =>
     buildNudges({
@@ -76,7 +80,10 @@ export function useNudges({ home, entries, shared }) {
       partner: partnerSignals.value,
       recentLog: partnerRecentLog({ entries: entries.entries.value, partnerUid: partnerUid.value, now: now.value }),
       checkedInToday: Boolean(checkins.forDate(todayKey.value)),
-      partnerFeeling: team.partnerFeeling,
+      // Your partner's check-in today is shared, so it speaks for itself.
+      partnerFeeling: partnerToday.value
+        ? { level: feelingLevel(partnerToday.value), date: todayKey.value }
+        : team.partnerFeeling,
       supportNeeded: needsSupport(checkins.lastSeven(now.value), now.value),
       settings: home.settings?.value ?? null,
       dismissed: team.dismissed,

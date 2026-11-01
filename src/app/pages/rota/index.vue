@@ -979,7 +979,7 @@ async function finishSetup() {
 }
 
 .rt__card {
-  background: #fff;
+  background: var(--nt-surface, #fff);
   border: 1px solid var(--nt-line);
   border-radius: 12px;
   padding: 24px;
@@ -1076,7 +1076,7 @@ async function finishSetup() {
   width: 100%;
   min-height: 168px;
   padding: 14px 2px 12px;
-  background: #fff;
+  background: var(--nt-surface, #fff);
   border: 1px solid var(--nt-line);
   border-radius: 10px;
   font: inherit;

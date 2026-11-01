@@ -84,7 +84,7 @@ function onStatusKeydown(event) {
 
 <style scoped>
 .bf__status { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; }
-.bf__seg { padding: 12px 16px; background: #fff; border: 1px solid var(--nt-line); border-radius: 8px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-ink); cursor: pointer; }
+.bf__seg { padding: 12px 16px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 8px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-ink); cursor: pointer; }
 .bf__seg:hover { border-color: var(--nt-muted); }
 .bf__seg--on, .bf__seg--on:hover { border-color: var(--nt-plum); box-shadow: 0 0 0 1px var(--nt-plum); }
 .bf__seg:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }

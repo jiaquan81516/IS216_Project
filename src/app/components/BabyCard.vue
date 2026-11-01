@@ -20,7 +20,7 @@ const line = () => babySummary(props.baby).line;
 </template>
 
 <style scoped>
-.bc { width: 100%; padding: 20px 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.bc { width: 100%; padding: 20px 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
 .bc__label { margin: 0; font-size: 0.875rem; line-height: 1.4; color: var(--nt-muted); }
 .bc__name { margin: 2px 0 0; font-size: 1rem; font-weight: 600; line-height: 1.4; color: var(--nt-ink); }
 .bc__line { margin: 2px 0 0; font-size: 0.875rem; line-height: 1.4; color: var(--nt-muted); }
