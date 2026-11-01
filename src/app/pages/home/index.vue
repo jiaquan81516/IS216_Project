@@ -21,6 +21,7 @@ import { useCheckinsStore } from "@/app/stores/checkins";
 import { encouragementFor } from "@/app/data/encouragement";
 import { MOODS } from "@/app/data/wellness";
 import { useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
+import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 import { usePrefs } from "@/app/composables/usePrefs";
 import { useShared, SHARED_KEY } from "@/app/composables/useShared";
 import { ROUTES } from "@/app/routes";
@@ -160,26 +161,41 @@ const QUICK_LOG = [
 // What the baby is doing right now, read from the care log: asleep (a sleep with no end yet), just
 // fed (within 40 minutes), getting hungry (three hours since the last feed), or simply awake.
 const babyName = computed(() => home.baby.value.name || "Baby");
-const babyNow = computed(() => {
-  const name = babyName.value;
-  const list = entriesShared.entries.value ?? [];
+// Reads one baby's day from their entries: the mood of the picture, the three tallies for today.
+function readBaby(list, name, at) {
+  const sum = todaySummary({ entries: list, now: at });
+  const sleepText = sum.sleepMinutes ? formatMinutes(sum.sleepMinutes) : "0 m";
+  const tally = { feeds: sum.feeds, nappies: sum.nappies, sleep: sleepText };
   const sleep = lastOfType(list, "sleep");
   const sleepStart = sleep ? toDate(sleep.at) : null;
-  const sleepMinutes = sleepStart ? (now.value.getTime() - sleepStart.getTime()) / 60000 : 0;
+  const sleepMinutes = sleepStart ? (at.getTime() - sleepStart.getTime()) / 60000 : 0;
   if (sleep && sleepStart && !toDate(sleep.endedAt) && sleepMinutes >= 0 && sleepMinutes < 16 * 60) {
-    return { state: "sleeping", title: `${name} is sleeping`, detail: `Since ${clockTime(sleepStart)}, ${formatMinutes(sleepMinutes)} so far` };
+    return { ...tally, state: "sleeping", title: `${name} is sleeping`, detail: `Since ${clockTime(sleepStart)}, ${formatMinutes(sleepMinutes)} so far` };
   }
-  const fedAt = summary.value.lastFeedAt;
-  const fedMinutes = fedAt ? (now.value.getTime() - fedAt.getTime()) / 60000 : null;
+  const fedAt = sum.lastFeedAt;
+  const fedMinutes = fedAt ? (at.getTime() - fedAt.getTime()) / 60000 : null;
   if (fedMinutes !== null && fedMinutes >= 0 && fedMinutes < 40) {
-    return { state: "fed", title: `${name} has just been fed`, detail: `Fed ${agoText(fedAt, now.value)}` };
+    return { ...tally, state: "fed", title: `${name} has just been fed`, detail: `Fed ${agoText(fedAt, at)}` };
   }
   if (fedMinutes !== null && fedMinutes >= 180) {
-    return { state: "hungry", title: `${name} may be getting hungry`, detail: `Last fed ${agoText(fedAt, now.value)}` };
+    return { ...tally, state: "hungry", title: `${name} may be getting hungry`, detail: `Last fed ${agoText(fedAt, at)}` };
   }
-  return { state: "awake", title: `${name} is awake`, detail: fedAt ? `Last fed ${agoText(fedAt, now.value)}` : "No feeds logged yet" };
+  return { ...tally, state: "awake", title: `${name} is awake`, detail: fedAt ? `Last fed ${agoText(fedAt, at)}` : "No feeds logged yet" };
+}
+const babyNow = computed(() => readBaby(entriesShared.entries.value ?? [], babyName.value, now.value));
+const sleepToday = computed(() => babyNow.value.sleep);
+
+// With more than one baby, Home shows every baby, so a parent never misses one.
+const { babies, selectBaby } = useSelectedBaby();
+const multiBabies = computed(() => babies.value.length > 1);
+const babyCards = computed(() => {
+  const all = entriesShared.raw?.value ?? [];
+  return babies.value.map((b, i) => {
+    const name = b.babyName || `Baby ${i + 1}`;
+    const list = all.filter((e) => (e.babyId ?? "primary") === b.id);
+    return { id: b.id, name, ...readBaby(list, name, now.value) };
+  });
 });
-const sleepToday = computed(() => (summary.value.sleepMinutes ? formatMinutes(summary.value.sleepMinutes) : "0 m"));
 
 // ---- Covering tonight, through the real sleep rota ----
 const fmtHour = (hour) => {
@@ -619,9 +635,26 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
         </div>
       </header>
 
-      <section class="hp__trio" aria-label="Everyday">
+      <section class="hp__trio" :class="{ 'hp__trio--multi': multiBabies }" aria-label="Everyday">
+        <!-- Every baby, today, when there is more than one -->
+        <template v-if="multiBabies">
+          <article v-for="b in babyCards" :key="b.id" class="hp__card hp__trio-card hp__trio-card--baby hp__bcard" :aria-labelledby="`hp-baby-${b.id}`">
+            <BabyScene on-dark :state="b.state" :title="b.title" :detail="b.detail" :title-id="`hp-baby-${b.id}`" />
+            <ul v-if="!entriesFailed" class="hp__tally">
+              <li><b>{{ b.feeds }}</b><span>feeds</span></li>
+              <li><b>{{ b.nappies }}</b><span>nappies</span></li>
+              <li><b>{{ b.sleep }}</b><span>sleep</span></li>
+            </ul>
+            <div class="hp__quicklog">
+              <AppLink v-for="q in QUICK_LOG" :key="q.key" class="hp__qbtn" :to="{ path: ROUTES.CARE_LOG, query: { log: q.key } }" @click="selectBaby(b.id)">
+                <Icon :name="q.icon" :size="18" />{{ q.label }}
+              </AppLink>
+            </div>
+            <AppLink class="hp__carelink" :to="ROUTES.CARE_LOG" @click="selectBaby(b.id)">Open {{ b.name }}'s care log</AppLink>
+          </article>
+        </template>
         <!-- Baby, today -->
-        <article class="hp__card hp__trio-card hp__trio-card--baby" aria-labelledby="hp-baby-title">
+        <article v-else class="hp__card hp__trio-card hp__trio-card--baby" aria-labelledby="hp-baby-title">
           <BabyScene on-dark :state="babyNow.state" :title="babyNow.title" :detail="babyNow.detail" title-id="hp-baby-title" />
           <ul v-if="!entriesFailed" class="hp__tally">
             <li><b>{{ summary.feeds }}</b><span>feeds</span></li>
@@ -1698,4 +1731,12 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
   .hp__glance .hp__after { display: flex; overflow-x: auto; scroll-snap-type: x proximity; }
   .hp__glance .hp__after-row { flex: 0 0 15rem; scroll-snap-align: start; }
 }
+
+/* More than one baby: a card for each, side by side, so nobody is missed */
+.hp__trio.hp__trio--multi { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+.hp__trio--multi > .hp__trio-card.hp__bcard { grid-column: auto; grid-template-columns: minmax(0, 1fr); grid-template-rows: none; align-items: start; row-gap: 14px; }
+.hp__bcard > .bs, .hp__bcard > .hp__tally, .hp__bcard > .hp__quicklog, .hp__bcard > .hp__carelink { grid-column: 1; grid-row: auto; }
+.hp__bcard > .bs { max-width: 240px; justify-self: center; }
+.hp__bcard .hp__tally b { font-size: 1.625rem; }
+.hp__bcard .hp__quicklog .hp__qbtn { padding: 12px 6px; font-size: 0.9375rem; }
 </style>
