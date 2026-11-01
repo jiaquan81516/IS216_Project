@@ -142,6 +142,23 @@ const items = computed(() =>
     dot: item.key === "today" && unread.value > 0,
   })),
 );
+// Daily pages sit on the bar; the rest live under "More". An administrator's sections are all primary.
+const primaryItems = computed(() => items.value.filter((i) => i.group !== "secondary"));
+const moreItems = computed(() => items.value.filter((i) => i.group === "secondary"));
+const moreActive = computed(() => moreItems.value.some((i) => i.active));
+const moreOpen = ref(false);
+const moreButton = ref(null);
+const moreWrap = ref(null);
+function closeMore({ restoreFocus = false } = {}) {
+  if (!moreOpen.value) return;
+  moreOpen.value = false;
+  if (restoreFocus) moreButton.value?.focus();
+}
+function onDocPointer(event) {
+  if (moreOpen.value && !moreWrap.value?.contains(event.target)) closeMore();
+}
+onMounted(() => document.addEventListener("pointerdown", onDocPointer));
+onBeforeUnmount(() => document.removeEventListener("pointerdown", onDocPointer));
 // The administrator is shown by their account name: display name, else the part of the email before @.
 const adminName = computed(() => currentUser.value?.displayName || currentUser.value?.email?.split("@")[0] || "Administrator");
 
@@ -154,7 +171,10 @@ function closeMenu({ restoreFocus = false } = {}) {
   if (restoreFocus) menuButton.value?.focus();
 }
 function onKeydown(event) {
-  if (event.key === "Escape") closeMenu({ restoreFocus: true });
+  if (event.key === "Escape") {
+    closeMore({ restoreFocus: true });
+    closeMenu({ restoreFocus: true });
+  }
 }
 function skipToMain(event) {
   event.preventDefault();
@@ -203,7 +223,10 @@ async function signOut() {
   router.push(wasAdmin && ROUTES.ADMIN_SIGN_IN ? ROUTES.ADMIN_SIGN_IN : ROUTES.LANDING);
 }
 
-watch(() => route.fullPath, () => closeMenu());
+watch(() => route.fullPath, () => {
+  closeMenu();
+  closeMore();
+});
 onMounted(() => window.addEventListener("keydown", onKeydown));
 onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 </script>
@@ -230,7 +253,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
         <div id="app-top-panel" class="top__panel" :class="{ 'top__panel--open': menuOpen }">
           <nav class="top__nav" aria-label="Main">
             <ul class="top__list">
-              <li v-for="item in items" :key="item.key">
+              <li v-for="item in primaryItems" :key="item.key">
                 <RouterLink
                   :to="item.to"
                   class="top__link"
@@ -242,6 +265,34 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
                   <span v-if="item.dot" class="top__dot" aria-hidden="true"></span>
                   <span v-if="item.dot" class="visually-hidden">unread</span>
                 </RouterLink>
+              </li>
+              <li v-if="moreItems.length" ref="moreWrap" class="top__more" :class="{ 'top__more--open': moreOpen }">
+                <button
+                  ref="moreButton"
+                  type="button"
+                  class="top__link top__morebtn"
+                  :class="{ 'top__link--active': moreActive }"
+                  :aria-expanded="moreOpen ? 'true' : 'false'"
+                  aria-controls="top-more-list"
+                  @click="moreOpen = !moreOpen"
+                >
+                  <span>More</span>
+                  <Icon name="chevron-down" :size="16" class="top__morechev" />
+                </button>
+                <p class="top__moretitle">More</p>
+                <ul id="top-more-list" class="top__morelist">
+                  <li v-for="item in moreItems" :key="item.key">
+                    <RouterLink
+                      :to="item.to"
+                      class="top__link top__sublink"
+                      :class="{ 'top__link--active': item.active }"
+                      :aria-current="item.active ? 'page' : undefined"
+                    >
+                      <Icon :name="item.icon" />
+                      <span>{{ item.label }}</span>
+                    </RouterLink>
+                  </li>
+                </ul>
               </li>
             </ul>
           </nav>
@@ -471,6 +522,72 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 .top__link--active:hover::after {
   background: #f6d8c6;
 }
+.top__more {
+  position: relative;
+  display: flex;
+}
+.top__morebtn {
+  background: none;
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+.top__morechev {
+  transition: transform 180ms ease;
+}
+.top__more--open .top__morechev {
+  transform: rotate(180deg);
+}
+.top__moretitle {
+  display: none;
+}
+.top__morelist {
+  position: absolute;
+  top: calc(100% - 6px);
+  right: -12px;
+  z-index: 30;
+  min-width: 13rem;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: #182a46;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgb(8 16 32 / 35%);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 140ms ease, transform 160ms ease, visibility 0s linear 160ms;
+}
+.top__more--open .top__morelist {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 140ms ease, transform 160ms ease;
+}
+.top__sublink {
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+.top__sublink::after {
+  display: none;
+}
+.top__sublink:hover {
+  background: rgb(255 255 255 / 10%);
+}
+.top__sublink.top__link--active,
+.top__sublink.top__link--active:hover {
+  background: #f6d8c6;
+  color: #1f3556;
+}
+@media (prefers-reduced-motion: reduce) {
+  .top__morechev,
+  .top__morelist,
+  .top__more--open .top__morelist {
+    transition: none;
+  }
+}
 .top__dot {
   width: 8px;
   height: 8px;
@@ -522,17 +639,17 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
 /* On a wide bar the pages are words only; icons come back in the folded menu. */
 @media (min-width: 1100px) {
-  .top__link :deep(svg) {
+  .top__list > li > .top__link :deep(svg:not(.top__morechev)) {
     display: none;
   }
 }
 /* A little less room: the baby's age drops out first. */
-@media (max-width: 1499px) and (min-width: 1100px) {
+@media (max-width: 1399px) and (min-width: 1100px) {
   .top__ctx-text .top__ctx-age {
     display: none;
   }
 }
-@media (max-width: 1299px) and (min-width: 1100px) {
+@media (max-width: 1199px) and (min-width: 1100px) {
   .top__ctx {
     display: none;
   }
@@ -606,6 +723,36 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   .top__link--active:hover {
     background: #f6d8c6;
     color: #1f3556;
+  }
+  .top__more {
+    flex-direction: column;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgb(255 255 255 / 12%);
+  }
+  .top__morebtn {
+    display: none;
+  }
+  .top__moretitle {
+    display: block;
+    margin: 0 0 4px;
+    padding: 0 12px;
+    font-size: 0.8125rem;
+    color: #8fa3c2;
+  }
+  .top__morelist {
+    position: static;
+    min-width: 0;
+    padding: 0;
+    background: none;
+    border: 0;
+    box-shadow: none;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+  }
+  .top__sublink {
+    padding: 10px 12px;
   }
   .top__ctx {
     order: 2;
