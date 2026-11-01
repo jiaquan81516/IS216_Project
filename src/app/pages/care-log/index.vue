@@ -1,4 +1,5 @@
 <script setup>
+import BabySwitch from "@/app/components/BabySwitch.vue";
 import { useToast } from "@/app/composables/useToast";
 import SkeletonList from "@/app/components/SkeletonList.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
@@ -311,6 +312,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
           <span>Log care</span>
         </button>
       </header>
+      <BabySwitch />
 
       <section class="cl__card cl__strip" aria-labelledby="cl-today">
         <h2 id="cl-today" class="cl__card-title">Today</h2>
