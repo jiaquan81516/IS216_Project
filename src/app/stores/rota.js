@@ -13,9 +13,45 @@ import {
   subscribeSwaps,
 } from "@/api/rota";
 import { addDays, isIsoDate, mondayOf, toIso } from "@/app/utils/rotaHelpers";
-import { ownerKey } from "@/app/utils/sharedHelpers";
+import { ownerKey, ownerUid } from "@/app/utils/sharedHelpers";
 
 const PATTERNS = ["alternate", "split", "manual"];
+// Who looks after the baby, hour by hour. The rota still plans the nights; this lets you paint any
+// hour of the day with a parent, both, or someone else (a nanny, a grandparent, childcare). It is a list of
+// 24 values, one for each hour of the day starting at midnight. A value is a uid, "both", "other:Label",
+// or an empty string for "use the default" (the rota for the evening and night, open in the day).
+const HOURS = 24;
+function cleanHours(list) {
+  const out = Array(HOURS).fill(null);
+  if (!Array.isArray(list)) return out;
+  for (let h = 0; h < HOURS; h += 1) {
+    const value = typeof list[h] === "string" ? list[h] : "";
+    if (!value || value === "none") continue;
+    if (value.startsWith("other:")) out[h] = { who: "other", label: value.slice(6, 30) || "Someone else" };
+    else out[h] = { who: value, label: "" };
+  }
+  return out;
+}
+// The earlier shift choices (a list of shifts, or morning and afternoon) become hours.
+function legacyHours(data) {
+  const list = Array(HOURS).fill("");
+  const put = (cover, from, to) => {
+    if (!cover || typeof cover.who !== "string" || cover.who === "none") return;
+    for (let h = from; h < to; h += 1) list[h] = cover.who === "other" ? `other:${cover.label || "Someone else"}` : cover.who;
+  };
+  if (Array.isArray(data?.dayShifts)) {
+    for (const shift of data.dayShifts) {
+      const from = Math.floor(Number(String(shift?.start ?? "").slice(0, 2)) + Number(String(shift?.start ?? "").slice(3, 5)) / 60);
+      const to = Math.ceil(Number(String(shift?.end ?? "").slice(0, 2)) + Number(String(shift?.end ?? "").slice(3, 5)) / 60);
+      if (Number.isFinite(from) && Number.isFinite(to)) put(shift, Math.max(0, from), Math.min(HOURS, to));
+    }
+  } else if (data?.dayCover) {
+    put(data.dayCover.morning, 6, 12);
+    put(data.dayCover.afternoon, 12, 18);
+  }
+  return list;
+}
+
 // Overrides are loaded for a year either side of today, which covers the rota week view and
 // the calendar month grid without a second listener.
 const WINDOW_DAYS = 365;
@@ -137,6 +173,7 @@ export const useRotaStore = defineStore("app-rota", () => {
       startDate: isIsoDate(data.startDate) ? data.startDate : base.startDate,
       handoverTime: /^\d{2}:\d{2}$/.test(data.handoverTime ?? "") ? data.handoverTime : base.handoverTime,
       firstOnDuty: data.firstOnDuty ?? null,
+      hourCover: cleanHours(Array.isArray(data.hourCover) ? data.hourCover : legacyHours(data)),
       updatedAt: data.updatedAt ?? null,
       updatedBy: data.updatedBy ?? null,
     };
@@ -155,6 +192,9 @@ export const useRotaStore = defineStore("app-rota", () => {
       firstOnDuty: ownerKey(plan.value.firstOnDuty, me) === "partner" ? "partner" : "me",
       startDate: plan.value.startDate,
       handoverTime: plan.value.handoverTime,
+      hourCover: plan.value.hourCover.map((cell) =>
+        cell ? { ...cell, who: cell.who === "both" || cell.who === "other" ? cell.who : ownerKey(cell.who, me) } : null,
+      ),
       overrides,
       swaps: swaps.value.map((s) => ({ ...s, from: ownerKey(s.from, me) ?? "me" })),
     };
@@ -191,6 +231,18 @@ export const useRotaStore = defineStore("app-rota", () => {
   }
   function setStartDate(startDate) {
     return saveSettings({ startDate });
+  }
+  // The hours you painted: a list of 24 cells, each null (use the default) or { who: "me" | "partner" | "both" | "other", label }.
+  // Saves the whole list, so an erased hour goes too.
+  function setHourCover(cells) {
+    const stored = Array.from({ length: HOURS }, (_, h) => {
+      const cell = cells?.[h];
+      if (!cell?.who) return "";
+      if (cell.who === "me" || cell.who === "partner") return ownerUid(cell.who, meUid.value, partnerUid.value) || "";
+      if (cell.who === "other") return `other:${cell.label || "Someone else"}`;
+      return cell.who === "both" ? "both" : "";
+    });
+    return saveSettings({ hourCover: stored });
   }
   function setHandoverTime(handoverTime) {
     return saveSettings({ handoverTime });
@@ -234,8 +286,9 @@ export const useRotaStore = defineStore("app-rota", () => {
     const swap = swaps.value.find((s) => s.id === id);
     if (!swap) return Promise.resolve(false);
     const taker = swap.to || meUid.value;
+    // A cover offer ("I will take tonight") has no night of its own to give, so only withDate moves.
     const nightsToSet = accept
-      ? [{ date: swap.date, onCall: taker }, ...(swap.withDate ? [{ date: swap.withDate, onCall: swap.from }] : [])]
+      ? [...(swap.date ? [{ date: swap.date, onCall: taker }] : []), ...(swap.withDate ? [{ date: swap.withDate, onCall: swap.from }] : [])]
       : [];
     return attempt(
       () => respondToSwap(householdId.value, id, accept, { uid: meUid.value, nights: nightsToSet }),
@@ -269,7 +322,7 @@ export const useRotaStore = defineStore("app-rota", () => {
 
   // Back to the default pattern, and every loaded override cleared for both parents.
   async function reset() {
-    const ok = await saveSettings({ ...rotaDefaults(), firstOnDuty: meUid.value });
+    const ok = await saveSettings({ ...rotaDefaults(), firstOnDuty: meUid.value, hourCover: Array(HOURS).fill(""), dayShifts: [] });
     if (!ok) return false;
     const dates = Object.keys(nights.value);
     for (const date of dates) {
@@ -304,6 +357,7 @@ export const useRotaStore = defineStore("app-rota", () => {
     setFirstOnDuty,
     setStartDate,
     setHandoverTime,
+    setHourCover,
     setOverride,
     requestSwap,
     respondSwap,

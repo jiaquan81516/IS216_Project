@@ -68,7 +68,7 @@ function toggle() {
   width: 44px;
   height: 24px;
   padding: 0;
-  background: #fff;
+  background: var(--nt-surface, #fff);
   border: 1px solid var(--nt-line);
   border-radius: 999px;
   cursor: pointer;
@@ -98,6 +98,6 @@ function toggle() {
 .tg__switch[aria-checked="true"] .tg__knob {
   left: auto;
   right: 3px;
-  background: #fff;
+  background: var(--nt-surface, #fff);
 }
 </style>
