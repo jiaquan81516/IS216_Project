@@ -43,16 +43,8 @@ const home = useHome();
 provide(HOME_KEY, home);
 
 // Which baby this dashboard shows. Loaded once the household id is known.
-const { babies, selectedBaby, selectBaby, loadBabies } = useSelectedBaby();
+const { loadBabies } = useSelectedBaby();
 watch(home.householdId, (id) => id && loadBabies(id), { immediate: true });
-
-// The switcher only appears on pages that belong to one baby.
-const PER_BABY = [ROUTES.HOME, ROUTES.CARE_LOG, ROUTES.CHECKLIST, ROUTES.ROTA, ROUTES.CALENDAR];
-const showSwitcher = computed(
-  () =>
-    babies.value.length > 1 &&
-    PER_BABY.some((p) => route.path === p || route.path.startsWith(p + "/")),
-);
 
 // One live entries listener, shared by Home and the care log. It waits for the household id.
 const entriesShared = useEntries(home.householdId);
@@ -107,13 +99,6 @@ const menuOpen = ref(false);
 const menuButton = ref(null);
 
 const ready = computed(() => !home.loading.value && !home.error.value);
-const babyLabel = computed(() => selectedBaby.value?.babyName ?? home.baby.value.name ?? "");
-const babyOpen = ref(false);
-const babyWrap = ref(null);
-function pickBaby(id) {
-  selectBaby(id);
-  babyOpen.value = false;
-}
 const userName = computed(() => displayName(home.me.value.displayName || home.me.value.firstName));
 // A small dot on Home while there are posts from your partner you have not
 // acknowledged. The stream on Home is where you clear them.
@@ -151,7 +136,6 @@ function closeMore({ restoreFocus = false } = {}) {
 }
 function onDocPointer(event) {
   if (moreOpen.value && !moreWrap.value?.contains(event.target)) closeMore();
-  if (babyOpen.value && !babyWrap.value?.contains(event.target)) babyOpen.value = false;
 }
 onMounted(() => document.addEventListener("pointerdown", onDocPointer));
 onBeforeUnmount(() => document.removeEventListener("pointerdown", onDocPointer));
@@ -168,7 +152,6 @@ function closeMenu({ restoreFocus = false } = {}) {
 }
 function onKeydown(event) {
   if (event.key === "Escape") {
-    babyOpen.value = false;
     closeMore({ restoreFocus: true });
     closeMenu({ restoreFocus: true });
   }
@@ -223,7 +206,6 @@ async function signOut() {
 watch(() => route.fullPath, () => {
   closeMenu();
   closeMore();
-  babyOpen.value = false;
 });
 onMounted(() => window.addEventListener("keydown", onKeydown));
 onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
@@ -294,40 +276,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
               </li>
             </ul>
           </nav>
-          <div v-if="!adminWorkspace && ready && babyLabel" ref="babyWrap" class="top__baby" :class="{ 'top__baby--open': babyOpen }">
-            <button
-              v-if="showSwitcher"
-              type="button"
-              class="top__babybtn"
-              aria-haspopup="menu"
-              :aria-expanded="babyOpen ? 'true' : 'false'"
-              aria-label="Switch baby"
-              @click="babyOpen = !babyOpen"
-            >
-              <span class="top__babyface" aria-hidden="true">{{ babyLabel.charAt(0).toUpperCase() }}</span>
-              <span class="top__babyname">{{ babyLabel }}</span>
-              <Icon name="chevron-down" :size="16" class="top__babychev" />
-            </button>
-            <p v-else class="top__babybtn top__babybtn--static">
-              <span class="top__babyface" aria-hidden="true">{{ babyLabel.charAt(0).toUpperCase() }}</span>
-              <span class="top__babyname">{{ babyLabel }}</span>
-            </p>
-            <ul v-if="showSwitcher" class="top__babymenu" role="menu" aria-label="Babies">
-              <li v-for="(b, i) in babies" :key="b.id" role="none">
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  class="top__babyitem"
-                  :class="{ 'top__babyitem--on': b.id === selectedBaby?.id }"
-                  :aria-checked="b.id === selectedBaby?.id ? 'true' : 'false'"
-                  @click="pickBaby(b.id)"
-                >
-                  <span class="top__babyface" aria-hidden="true">{{ (b.babyName || `Baby ${i + 1}`).charAt(0).toUpperCase() }}</span>
-                  {{ b.babyName || `Baby ${i + 1}` }}
-                </button>
-              </li>
-            </ul>
-          </div>
           <div class="top__user">
             <UserMenu :name="adminWorkspace ? adminName : userName" :admin="adminWorkspace" drop="down" @sign-out="askSignOut" />
           </div>
@@ -624,120 +572,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   background: rgb(255 255 255 / 10%);
 }
 
-.top__baby {
-  position: relative;
-  flex: none;
-  margin-left: auto;
-}
-.top__babybtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 4px 12px 4px 4px;
-  background: #fdf3e6;
-  border: 0;
-  border-radius: 999px;
-  font-family: inherit;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #1f3556;
-  cursor: pointer;
-}
-.top__babybtn--static {
-  cursor: default;
-}
-.top__babybtn:hover:not(.top__babybtn--static) {
-  background: #fff;
-}
-.top__babybtn:focus-visible,
-.top__babyitem:focus-visible {
-  outline: 2px solid #f6d8c6;
-  outline-offset: 2px;
-}
-.top__babyface {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  background: #f1c9ad;
-  border-radius: 50%;
-  font-family: var(--nt-serif, inherit);
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #1f3556;
-}
-.top__babyname {
-  max-width: 9rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.top__babychev {
-  transition: transform 180ms ease;
-}
-.top__baby--open .top__babychev {
-  transform: rotate(180deg);
-}
-.top__babymenu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 30;
-  min-width: 12rem;
-  margin: 0;
-  padding: 6px;
-  list-style: none;
-  background: #182a46;
-  border: 1px solid rgb(255 255 255 / 14%);
-  border-radius: 14px;
-  box-shadow: 0 12px 28px rgb(8 16 32 / 35%);
-  opacity: 0;
-  visibility: hidden;
-  transform: translateY(-4px);
-  transition: opacity 140ms ease, transform 160ms ease, visibility 0s linear 160ms;
-}
-.top__baby--open .top__babymenu {
-  opacity: 1;
-  visibility: visible;
-  transform: none;
-  transition: opacity 140ms ease, transform 160ms ease;
-}
-.top__babyitem {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 10px;
-  background: none;
-  border: 0;
-  border-radius: 10px;
-  font-family: inherit;
-  font-size: 0.9375rem;
-  color: #c9d8ec;
-  text-align: left;
-  cursor: pointer;
-}
-.top__babyitem:hover {
-  background: rgb(255 255 255 / 10%);
-  color: #fff;
-}
-.top__babyitem--on,
-.top__babyitem--on:hover {
-  background: #f6d8c6;
-  color: #1f3556;
-  font-weight: 600;
-}
-@media (prefers-reduced-motion: reduce) {
-  .top__babychev,
-  .top__babymenu,
-  .top__baby--open .top__babymenu {
-    transition: none;
-  }
-}
-
 /* On a wide bar the pages are words only; icons come back in the folded menu. */
 @media (min-width: 1100px) {
   .top__list > li > .top__link :deep(svg:not(.top__morechev)) {
@@ -845,20 +679,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   }
   .top__sublink {
     padding: 10px 12px;
-  }
-  .top__baby {
-    order: 2;
-    margin-left: 0;
-    padding-top: 12px;
-    border-top: 1px solid rgb(255 255 255 / 12%);
-  }
-  .top__babymenu {
-    position: static;
-    margin-top: 8px;
-    min-width: 0;
-  }
-  .top__baby:not(.top__baby--open) .top__babymenu {
-    display: none;
   }
   .top__user {
     order: 3;

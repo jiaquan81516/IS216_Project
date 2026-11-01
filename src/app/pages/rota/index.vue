@@ -1,4 +1,5 @@
 <script setup>
+import BabySwitch from "@/app/components/BabySwitch.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
 import { computed, inject, ref } from "vue";
@@ -456,6 +457,7 @@ async function finishSetup() {
         shared calendar.
       </p>
     </header>
+    <BabySwitch />
 
     <Tabs
       v-model="tab"

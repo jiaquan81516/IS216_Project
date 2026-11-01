@@ -1,4 +1,5 @@
 <script setup>
+import BabySwitch from "@/app/components/BabySwitch.vue";
 import SkeletonList from "@/app/components/SkeletonList.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
@@ -115,6 +116,7 @@ function doneMeta(task) {
           <p class="ck__sub">Who is doing what, in one place.</p>
         </div>
       </header>
+      <BabySwitch />
 
       <SkeletonList v-if="listLoading" :rows="4" :height="56" label="Loading the checklist" />
       <div v-if="!listLoading && listErrorInfo" class="ck__error alert alert-danger" role="alert">

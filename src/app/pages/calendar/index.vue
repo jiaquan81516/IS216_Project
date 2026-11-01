@@ -1,4 +1,5 @@
 <script setup>
+import BabySwitch from "@/app/components/BabySwitch.vue";
 import { useToast } from "@/app/composables/useToast";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
@@ -397,6 +398,7 @@ function onDelete(id) {
 <template>
   <div class="cal">
     <h1 class="visually-hidden">Calendar</h1>
+    <BabySwitch />
 
     <section class="cal__toolbar" :class="{ 'cal__toolbar--searching': searchOpen }" aria-label="Calendar controls">
       <button type="button" class="cal__today" aria-label="Today" @click="goToday">
