@@ -14,6 +14,7 @@ const props = defineProps({
   saving: { type: Boolean, default: false },
   error: { type: String, default: "" },
   allowedTypes: { type: Array, default: null },
+  lockType: { type: Boolean, default: false },
 });
 const emit = defineEmits(["close", "save"]);
 
@@ -128,7 +129,10 @@ function init() {
 
 const isEditing = computed(() => Boolean(props.entry));
 const typeLabel = computed(() => ENTRY_TYPES[form.type]?.label ?? "");
-const title = computed(() => (isEditing.value ? `Edit ${typeLabel.value.toLowerCase()}` : "Log care"));
+const title = computed(() => {
+  if (isEditing.value) return `Edit ${typeLabel.value.toLowerCase()}`;
+  return props.lockType ? `Log ${typeLabel.value.toLowerCase()}` : "Log care";
+});
 const saveLabel = computed(() => (props.saving ? "Saving..." : isEditing.value ? "Save changes" : "Save"));
 
 const dayOptions = computed(() => {
@@ -310,7 +314,7 @@ onBeforeUnmount(() => {
 
       <form class="clp__form" novalidate @submit.prevent="submit">
         <div class="clp__body">
-          <div v-if="!isEditing" class="clp__group">
+          <div v-if="!isEditing && !lockType" class="clp__group">
             <p class="clp__label">What are you logging?</p>
             <ChipGroup v-model="form.type" :options="typeOptions" label="Type of care" />
           </div>
@@ -469,20 +473,28 @@ onBeforeUnmount(() => {
 .clp__backdrop {
   position: absolute;
   inset: 0;
-  background: rgb(31 41 55 / 35%);
+  background: rgb(24 34 70 / 45%);
 }
 .clp__panel {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
-  width: 420px;
-  max-width: 100%;
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
   background: var(--nt-bg);
-  border-left: 1px solid var(--nt-line);
+  border: 0;
+  border-radius: 24px;
+  box-shadow: 0 24px 60px rgb(24 34 70 / 35%);
+  overflow: hidden;
   color: var(--nt-ink);
+  animation: clp-pop 0.18s ease-out;
+}
+@keyframes clp-pop {
+  from { opacity: 0; transform: translate(-50%, -47%); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
 }
 .clp__head {
   display: flex;
@@ -619,8 +631,14 @@ onBeforeUnmount(() => {
 
 @media (max-width: 575px) {
   .clp__panel {
+    top: auto;
+    left: 0;
+    bottom: 0;
+    transform: none;
     width: 100%;
-    border-left: 0;
+    max-height: 92vh;
+    border-radius: 24px 24px 0 0;
+    animation: none;
   }
   .clp__head,
   .clp__body,

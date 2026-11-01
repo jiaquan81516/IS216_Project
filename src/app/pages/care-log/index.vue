@@ -76,9 +76,31 @@ const myUid = computed(() => me.value.uid);
 const isMine = (entry) => entry.by === myUid.value;
 const hasSeen = (entry) => Object.prototype.hasOwnProperty.call(entry.seenBy ?? {}, myUid.value);
 
-const groups = computed(() => groupByDay(allEntries.value, now.value));
+const FILTERS = [
+  { key: "all", label: "All" },
+  { key: "feed", label: "Feeds" },
+  { key: "sleep", label: "Sleep" },
+  { key: "nappy", label: "Nappies" },
+  { key: "medication", label: "Meds" },
+  { key: "note", label: "Notes" },
+];
+const filter = ref("all");
+const groups = computed(() =>
+  groupByDay(
+    allEntries.value.filter((e) => filter.value === "all" || e.type === filter.value),
+    now.value,
+  ),
+);
 
 const partnerFirst = computed(() => (partner.value ? displayName(partner.value.firstName) : ""));
+
+const myFirst = computed(() => displayName(me.value.firstName));
+const sharedBy = computed(() => (partnerFirst.value ? `${myFirst.value} and ${partnerFirst.value}` : myFirst.value));
+const todayLabel = computed(() => {
+  const d = now.value;
+  return `${d.toLocaleDateString("en-GB", { weekday: "short" })} ${d.getDate()} ${d.toLocaleDateString("en-GB", { month: "short" })}`;
+});
+const statusLine = computed(() => (lastFeed.value ? lastFeedTitle.value : "No feeds logged yet"));
 
 function byLabel(entry) {
   if (isMine(entry)) return "you";
@@ -297,246 +319,205 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
     </div>
 
     <template v-if="!loading && !error">
-      <header class="cl__head">
-        <div class="cl__head-text">
-          <h1 class="nt-title cl__title">Care log</h1>
-          <p class="cl__sub">Everything you and your partner have logged, newest first.</p>
-        </div>
-        <button
-          type="button"
-          class="btn cl__log"
-          :class="panelOpen ? 'btn-outline' : 'btn-primary'"
-          @click="openPanel('feed', $event)"
-        >
-          <Icon name="plus" :size="18" />
-          <span>Log care</span>
+  <header class="cl__hero">
+    <div class="cl__hero-text">
+      <p class="cl__eyebrow">Shared by {{ sharedBy }}</p>
+      <h1 class="cl__title">Care log</h1>
+      <p class="cl__lead">Tap what just happened.<template v-if="partnerFirst"> {{ partnerFirst }} sees it straight away.</template></p>
+      <p class="cl__pill"><span class="cl__pill-dot"></span>{{ statusLine }}</p>
+    </div>
+    <svg class="cl__art" viewBox="0 0 150 180" aria-hidden="true">
+      <path d="M5 175V75a70 70 0 0 1 140 0v100z" fill="#f6e3c4" stroke="#e8cf9f" stroke-width="4"/>
+      <path d="M20 175V78a55 55 0 0 1 110 0v97z" fill="#b6c6ea"/>
+      <circle cx="75" cy="85" r="26" fill="#f8dcc0"/>
+      <path d="M49 82a26 26 0 0 1 52 0z" fill="#f4e6d0"/>
+      <circle cx="67" cy="90" r="2.5" fill="#2a2f55"/><circle cx="83" cy="90" r="2.5" fill="#2a2f55"/>
+      <path d="M69 99q6 5 12 0" fill="none" stroke="#c76a5a" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M45 175c0-28 14-42 30-42s30 14 30 42z" fill="#98aadb"/>
+    </svg>
+  </header>
+  <BabySwitch />
+
+  <section aria-labelledby="cl-now">
+    <div class="cl__row-head">
+      <h2 id="cl-now" class="cl__h2">Log now</h2>
+      <p class="cl__hint">Pick one, then adjust the time if needed</p>
+    </div>
+    <ul class="cl__tiles">
+      <li v-for="t in quickTypes" :key="t.key">
+        <button type="button" class="cl__tile" :data-type="t.key" @click="openPanel(t.key, $event)">
+          <span class="cl__tile-icon"><Icon :name="t.icon" :size="22" /></span>
+          <span class="cl__tile-label">{{ t.label }}</span>
+          <span class="cl__tile-hint">{{ t.hint }}</span>
         </button>
-      </header>
-      <BabySwitch />
+      </li>
+    </ul>
+  </section>
 
-      <section class="cl__card cl__strip" aria-labelledby="cl-today">
-        <h2 id="cl-today" class="cl__card-title">Today</h2>
-        <dl class="cl__stats">
-          <div v-for="stat in stats" :key="stat.key" class="cl__stat">
-            <dd class="cl__big">{{ stat.value }}</dd>
-            <dt class="cl__stat-label">{{ stat.label }}</dt>
-          </div>
-          <div class="cl__stat cl__stat--last">
-            <template v-if="lastFeed">
-              <dd class="cl__big">{{ lastFeedTitle.replace("Last feed ", "") }}</dd>
-              <dt class="cl__stat-label">Last feed. {{ lastFeedLine }}</dt>
-            </template>
-            <template v-else>
-              <dd class="cl__big cl__big--empty">None yet</dd>
-              <dt class="cl__stat-label">No feeds logged yet</dt>
-            </template>
-          </div>
-        </dl>
-      </section>
+  <section class="cl__today" aria-labelledby="cl-today">
+    <div class="cl__row-head">
+      <h2 id="cl-today" class="cl__eyebrow cl__eyebrow--rose">Today · {{ todayLabel }}</h2>
+      <p class="cl__hint cl__hint--rose">Last feed: {{ lastFeed ? lastFeedTitle.replace("Last feed ", "") : "none yet" }}</p>
+    </div>
+    <dl class="cl__stats">
+      <div v-for="stat in stats" :key="stat.key" class="cl__stat">
+        <dt class="cl__stat-label">{{ stat.label }}</dt>
+        <dd class="cl__big">{{ stat.value }}</dd>
+      </div>
+    </dl>
+  </section>
 
-      <div class="cl__cols">
-        <section class="cl__card cl__timeline" aria-labelledby="cl-timeline">
-          <div class="cl__tl-head">
-            <h2 id="cl-timeline" class="cl__card-title cl__card-title--lg">Timeline</h2>
-          </div>
+  <section class="cl__timeline" aria-labelledby="cl-timeline">
+    <div class="cl__row-head cl__row-head--wrap">
+      <h2 id="cl-timeline" class="cl__h2 cl__h2--lg">Timeline</h2>
+      <div class="cl__filters" role="group" aria-label="Filter the timeline">
+        <button v-for="f in FILTERS" :key="f.key" type="button" class="cl__chip" :aria-pressed="filter === f.key ? 'true' : 'false'" @click="filter = f.key">{{ f.label }}</button>
+      </div>
+    </div>
 
-          <div aria-live="polite">
-            <SkeletonList v-if="entriesLoading" :rows="4" :height="64" label="Loading the log" />
-          </div>
+    <div aria-live="polite">
+      <SkeletonList v-if="entriesLoading" :rows="4" :height="64" label="Loading the log" />
+    </div>
 
-          <div v-if="!entriesLoading && entriesErrorInfo" class="cl__error alert alert-danger" role="alert">
-            <div>
-              <p class="mb-0">{{ entriesErrorInfo.text }}</p>
-              <p v-if="entriesErrorInfo.detail" class="cl__muted">{{ entriesErrorInfo.detail }}</p>
-            </div>
-            <button type="button" class="btn btn-outline btn-sm" @click="retry">Try again</button>
-          </div>
+    <div v-if="!entriesLoading && entriesErrorInfo" class="cl__error alert alert-danger" role="alert">
+      <p class="mb-0">{{ entriesErrorInfo.text }}</p>
+      <button type="button" class="btn btn-outline btn-sm" @click="retry">Try again</button>
+    </div>
 
-          <template v-if="!entriesLoading && !entriesErrorInfo">
-            <div v-if="!allEntries.length" class="cl__empty">
-              <h3 class="cl__empty-title">No care logged yet</h3>
-              <p class="cl__muted">Log the first feed or nap and your partner will see it here.</p>
-            </div>
+    <template v-if="!entriesLoading && !entriesErrorInfo">
+      <p v-if="!groups.length" class="cl__muted">Nothing logged yet. Tap a card above to start.</p>
 
-            <section v-for="group in groups" :key="group.key" class="cl__day" :aria-label="group.label">
-              <h3 class="cl__day-title">{{ group.label }}</h3>
-              <TransitionGroup tag="ul" name="li" class="cl__rows">
-                <li v-for="entry in group.entries" :key="entry.id" class="cl__row">
-                  <span class="cl__time">{{ prefTime(entry.at) }}</span>
-                  <span class="cl__icon">
-                    <Icon :name="iconOf(entry)" :size="18" />
-                  </span>
-                  <div class="cl__body">
-                    <p class="cl__row-title">{{ summary(entry).title }}</p>
-                    <p v-if="summary(entry).detail" class="cl__row-detail">{{ summary(entry).detail }}</p>
-                    <p v-if="summary(entry).note" class="cl__row-detail">{{ summary(entry).note }}</p>
-                    <p class="cl__row-by">
-                      <span>by {{ byLabel(entry) }}</span>
-                      <span v-if="seenByPartner(entry)">Seen by {{ partnerFirst }}</span>
-                    </p>
-                    <p v-if="rowError.id === entry.id" class="cl__row-error" role="alert">{{ rowError.text }}</p>
+      <div v-for="group in groups" :key="group.key" class="cl__day">
+        <div class="cl__day-head"><span class="cl__day-pill">{{ group.label }}</span><span class="cl__day-line"></span></div>
+        <TransitionGroup tag="ul" name="li" class="cl__rows">
+          <li v-for="entry in group.entries" :key="entry.id" class="cl__item">
+            <span class="cl__dot" aria-hidden="true"></span>
+            <div class="cl__card">
+              <span class="cl__card-icon" :data-type="entry.type"><Icon :name="iconOf(entry)" :size="20" /></span>
+              <div class="cl__body">
+                <p class="cl__row-title">{{ summary(entry).title }} <span class="cl__time">{{ prefTime(entry.at) }}</span></p>
+                <p v-if="summary(entry).detail" class="cl__row-detail">{{ summary(entry).detail }}</p>
+                <p v-if="summary(entry).note" class="cl__row-detail">{{ summary(entry).note }}</p>
+                <p class="cl__row-detail">logged by {{ byLabel(entry) }}<span v-if="seenByPartner(entry)"> · Seen by {{ partnerFirst }}</span></p>
+                <p v-if="rowError.id === entry.id" class="cl__row-error" role="alert">{{ rowError.text }}</p>
+              </div>
+              <div class="cl__side">
+                <AppBadge v-if="!isMine(entry) && newIds.has(entry.id)" color="blue">New</AppBadge>
+                <template v-if="isMine(entry)">
+                  <div v-if="confirmingId === entry.id" class="cl__confirm">
+                    <span class="cl__confirm-text">Delete?</span>
+                    <button type="button" class="btn btn-outline btn-sm" :disabled="deletingId === entry.id" @click="confirmDelete(entry)">Delete</button>
+                    <button type="button" class="btn btn-outline btn-sm" @click="confirmingId = ''">Cancel</button>
                   </div>
-                  <div class="cl__side">
-                    <AppBadge v-if="!isMine(entry) && newIds.has(entry.id)" color="blue">New</AppBadge>
-                    <template v-if="isMine(entry)">
-                      <div v-if="confirmingId === entry.id" class="cl__confirm">
-                        <span class="cl__confirm-text">Delete this entry?</span>
-                        <button
-                          type="button"
-                          class="btn btn-outline btn-sm cl__btn-danger"
-                          :disabled="deletingId === entry.id"
-                          @click="confirmDelete(entry)"
-                        >
-                          Delete
-                        </button>
-                        <button type="button" class="btn btn-outline btn-sm" @click="confirmingId = ''">Cancel</button>
-                      </div>
-                      <div v-else class="cl__actions">
-                        <button
-                          type="button"
-                          class="cl__icon-btn cl__icon-btn--edit"
-                          aria-label="Edit entry"
-                          @click="openEdit(entry, $event)"
-                        >
-                          <Icon name="edit" :size="18" />
-                        </button>
-                        <button
-                          type="button"
-                          class="cl__icon-btn cl__icon-btn--delete"
-                          aria-label="Delete entry"
-                          @click="askDelete(entry)"
-                        >
-                          <Icon name="trash" :size="18" />
-                        </button>
-                      </div>
-                    </template>
-                  </div>
-                </li>
-              </TransitionGroup>
-            </section>
-
-            <p v-if="moreError" class="cl__muted" role="alert">{{ moreError }}</p>
-            <div v-if="hasMore" class="cl__more">
-              <button type="button" class="btn btn-outline" :disabled="loadingMore" @click="more">
-                {{ loadingMore ? "Loading..." : "Load older" }}
-              </button>
+                  <template v-else>
+                    <button type="button" class="cl__icon-btn" aria-label="Edit entry" @click="openEdit(entry, $event)"><Icon name="edit" :size="18" /></button>
+                    <button type="button" class="cl__icon-btn cl__icon-btn--delete" aria-label="Delete entry" @click="askDelete(entry)"><Icon name="trash" :size="18" /></button>
+                  </template>
+                </template>
+              </div>
             </div>
-          </template>
-        </section>
-
-        <aside class="cl__card cl__quick" aria-labelledby="cl-quick">
-          <h2 id="cl-quick" class="cl__card-title cl__card-title--lg">Quick log</h2>
-          <ul class="cl__links">
-            <li v-for="t in quickTypes" :key="t.key">
-              <button type="button" class="cl__link" @click="openPanel(t.key, $event)">
-                <Icon :name="t.icon" :size="20" class="cl__link-icon" />
-                <span class="cl__link-text">
-                  <span class="cl__link-label">{{ t.label }}</span>
-                  <span class="cl__link-hint">{{ t.hint }}</span>
-                </span>
-                <Icon name="chevron" :size="16" class="cl__link-icon" />
-              </button>
-            </li>
-          </ul>
-        </aside>
+          </li>
+        </TransitionGroup>
       </div>
 
-      <CareLogPanel
-        :open="panelOpen"
-        :entry="editing"
-        :initial-type="panelType"
-        :saving="saving"
-        :error="saveError"
-        @close="closePanel"
-        @save="onSave"
-      />
+      <p v-if="moreError" class="cl__muted" role="alert">{{ moreError }}</p>
+      <div v-if="hasMore" class="cl__more"><button type="button" class="btn btn-outline" :disabled="loadingMore" @click="more">{{ loadingMore ? "Loading..." : "Load older" }}</button></div>
+      <p v-else-if="groups.length" class="cl__muted">That's everything logged so far.</p>
     </template>
+  </section>
+
+  <CareLogPanel :open="panelOpen" :entry="editing" :initial-type="panelType" :lock-type="true" :saving="saving" :error="saveError" @close="closePanel" @save="onSave" />
+  </template>
   </div>
 </template>
 
 <style scoped>
-.cl { display: flex; flex-direction: column; gap: 24px; width: 100%; font-size: 1rem; }
-.cl__status { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
-.cl__muted { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
-.cl__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 0; font-size: 0.875rem; border-radius: 8px; }
+.cl { --navy: #243560; --navy-2: #2d3f70; --ink: #1f2a52; --cream: #fdf9f0; --sand: #e9d9b8; display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 1020px; margin: 0 auto; color: var(--ink); }
+.cl__status, .cl__muted { margin: 0; font-size: 0.875rem; color: #6b7392; }
+.cl__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; border-radius: 8px; }
 
-.cl__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.cl__head-text { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.cl__title { font-size: 2.5rem; line-height: 1.2; }
-.cl__sub { margin: 0; font-size: 1rem; color: var(--nt-muted); }
-.cl__log { display: inline-flex; align-items: center; gap: 8px; }
+.cl__hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 32px 40px; background: var(--navy-2); border-radius: 28px; border-bottom: 5px solid #182246; color: #fff; overflow: hidden; }
+.cl__hero-text { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cl__eyebrow { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #f2a477; }
+.cl__eyebrow--rose { color: #a8473f; }
+.cl__title { margin: 0; font-family: var(--nt-serif); font-size: 2.25rem; line-height: 1.05; font-weight: 700; color: #fff; }
+.cl__lead { margin: 0; font-size: 1.0625rem; color: #dfe5f7; }
+.cl__pill { display: inline-flex; align-items: center; align-self: flex-start; gap: 8px; margin: 6px 0 0; padding: 8px 16px; border: 1px solid rgb(255 255 255 / 35%); border-radius: 999px; background: rgb(255 255 255 / 10%); font-size: 0.9375rem; }
+.cl__pill-dot { width: 10px; height: 10px; border-radius: 50%; background: #8fd19e; }
+.cl__art { flex: none; width: 140px; height: auto; align-self: flex-end; margin-bottom: -32px; }
 
-.cl__card { background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; padding: 24px; min-width: 0; }
-.cl__card-title { margin: 0 0 12px; font-size: 0.9375rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
-.cl__card-title--lg { font-size: 1.125rem; margin-bottom: 8px; }
+.cl__row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.cl__row-head--wrap { flex-wrap: wrap; align-items: center; }
+.cl__h2 { margin: 0; font-family: var(--nt-serif); font-size: 1.5rem; font-weight: 700; }
+.cl__h2--lg { font-size: 1.75rem; }
+.cl__hint { margin: 0; font-size: 0.875rem; }
+.cl__hint--rose { color: #7a4a4a; }
 
-.cl__stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 24px; margin: 0; }
-.cl__stat { display: flex; flex-direction: column-reverse; justify-content: flex-end; gap: 4px; min-width: 0; padding-left: 24px; border-left: 1px solid var(--nt-line); }
-.cl__stat:first-child { padding-left: 0; border-left: 0; }
-.cl__big { margin: 0; font-size: 1.75rem; font-weight: 600; line-height: 1.2; color: var(--nt-ink); }
-.cl__big--empty { font-size: 1.25rem; font-weight: 500; color: var(--nt-muted); }
-.cl__stat-label { font-size: 0.875rem; font-weight: 400; line-height: 1.45; color: var(--nt-muted); }
+.cl__tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+.cl__tile { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; height: 100%; min-height: 168px; padding: 16px; background: #f6e3d0; border: 0; border-bottom: 4px solid rgb(31 42 82 / 18%); border-radius: 20px; font-family: inherit; text-align: left; color: var(--ink); cursor: pointer; transition: transform 0.15s; }
+.cl__tile:hover { transform: translateY(-2px); }
+.cl__tile:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
+.cl__tile-icon { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; margin-bottom: auto; border-radius: 14px; background: #a8532f; color: #fff; }
+.cl__tile-label { font-family: var(--nt-serif); font-size: 1.375rem; font-weight: 700; }
+.cl__tile-hint { font-size: 0.8125rem; color: #5b6385; }
+.cl__tile[data-type="sleep"] { background: #dfe6f6; }
+.cl__tile[data-type="sleep"] .cl__tile-icon { background: #243560; }
+.cl__tile[data-type="nappy"], .cl__tile[data-type="diaper"] { background: #f8e8ee; }
+.cl__tile[data-type="nappy"] .cl__tile-icon, .cl__tile[data-type="diaper"] .cl__tile-icon { background: #8a3f56; }
+.cl__tile[data-type="medication"] { background: #e4efdc; }
+.cl__tile[data-type="medication"] .cl__tile-icon { background: #43683a; }
+.cl__tile[data-type="note"] { background: #fbf0d6; }
+.cl__tile[data-type="note"] .cl__tile-icon { background: #7a5a22; }
 
-.cl__cols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-.cl__quick { order: 1; }
-.cl__timeline { order: 2; display: flex; flex-direction: column; gap: 8px; }
+.cl__today { padding: 20px 24px 24px; background: #f9e9ee; border: 1px solid #e9b9c6; border-bottom-width: 3px; border-radius: 24px; }
+.cl__stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.cl__stat { display: flex; flex-direction: column; gap: 2px; padding: 12px 16px; background: #fff; border: 1.5px dashed #e3aab9; border-radius: 12px; }
+.cl__stat-label { font-size: 0.875rem; font-weight: 400; color: #5b6385; }
+.cl__big { margin: 0; font-family: var(--nt-serif); font-size: 2.25rem; font-weight: 700; line-height: 1.1; }
 
-.cl__links { margin: 0; padding: 0; list-style: none; }
-.cl__links li + li { border-top: 1px solid var(--nt-line); }
-.cl__link { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 0; background: none; border: 0; font-family: inherit; text-align: left; color: var(--nt-ink); cursor: pointer; }
-.cl__link-icon { flex: none; color: var(--nt-muted); }
-.cl__link-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
-.cl__link-label { font-size: 1rem; font-weight: 600; }
-.cl__link-hint { font-size: 0.875rem; color: var(--nt-muted); }
-.cl__link:hover .cl__link-label { color: var(--nt-plum); text-decoration: underline; text-underline-offset: 3px; }
-.cl__link:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
+.cl__timeline { padding: 24px 28px 28px; background: var(--cream); border: 1px solid var(--sand); border-bottom-width: 4px; border-radius: 24px; }
+.cl__filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.cl__chip { padding: 8px 20px; background: transparent; border: 1.5px solid var(--navy); border-radius: 999px; font-family: inherit; font-size: 0.9375rem; font-weight: 600; color: var(--navy); cursor: pointer; }
+.cl__chip[aria-pressed="true"] { background: var(--navy); color: #fff; }
+.cl__chip:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
 
-.cl__empty { padding: 16px 0; border-top: 1px solid var(--nt-line); }
-.cl__empty-title { margin: 0 0 4px; font-size: 1rem; font-weight: 600; color: var(--nt-ink); }
-
-.cl__day { margin-top: 8px; }
-.cl__day-title { margin: 0 0 4px; font-size: 0.875rem; font-weight: 600; line-height: 1.3; color: var(--nt-muted); }
-.cl__rows { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
-.cl__row { display: grid; grid-template-columns: 72px 18px minmax(0, 1fr) auto; gap: 16px; align-items: start; padding: 16px 0; border-bottom: 1px solid var(--nt-line); }
-.cl__rows > .cl__row:last-child { border-bottom: 0; }
-.cl__time { font-size: 0.875rem; line-height: 36px; color: var(--nt-muted); }
-.cl__icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 36px; color: var(--nt-muted); }
-.cl__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.cl__row-title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.5; color: var(--nt-ink); }
-.cl__row-detail { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); overflow-wrap: anywhere; }
-.cl__row-by { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
+.cl__day { margin-top: 12px; }
+.cl__day-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.cl__day-pill { padding: 4px 12px; background: var(--navy); border-radius: 8px; font-size: 0.8125rem; font-weight: 600; color: #fff; }
+.cl__day-line { flex: 1; border-top: 2px dashed var(--sand); }
+.cl__rows { margin: 0; padding: 0; list-style: none; }
+.cl__item { position: relative; display: flex; gap: 16px; padding-bottom: 12px; }
+.cl__item::before { content: ""; position: absolute; left: 13px; top: 40px; bottom: -4px; border-left: 2px dashed var(--sand); }
+.cl__item:last-child::before { display: none; }
+.cl__dot { flex: none; width: 28px; height: 28px; margin-top: 12px; border-radius: 50%; background: #fff; border: 7px solid #a8532f; box-sizing: border-box; box-shadow: 0 0 0 3px #f1d8c8; }
+.cl__card { flex: 1; display: flex; align-items: flex-start; gap: 16px; min-width: 0; padding: 14px 16px; background: #fff; border: 1px solid var(--sand); border-radius: 18px; }
+.cl__card-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 12px; background: #243560; color: #fff; }
+.cl__card-icon[data-type="feed"] { background: #a8532f; }
+.cl__card-icon[data-type="nappy"], .cl__card-icon[data-type="diaper"] { background: #8a3f56; }
+.cl__card-icon[data-type="medication"] { background: #43683a; }
+.cl__card-icon[data-type="note"] { background: #7a5a22; }
+.cl__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cl__row-title { margin: 0; font-family: var(--nt-serif); font-size: 1.25rem; font-weight: 700; }
+.cl__time { margin-left: 8px; font-family: inherit; font-size: 0.8125rem; font-weight: 700; color: #a8532f; }
+.cl__row-detail { margin: 0; font-size: 0.9375rem; color: #4a5272; overflow-wrap: anywhere; }
 .cl__row-error { margin: 4px 0 0; font-size: 0.875rem; color: var(--nt-coral); }
-.cl__side { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-height: 36px; }
-.cl__actions { display: flex; gap: 0; }
-.cl__icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; background: transparent; border: 0; border-radius: 8px; color: var(--nt-muted); cursor: pointer; transition: background-color 0.15s, color 0.15s; }
-.cl__icon-btn:hover { background: var(--nt-gray); }
-.cl__icon-btn--edit:hover { color: var(--nt-plum); }
-.cl__icon-btn--delete:hover { color: var(--nt-coral); }
-.cl__icon-btn:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
-.cl__confirm { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
-.cl__confirm-text { font-size: 0.875rem; color: var(--nt-ink); }
-.cl__btn-danger { --bs-btn-color: var(--nt-coral); --bs-btn-hover-color: var(--nt-coral); --bs-btn-active-color: var(--nt-coral); --bs-btn-border-color: var(--nt-coral); --bs-btn-hover-border-color: var(--nt-coral); --bs-btn-active-border-color: var(--nt-coral); }
+.cl__side { display: flex; align-items: center; gap: 8px; }
+.cl__icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; background: #f1ead9; border: 0; border-radius: 12px; color: #5b4a2a; cursor: pointer; }
+.cl__icon-btn--delete { background: #f3e1dc; color: #a8473f; }
+.cl__icon-btn:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
+.cl__confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.875rem; }
 .cl__more { display: flex; justify-content: center; padding-top: 8px; }
 
-@media (min-width: 1100px) {
-  .cl__cols { grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; }
-  .cl__quick { order: 2; }
-  .cl__timeline { order: 1; }
-}
 @media (max-width: 991px) {
-  .cl__title { font-size: 2rem; }
-  .cl__stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .cl__stat--last { grid-column: 1 / -1; padding-left: 0; border-left: 0; padding-top: 16px; border-top: 1px solid var(--nt-line); }
+  .cl__tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cl__hero { padding: 24px; }
+  .cl__art { display: none; }
 }
 @media (max-width: 575px) {
-  .cl__card { padding: 20px; }
-  .cl__stats { gap: 16px 12px; }
-  .cl__stat { padding-left: 12px; }
-  .cl__big { font-size: 1.375rem; }
-  .cl__row { grid-template-columns: 18px minmax(0, 1fr); }
-  .cl__time { grid-column: 2; grid-row: 1; line-height: 1.45; }
-  .cl__icon { grid-column: 1; grid-row: 1 / span 2; }
-  .cl__body { grid-column: 2; }
-  .cl__side { grid-column: 2; justify-content: flex-start; }
+  .cl__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cl__stats { grid-template-columns: 1fr; }
+  .cl__title { font-size: 2.25rem; }
+  .cl__timeline { padding: 20px 16px; }
+  .cl__card { flex-wrap: wrap; }
 }
 </style>
