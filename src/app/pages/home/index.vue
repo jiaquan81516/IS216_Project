@@ -5,23 +5,20 @@ import { useRouter } from "vue-router";
 import { CHAT_TEXT_MAX } from "@/api/chat";
 import AppButton from "@/components/ui/AppButton.vue";
 import AppLink from "@/components/ui/AppLink.vue";
-import CarryIcon from "@/app/components/CarryIcon.vue";
 import BabyScene from "@/app/components/BabyScene.vue";
 import Icon from "@/app/components/Icon.vue";
-import SlideArt from "@/app/components/SlideArt.vue";
 import { ownerKey, ownerLabel } from "@/app/utils/sharedHelpers";
 import { agendaGroups, agendaHeading, eventTimeLabel } from "@/app/utils/calendarHelpers";
 import { buildStream } from "@/app/utils/stream";
-import { agoText, dutyTonight, nextUp, todaySummary, tonightDate } from "@/app/utils/homeSummary";
-import { addDays, mondayOf, toIso, weekNights } from "@/app/utils/rotaHelpers";
+import { agoText, todaySummary, tonightDate } from "@/app/utils/homeSummary";
+import { mondayOf, toIso, weekNights } from "@/app/utils/rotaHelpers";
 import { isStruggling, moodStageFor } from "@/app/utils/moodStage";
 import { formatMinutes, formatTime as clockTime, lastOfType, toDate } from "@/app/utils/entryHelpers";
-import { babySentence, displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
+import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { NUDGES_KEY } from "@/app/composables/useNudges";
 import { useCheckinsStore } from "@/app/stores/checkins";
 import { encouragementFor } from "@/app/data/encouragement";
 import { MOODS } from "@/app/data/wellness";
-import { SLIDES } from "@/app/data/slides";
 import { useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { usePrefs } from "@/app/composables/usePrefs";
 import { useShared, SHARED_KEY } from "@/app/composables/useShared";
@@ -47,24 +44,6 @@ const { formatTime } = usePrefs();
 
 const now = ref(new Date());
 let clock = null;
-const reduceMotion = typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
-const slideIndex = ref(0);
-const slidesPlaying = ref(!reduceMotion);
-const slidesHeld = ref(false); // the pointer or keyboard focus is on the carousel
-const SLIDE_SECONDS = 7;
-function goSlide(index) {
-  slideIndex.value = (index + SLIDES.length) % SLIDES.length;
-}
-let touchX = null;
-function onTouchStart(event) {
-  touchX = event.touches[0]?.clientX ?? null;
-}
-function onTouchEnd(event) {
-  if (touchX === null) return;
-  const dx = (event.changedTouches[0]?.clientX ?? touchX) - touchX;
-  touchX = null;
-  if (Math.abs(dx) > 40) goSlide(slideIndex.value + (dx < 0 ? 1 : -1));
-}
 onMounted(() => {
   clock = setInterval(() => {
     now.value = new Date();
@@ -87,7 +66,6 @@ const dateText = computed(() => {
 const myName = computed(() => displayName(me.value.firstName));
 const partnerFirst = computed(() => (partner.value ? displayName(partner.value.firstName) : ""));
 const showInvite = computed(() => !partner.value && Boolean(inviteCode.value));
-const babyLine = computed(() => babySentence(home.baby.value));
 
 // ---- How each of you is doing, from the shared check-ins ----
 const latestOf = (map) => {
@@ -291,7 +269,6 @@ async function paintOneHour(index) {
   draft[(6 + index) % 24] = brushCell();
   await rotaStore.value?.setHourCover(draft);
 }
-const roleFor = (who) => (who === "me" ? me.value.role : who === "partner" ? partner.value?.role : null) ?? null;
 const dayPlan = computed(() => {
   const n = now.value;
   const anchor = new Date(n);
@@ -361,6 +338,22 @@ const dayPlan = computed(() => {
   const nowText = n.toLocaleTimeString("en-SG", { hour: "numeric", minute: "2-digit" }).toUpperCase();
   return { parts, blocks, ticks, now: nowPos, nowText, current, summary, dayOpen: grid.slice(0, 12).every((cell) => cell.who === "open"), grid };
 });
+// The one sentence the page opens with: who is looking after the baby right now, and what is next.
+const carerName = (part) => (part.who === "me" ? "You" : part.who === "both" ? "You both" : part.who === "partner" ? partnerFirst.value || "Your partner" : part.who === "other" ? part.name : "");
+const carerVerb = (part) => (part.who === "me" || part.who === "both" ? "are" : "is");
+const lookingAfter = computed(() => {
+  const { parts, current } = dayPlan.value;
+  const open = !current || current.who === "open";
+  const next = parts.length > 1 ? parts[(parts.indexOf(current) + 1) % parts.length] : null;
+  return {
+    open,
+    who: open ? "open" : current.who,
+    initial: open ? "?" : current.who === "both" ? "&" : carerName(current).charAt(0).toUpperCase(),
+    headline: open ? `No one is set to look after ${babyName.value} yet` : `${carerName(current)} ${carerVerb(current)} looking after ${babyName.value}`,
+    until: open ? "" : `Until ${current.end}`,
+    next: !next || next === current ? "" : next.who === "open" ? "Then: not planned yet" : `Then ${carerName(next)}, from ${next.start}`,
+  };
+});
 // Offers your partner has made that need your answer.
 const listOpen = ref(false);
 const smallThings = computed(() => incomingSwaps.value.length + waiting.value.length);
@@ -394,17 +387,6 @@ const members = computed(() => {
   const list = [{ uid: me.value.uid, displayName: me.value.displayName || me.value.firstName }];
   if (partner.value) list.push({ uid: partner.value.uid, displayName: partner.value.displayName || partner.value.firstName });
   return list;
-});
-const duty = computed(() => {
-  const rota = rotaStore.value;
-  const hasRota = Boolean(rota?.settings);
-  return dutyTonight({
-    rotaSettings: hasRota ? rota.settings : null,
-    view: hasRota ? rota.view : null,
-    now: now.value,
-    uid: myUid.value,
-    members: members.value,
-  });
 });
 // ---- Reaching your partner, in one tap ----
 const sent = ref({});
@@ -482,18 +464,6 @@ async function sendLetter() {
 // ---- The baby, kept small ----
 const entriesFailed = computed(() => Boolean(entriesShared.error?.value));
 const summary = computed(() => todaySummary({ entries: entriesShared.entries.value, now: now.value }));
-const lastFeed = computed(() =>
-  summary.value.lastFeedAt ? `${clockTime(summary.value.lastFeedAt)}, ${agoText(summary.value.lastFeedAt, now.value)}` : "",
-);
-const upNext = computed(() =>
-  nextUp({
-    events: shared.calendar?.events ?? [],
-    tasks: rtw.tasks,
-    handoverTime: rotaStore.value?.settings ? rotaStore.value.view.handoverTime : null,
-    now: now.value,
-  }),
-);
-
 // The next few things on the shared calendar and open tasks with a due date, soonest first.
 const KIND_LABEL = { appointment: "Appointment", family: "Family", work: "Work", task: "Task" };
 const kindClass = (kind) => `hp__kind--${String(kind).toLowerCase()}`;
@@ -510,21 +480,10 @@ const coming = computed(() => {
     rows.push({ key: `t${task.id ?? task.title}`, iso: task.due, title: task.title, time: "", owner: ownerLabel(task.owner, myUid.value, myName.value, partnerFirst.value), who: ownerKey(task.owner, myUid.value), kind: KIND_LABEL.task });
   }
   rows.sort((x, y) => (x.iso < y.iso ? -1 : x.iso > y.iso ? 1 : 0));
-  // Placeholder plans, shown only while nothing real is planned, so the layout can be judged.
-  const sample = rows.length === 0;
-  if (sample) {
-    const named = partnerFirst.value || "Your partner";
-    rows.push(
-      { key: "s1", iso: todayIso, title: "Health visitor home check", time: "2:30 PM", owner: "Both", who: "both", kind: KIND_LABEL.appointment },
-      { key: "s2", iso: addDays(todayIso, 1), title: "Pick up the car seat", time: "", owner: named, who: "partner", kind: KIND_LABEL.task },
-      { key: "s3", iso: addDays(todayIso, 3), title: "Dinner at grandma's", time: "6:00 PM", owner: "Both", who: "both", kind: KIND_LABEL.family },
-      { key: "s4", iso: addDays(todayIso, 6), title: "Six week check-up", time: "10:30 AM", owner: myName.value, who: "me", kind: KIND_LABEL.appointment },
-    );
-  }
   return rows.slice(0, 4).map((row) => {
     const date = new Date(`${row.iso}T00:00:00`);
     const heading = agendaHeading(row.iso, todayIso);
-    return { ...row, sample, month: date.toLocaleDateString("en-GB", { month: "short" }), weekday: date.toLocaleDateString("en-GB", { weekday: "short" }), day: date.getDate(), when: heading === "Today" || heading === "Tomorrow" ? heading : date.toLocaleDateString("en-GB", { day: "numeric", month: "long" }), soon: heading === "Today" };
+    return { ...row, month: date.toLocaleDateString("en-GB", { month: "short" }), weekday: date.toLocaleDateString("en-GB", { weekday: "short" }), day: date.getDate(), when: heading === "Today" || heading === "Tomorrow" ? heading : date.toLocaleDateString("en-GB", { day: "numeric", month: "long" }), soon: heading === "Today" };
   });
 });
 
@@ -543,9 +502,6 @@ const items = computed(() =>
     now: now.value,
   }),
 );
-const streamLoading = computed(() => !householdId.value || posts.loading || entriesShared.loading.value);
-const streamError = computed(() => posts.errorInfo);
-const recent = computed(() => items.value.slice(0, 3));
 // What needs an answer from you: partner notes to acknowledge, and open tasks that are yours.
 const waiting = computed(() =>
   items.value.filter(
@@ -559,20 +515,7 @@ function metaLine(item) {
   const who = `${item.authorName}, ${formatTime(item.at)}`;
   return item.kindLabel ? `${who} · ${item.kindLabel}` : who;
 }
-function seenLine(item) {
-  return item.ackedByNames.length ? `Seen by ${item.ackedByNames.join(" and ")}` : "";
-}
-
 // ---- Notes and tasks ----
-const announcement = ref("");
-
-function announce(message) {
-  announcement.value = "";
-  nextTick(() => {
-    announcement.value = message;
-  });
-}
-
 const actionError = ref("");
 async function gotIt(item) {
   actionError.value = "";
@@ -582,12 +525,6 @@ async function markDone(item) {
   actionError.value = "";
   if (!(await rtw.toggleTask(item.rawId))) actionError.value = rtw.writeError;
 }
-async function removePost(item) {
-  actionError.value = "";
-  if (await posts.remove(item.rawId)) announce("Message deleted");
-  else actionError.value = posts.writeError;
-}
-
 const copied = ref(false);
 let copiedTimer = null;
 async function copyCode() {
@@ -617,63 +554,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
     </div>
 
     <template v-if="!loading && !error">
-      <!-- Words for new parents: one full-bleed photograph at a time, with the quote laid over it -->
-      <section
-        class="hp__car"
-        aria-roledescription="carousel"
-        aria-label="Words for new parents"
-        @mouseenter="slidesHeld = true"
-        @mouseleave="slidesHeld = false"
-        @focusin="slidesHeld = true"
-        @focusout="slidesHeld = false"
-        @keydown.left.prevent="goSlide(slideIndex - 1)"
-        @keydown.right.prevent="goSlide(slideIndex + 1)"
-        @touchstart.passive="onTouchStart"
-        @touchend.passive="onTouchEnd"
-      >
-        <div class="hp__car-stage" :aria-live="slidesPlaying ? 'off' : 'polite'">
-          <div
-            v-for="(slide, i) in SLIDES"
-            :key="slide.id"
-            class="hp__car-slide"
-            :class="{ 'is-active': i === slideIndex }"
-            role="group"
-            aria-roledescription="slide"
-            :aria-label="`${i + 1} of ${SLIDES.length}`"
-            :aria-hidden="i === slideIndex ? 'false' : 'true'"
-          >
-            <img v-if="slide.image" class="hp__car-photo" :src="slide.image" :alt="slide.alt" :style="{ objectPosition: slide.pos }" :loading="i === 0 ? 'eager' : 'lazy'" />
-            <SlideArt v-else :art="slide.art" />
-            <div class="hp__car-copy">
-              <p class="hp__car-label">{{ slide.label }}</p>
-              <blockquote class="hp__car-text">{{ slide.text }}</blockquote>
-            </div>
-            <a v-if="slide.credit" class="hp__car-credit" :href="slide.credit.url" target="_blank" rel="noopener noreferrer" :tabindex="i === slideIndex ? 0 : -1">Photo: {{ slide.credit.by }} · {{ slide.credit.license }}</a>
-          </div>
-        </div>
-
-        <!-- Progress along the bottom edge: one thin line per slide, and a quiet pause button -->
-        <div class="hp__car-nav">
-          <div class="hp__car-ticks" role="group" aria-label="Choose a slide">
-            <button v-for="(slide, i) in SLIDES" :key="slide.id" type="button" class="hp__tick-btn" :class="{ 'is-active': i === slideIndex }" :aria-label="`Go to slide ${i + 1}`" :aria-current="i === slideIndex ? 'true' : undefined" @click="goSlide(i)">
-              <span class="hp__tick-line">
-                <span
-                  v-if="i === slideIndex"
-                  :key="slideIndex"
-                  class="hp__tick-fill"
-                  :class="{ 'is-held': slidesHeld || !slidesPlaying }"
-                  :style="{ animationDuration: `${SLIDE_SECONDS}s` }"
-                  @animationend="goSlide(slideIndex + 1)"
-                ></span>
-              </span>
-            </button>
-          </div>
-          <button type="button" class="hp__car-pause" :aria-label="slidesPlaying ? 'Pause the slideshow' : 'Play the slideshow'" :aria-pressed="slidesPlaying ? 'false' : 'true'" @click="slidesPlaying = !slidesPlaying">
-            <svg v-if="slidesPlaying" width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true"><rect x="2.5" y="1.5" width="3" height="11" rx="1" /><rect x="8.5" y="1.5" width="3" height="11" rx="1" /></svg>
-            <svg v-else width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true"><path d="M3.5 1.8v10.4L12 7z" /></svg>
-          </button>
-        </div>
-      </section>
       <header class="hp__head">
         <div class="hp__head-text">
           <h1 class="hp__title">Good {{ greeting }}, {{ partnerFirst ? `${myName} and ${partnerFirst}` : myName }}.</h1>
@@ -738,23 +618,89 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
         </div>
       </header>
 
-      <!-- The next thing coming up, kept short and near the top -->
-      <section v-if="coming.length" class="hp__remind" aria-label="Next up">
-        <span class="hp__remind-bell" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z" /><path d="M10 20a2 2 0 0 0 4 0" /></svg>
-        </span>
-        <p class="hp__remind-text">
-          <span class="hp__label">Next up</span>
-          <strong>{{ coming[0].when }}<template v-if="coming[0].time">, {{ coming[0].time }}</template></strong>
-          <span class="hp__remind-title">{{ coming[0].title }}</span>
-        </p>
-        <span class="hp__kind" :class="kindClass(coming[0].kind)">{{ coming[0].kind }}</span>
-        <span class="hp__who2"><i class="hp__who2-dots" :class="`hp__who2-dots--${coming[0].who}`" aria-hidden="true"></i>{{ coming[0].owner }}</span>
-        <span v-if="coming[0].sample" class="hp__remind-sample">Sample</span>
-        <AppLink class="hp__link hp__link--sm hp__remind-link" :to="ROUTES.CALENDAR">Open the calendar</AppLink>
+      <section class="hp__trio" aria-label="Everyday">
+        <!-- Baby, today -->
+        <article class="hp__card hp__trio-card hp__trio-card--baby" aria-labelledby="hp-baby-title">
+          <BabyScene on-dark :state="babyNow.state" :title="babyNow.title" :detail="babyNow.detail" title-id="hp-baby-title" />
+          <ul v-if="!entriesFailed" class="hp__tally">
+            <li><b>{{ summary.feeds }}</b><span>feeds</span></li>
+            <li><b>{{ summary.nappies }}</b><span>nappies</span></li>
+            <li><b>{{ sleepToday }}</b><span>sleep</span></li>
+          </ul>
+          <div class="hp__quicklog">
+            <AppLink v-for="q in QUICK_LOG" :key="q.key" class="hp__qbtn" :to="{ path: ROUTES.CARE_LOG, query: { log: q.key } }">
+              <Icon :name="q.icon" :size="18" />{{ q.label }}
+            </AppLink>
+          </div>
+          <AppLink class="hp__carelink" :to="ROUTES.CARE_LOG">Open the care log</AppLink>
+        </article>
+
       </section>
 
-      <!-- Row one: the daily check-in on the left, the carousel and tonight on the right -->
+      <!-- Secondary, at a glance: who is looking after the baby, and what is coming up -->
+      <div class="hp__rcol hp__glance" aria-label="At a glance">
+          <div class="hp__rtop">
+            <!-- Tonight: who is on, hour by hour -->
+            <article v-if="dutyReady" class="hp__card hp__tonight" aria-labelledby="hp-tonight-title">
+              <header class="hp__card-head">
+                <div>
+                  <h2 id="hp-tonight-title" class="hp__card-title hp__now-title">{{ lookingAfter.headline }}</h2>
+                </div>
+              </header>
+              <p v-if="lookingAfter.until" class="hp__incharge"><strong>{{ lookingAfter.until }}</strong></p>
+              <p v-if="lookingAfter.next" class="hp__rule">{{ lookingAfter.next }}</p>
+              <div class="hp__nowact">
+                <button type="button" class="hp__btn hp__btn--primary" :aria-expanded="editorOpen ? 'true' : 'false'" aria-controls="hp-planner" @click="editorOpen = !editorOpen">{{ editorOpen ? "Done" : lookingAfter.open ? "Choose who" : "Change who" }}</button>
+                <AppLink class="hp__link hp__link--sm" :to="ROUTES.ROTA">Open the sleep rota</AppLink>
+              </div>
+              <div v-if="editorOpen" id="hp-planner" class="hp__cover" role="group" aria-label="Plan who looks after the baby, hour by hour">
+                <p class="hp__cover-title">Pick a person, then drag across the hours.</p>
+                <div class="hp__chips" role="radiogroup" aria-label="Who">
+                  <button v-for="b in brushes" :key="b.value" type="button" role="radio" class="hp__chip" :class="[{ 'is-on': brush === b.value }, `hp__chip--${b.value.split(':')[0]}`]" :aria-checked="brush === b.value ? 'true' : 'false'" @click="brush = b.value">{{ b.label }}</button>
+                </div>
+                <div class="hp__paint">
+                  <div ref="paintStrip" class="hp__strip2" role="group" aria-label="Hours of the day, 6 AM to 6 AM. Drag to paint, or press Enter on an hour." @pointerdown.prevent="startPaint" @pointermove="movePaint" @pointerup="endPaint" @pointercancel="endPaint">
+                    <button v-for="(cell, i) in dayPlan.grid" :key="i" type="button" class="hp__hour" :class="`hp__hour--${cell.who}`" :aria-label="`${hourName(cell.hour)}, ${cell.who === 'open' ? 'not planned' : cell.who === 'both' ? 'both of you' : cell.who === 'other' ? cell.label : cell.who === 'me' ? 'you' : partnerFirst}`" @keydown.enter.prevent="paintOneHour(i)" @keydown.space.prevent="paintOneHour(i)"></button>
+                    <span class="hp__paint-now" :style="{ left: `${dayPlan.now}%` }" aria-hidden="true"></span>
+                  </div>
+                  <div class="hp__paint-hours" aria-hidden="true"><span v-for="(label, i) in ['6 AM', '9 AM', '12 PM', '3 PM', '6 PM', '9 PM', '12 AM', '3 AM', '6 AM']" :key="i" :style="{ left: `${i * 12.5}%` }">{{ label }}</span></div>
+                </div>
+                <div class="hp__cover-foot">
+                  <p class="hp__small">Evening and night follow the sleep rota until you paint over them.</p>
+                  <span class="hp__cover-actions">
+                    <button type="button" class="hp__link hp__link--sm" @click="clearAllHours">{{ confirmClear ? "Tap again to clear every hour" : "Clear all hours" }}</button>
+                    <button type="button" class="hp__link hp__link--sm" @click="editorOpen = false; confirmClear = false">Done</button>
+                  </span>
+                </div>
+                <p v-if="rotaStore?.writeError" class="hp__problem" role="alert">{{ friendly(rotaStore.writeError) }}</p>
+              </div>
+            </article>
+          </div>
+          <!-- Coming up: the next few things on the shared calendar and task list -->
+          <section class="hp__coming" aria-labelledby="hp-coming-title">
+            <header class="hp__card-head hp__coming-head">
+              <div>
+                <h2 id="hp-coming-title" class="hp__card-title">Coming up</h2>
+              </div>
+              <AppLink class="hp__link hp__link--sm" :to="ROUTES.CALENDAR">Open the calendar</AppLink>
+            </header>
+            <p v-if="!coming.length" class="hp__coming-empty">Nothing planned yet. Add an appointment or task and it shows here.</p>
+            <div v-else class="hp__coming-grid">
+              <ol class="hp__after" aria-label="Coming up">
+                <li v-for="(row, ri) in coming.slice(0, 3)" :key="row.key" class="hp__after-row" :class="{ 'is-next': ri === 0 }">
+                  <span class="hp__leaf" aria-hidden="true"><i>{{ row.month }}</i><b>{{ row.day }}</b><small>{{ row.weekday }}</small></span>
+                  <span class="visually-hidden">{{ row.when }}, {{ row.weekday }}<template v-if="row.time">, {{ row.time }}</template>.</span>
+                  <span class="hp__after-body">
+                    <span class="hp__after-title">{{ row.title }}</span>
+                    <span class="hp__after-meta"><span v-if="row.time" class="hp__after-time">{{ row.time }}</span><span class="hp__kind" :class="kindClass(row.kind)">{{ row.kind }}</span><span class="hp__who2"><i class="hp__who2-dots" :class="`hp__who2-dots--${row.who}`" aria-hidden="true"></i>{{ row.owner }}</span></span>
+                  </span>
+                </li>
+              </ol>
+            </div>
+          </section>
+      </div>
+
+      <!-- The two of you: a note and the night window -->
       <section class="hp__layout" aria-label="Today">
         <div class="hp__lcol">
           <!-- The two of you -->
@@ -797,7 +743,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
               </template>
               <template v-else>
                 {{ draftSaved ? "Draft saved on this device." : "Your partner has not joined yet." }}
-                <template v-if="showInvite"> Invite them with code <strong>{{ inviteCode }}</strong> and you can send this.</template>
+                <template v-if="showInvite"> Invite them and you can send this.</template>
               </template>
             </p>
           </form>
@@ -862,130 +808,9 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
             </div>
 </article>
         </div>
-        <div class="hp__rcol">
-          <div class="hp__rtop">
-            <!-- Tonight: who is on, hour by hour -->
-            <article v-if="dutyReady" class="hp__card hp__tonight" aria-labelledby="hp-tonight-title">
-              <header class="hp__card-head">
-                <div>
-                  <p class="hp__label">Today</p>
-                  <h2 id="hp-tonight-title" class="hp__card-title">{{ duty.title }}</h2>
-                </div>
-                <div class="hp__tonight-actions">
-                  <button type="button" class="hp__chip hp__chip--plan" :aria-expanded="editorOpen ? 'true' : 'false'" @click="editorOpen = !editorOpen">{{ editorOpen ? "Close" : "Plan the hours" }}</button>
-                  <AppLink class="hp__link hp__link--sm" :to="ROUTES.ROTA">Open the sleep rota</AppLink>
-                </div>
-              </header>
-              <p class="hp__incharge">Right now, <strong>{{ dayPlan.current.who === "open" ? "no one is planned yet" : dayPlan.current.who === "both" ? "you are both in charge" : `${dayPlan.current.name} is in charge` }}</strong>.</p>
-              <ol class="hp__slots" :style="{ '--n': dayPlan.parts.length }" :aria-label="`Today, 6 AM to 6 AM: ${dayPlan.summary}.`">
-                <li v-for="(part, i) in dayPlan.parts" :key="i" class="hp__slot" :class="[`hp__slot--${part.who}`, { 'is-current': part === dayPlan.current }]">
-                  <span class="hp__slot-pic" aria-hidden="true">
-                    <CarryIcon v-if="part.who === 'me' || part.who === 'partner' || part.who === 'other'" :role="part.who === 'other' ? 'carer' : roleFor(part.who)" :who="part.who" :size="38" />
-                    <i v-else>{{ part.who === "both" ? "&" : "?" }}</i>
-                  </span>
-                  <span class="hp__slot-period">{{ part.period }}</span>
-                  <span class="hp__slot-name">{{ part.name }}</span>
-                  <span class="hp__slot-time">{{ part.time }}</span>
-                  <span v-if="part === dayPlan.current" class="hp__slot-now">Now, {{ dayPlan.nowText }}</span>
-                  <button v-if="part.key" type="button" class="hp__slot-edit" :aria-expanded="editorOpen ? 'true' : 'false'" @click="editorOpen = !editorOpen">{{ part.who === "open" ? "Set who" : "Change" }}</button>
-                </li>
-              </ol>
-              <div v-if="editorOpen" class="hp__cover" role="group" aria-label="Plan who looks after the baby, hour by hour">
-                <p class="hp__cover-title">Pick who, then drag across the hours.</p>
-                <div class="hp__chips" role="radiogroup" aria-label="Who">
-                  <button v-for="b in brushes" :key="b.value" type="button" role="radio" class="hp__chip" :class="[{ 'is-on': brush === b.value }, `hp__chip--${b.value.split(':')[0]}`]" :aria-checked="brush === b.value ? 'true' : 'false'" @click="brush = b.value">{{ b.label }}</button>
-                </div>
-                <div class="hp__paint">
-                  <div ref="paintStrip" class="hp__strip2" role="group" aria-label="Hours of the day, 6 AM to 6 AM. Drag to paint, or press Enter on an hour." @pointerdown.prevent="startPaint" @pointermove="movePaint" @pointerup="endPaint" @pointercancel="endPaint">
-                    <button v-for="(cell, i) in dayPlan.grid" :key="i" type="button" class="hp__hour" :class="`hp__hour--${cell.who}`" :aria-label="`${hourName(cell.hour)}, ${cell.who === 'open' ? 'not planned' : cell.who === 'both' ? 'both of you' : cell.who === 'other' ? cell.label : cell.who === 'me' ? 'you' : partnerFirst}`" @keydown.enter.prevent="paintOneHour(i)" @keydown.space.prevent="paintOneHour(i)"></button>
-                    <span class="hp__paint-now" :style="{ left: `${dayPlan.now}%` }" aria-hidden="true"></span>
-                  </div>
-                  <div class="hp__paint-hours" aria-hidden="true"><span v-for="(label, i) in ['6 AM', '9 AM', '12 PM', '3 PM', '6 PM', '9 PM', '12 AM', '3 AM', '6 AM']" :key="i" :style="{ left: `${i * 12.5}%` }">{{ label }}</span></div>
-                </div>
-                <div class="hp__cover-foot">
-                  <p class="hp__small">Evening and night follow the sleep rota until you paint over them.</p>
-                  <span class="hp__cover-actions">
-                    <button type="button" class="hp__link hp__link--sm" @click="clearAllHours">{{ confirmClear ? "Tap again to clear every hour" : "Clear all hours" }}</button>
-                    <button type="button" class="hp__link hp__link--sm" @click="editorOpen = false; confirmClear = false">Done</button>
-                  </span>
-                </div>
-                <p v-if="rotaStore?.writeError" class="hp__problem" role="alert">{{ friendly(rotaStore.writeError) }}</p>
-              </div>
-              <p v-else-if="dayPlan.dayOpen" class="hp__rule">Tap "Set who" to say who looks after the baby, and when.</p>
-              <p class="hp__small">{{ duty.line }}</p>
-            </article>
-          <!-- Lately -->
-          <article class="hp__card hp__trio-card hp__trio-card--log" aria-labelledby="hp-recent-title">
-            <header class="hp__card-head">
-              <div>
-                <p class="hp__label">Activity</p>
-                <h2 id="hp-recent-title" class="hp__card-title">Lately</h2>
-              </div>
-              <AppLink class="hp__link hp__link--sm" :to="ROUTES.CARE_LOG">Care log</AppLink>
-            </header>
-            <p v-if="streamLoading" class="hp__small">Loading...</p>
-            <div v-else-if="streamError" role="alert">
-              <p class="hp__small">{{ friendly(streamError.text) }}</p>
-              <p v-if="streamError.detail && !/firestore\.rules|database rules/i.test(streamError.detail)" class="hp__small">{{ streamError.detail }}</p>
-            </div>
-            <p v-else-if="!recent.length" class="hp__small">Nothing here yet. Leave a note or log something.</p>
-            <ul v-else class="hp__lines">
-              <li v-for="item in recent" :key="item.id" class="hp__line hp__line--time">
-                <p class="hp__small">{{ formatTime(item.at) }}</p>
-                <p class="hp__text"><strong>{{ item.isMine ? "You" : item.authorName }}</strong> {{ item.text }}<template v-if="seenLine(item)"> <span class="hp__small">· {{ seenLine(item) }}</span></template></p>
-                <button v-if="item.kind === 'message' && item.isMine" type="button" class="hp__link hp__link--quiet" @click="removePost(item)">Delete</button>
-              </li>
-            </ul>
-          </article>
-          </div>
-          <!-- Coming up: the next few things on the shared calendar and task list -->
-          <section v-if="coming.length > 1" class="hp__coming" aria-labelledby="hp-coming-title">
-            <header class="hp__card-head hp__coming-head">
-              <div>
-                <p class="hp__label">Coming up</p>
-                <h2 id="hp-coming-title" class="hp__card-title">After that</h2>
-              </div>
-              <AppLink class="hp__link hp__link--sm" :to="ROUTES.CALENDAR">Open the calendar</AppLink>
-            </header>
-            <div class="hp__coming-grid">
-              <ol class="hp__after" aria-label="After that">
-                <li v-for="row in coming.slice(1)" :key="row.key" class="hp__after-row">
-                  <span class="hp__leaf" aria-hidden="true"><i>{{ row.month }}</i><b>{{ row.day }}</b><small>{{ row.weekday }}</small></span>
-                  <span class="visually-hidden">{{ row.when }}, {{ row.weekday }}<template v-if="row.time">, {{ row.time }}</template>.</span>
-                  <span class="hp__after-body">
-                    <span class="hp__after-title">{{ row.title }}</span>
-                    <span class="hp__after-meta"><span v-if="row.time" class="hp__after-time">{{ row.time }}</span><span class="hp__kind" :class="kindClass(row.kind)">{{ row.kind }}</span><span class="hp__who2"><i class="hp__who2-dots" :class="`hp__who2-dots--${row.who}`" aria-hidden="true"></i>{{ row.owner }}</span></span>
-                  </span>
-                </li>
-              </ol>
-            </div>
-          </section>
-        </div>
       </section>
 
-      <section class="hp__trio" aria-label="Everyday">
-        <!-- Baby, today -->
-        <article class="hp__card hp__trio-card hp__trio-card--baby" aria-labelledby="hp-baby-title">
-          <BabyScene on-dark :state="babyNow.state" :title="babyNow.title" :detail="babyNow.detail" title-id="hp-baby-title" />
-          <ul v-if="!entriesFailed" class="hp__tally">
-            <li><b>{{ summary.feeds }}</b><span>feeds</span></li>
-            <li><b>{{ summary.nappies }}</b><span>nappies</span></li>
-            <li><b>{{ sleepToday }}</b><span>sleep</span></li>
-          </ul>
-          <div class="hp__quicklog">
-            <AppLink v-for="q in QUICK_LOG" :key="q.key" class="hp__qbtn" :to="{ path: ROUTES.CARE_LOG, query: { log: q.key } }">
-              <Icon :name="q.icon" :size="18" />{{ q.label }}
-            </AppLink>
-          </div>
-        </article>
 
-      </section>
-
-      <footer class="hp__baby">
-        <strong v-if="babyLine">{{ babyLine }}.</strong>
-        <template v-if="!entriesFailed && lastFeed"> Last feed {{ lastFeed }}.</template>
-        <template v-if="upNext"> Next: {{ upNext.title }}, {{ upNext.when }}.</template>
-      </footer>
     </template>
   </div>
 </template>
@@ -1827,5 +1652,49 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 @media (prefers-reduced-motion: reduce) {
   .hp__car-slide, .hp__car-slide.is-active, .hp__car-copy { transition: none; }
   .hp__tick-fill { animation: none; transform: scaleX(1); }
+}
+
+/* ---- Home restructure: the baby first, one plain sentence in the pink card, a compact Coming up ---- */
+.hp { gap: var(--s4); }
+.hp__rtop { grid-template-columns: minmax(0, 1fr); }
+.hp__rcol .hp__tonight .hp__now-title { font-size: 1.5rem; line-height: 1.3; }
+.hp__rcol .hp__tonight .hp__incharge { font-size: 1.0625rem; }
+.hp__nowact { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.hp__trio-card--baby .hp__tally b { font-size: 2rem; }
+.hp__trio-card--baby .hp__quicklog .hp__qbtn { padding: 14px 8px; font-size: 1rem; }
+/* Secondary row: the pink strip and Coming up sit side by side, short and quiet */
+.hp__glance { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: var(--s3); align-items: stretch; }
+.hp__glance .hp__rtop { display: flex; }
+.hp__glance .hp__rtop > .hp__tonight { flex: 1; }
+.hp__rcol .hp__card.hp__tonight { gap: 6px; padding: 16px 18px 16px 52px; justify-content: center; }
+.hp__rcol .hp__tonight .hp__now-title { font-size: 1.25rem; }
+.hp__rcol .hp__tonight .hp__incharge { font-size: 1rem; }
+.hp__nowact { margin-top: 6px; }
+.hp__glance .hp__coming { flex: 1 1 auto; justify-content: center; gap: var(--s1); padding: 14px 18px 10px; }
+.hp__glance .hp__coming-grid { flex: none; }
+.hp__glance .hp__coming-head .hp__card-title { font-size: 1.125rem; }
+.hp__glance .hp__coming .hp__after { padding: 0; align-content: start; }
+.hp__glance .hp__after-row { padding: 2px 0; }
+.hp__glance .hp__after-row + .hp__after-row { padding-left: 14px; }
+/* The note and the night window sit side by side across the page */
+.hp__layout { grid-template-columns: minmax(0, 1fr); }
+.hp__lcol .hp__open.hp__us { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: var(--s3); align-items: start; }
+.hp__lcol .hp__us .hp__noteform { align-self: start; }
+.hp__carelink { display: block; color: #cfdcf2; font-size: 0.875rem; text-align: center; }
+.hp__trio-card--baby > .hp__carelink { grid-column: 2; grid-row: 4; align-self: start; }
+.hp__coming-empty { margin: 0; color: var(--fg-muted); font-size: 0.9375rem; }
+@media (max-width: 899px) { .hp__trio-card--baby > .hp__carelink { grid-column: 1; grid-row: auto; } }
+.hp__after-row.is-next .hp__leaf { box-shadow: 0 0 0 2px rgb(184 92 56 / 45%); }
+@media (min-width: 900px) {
+  .hp__lcol .hp__window { align-self: stretch; }
+  .hp__lcol .hp__window .hp__garden { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 899px) {
+  .hp__glance { grid-template-columns: minmax(0, 1fr); gap: var(--s2); }
+  .hp__lcol .hp__open.hp__us { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 575px) {
+  .hp__glance .hp__after { display: flex; overflow-x: auto; scroll-snap-type: x proximity; }
+  .hp__glance .hp__after-row { flex: 0 0 15rem; scroll-snap-align: start; }
 }
 </style>
