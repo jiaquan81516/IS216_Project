@@ -31,7 +31,6 @@ const { isAdmin } = useAdmin();
 // An administrator sees only the admin tools, even if the same account also has a household.
 const adminWorkspace = computed(() => isAdmin.value);
 // Home has its own look: a deep blue page with the paper texture on its cards. Other pages keep the paper page for now.
-const isHome = computed(() => route.path === ROUTES.HOME);
 const tone = computed(() => {
   if (route.path === ROUTES.WELLNESS) return "personal";
   if (route.path === ROUTES.SUPPORT || route.path.startsWith(ROUTES.SUPPORT + "/")) return "care";
@@ -212,7 +211,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 </script>
 
 <template>
-  <div class="appshell" :class="{ 'appshell--home': isHome }">
+  <div class="appshell">
     <a class="appshell__skip" href="#app-main" @click="skipToMain">Skip to main content</a>
 
     <header class="top" aria-label="Household and navigation">
@@ -329,9 +328,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   background-image: url("/bg-sky.jpg");
   background-size: 675px 1200px;
   background-attachment: fixed;
-}
-.appshell--home .top {
-  zoom: 0.9;
 }
 .appshell__skip {
   position: absolute;
@@ -574,6 +570,20 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 
 /* On a wide bar the pages are words only; icons come back in the folded menu. */
 @media (min-width: 1100px) {
+  /* Brand on the left, the pages dead centre, the account on the right. */
+  .top__bar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+  }
+  .top__panel {
+    display: contents;
+  }
+  .top__nav {
+    justify-self: center;
+  }
+  .top__user {
+    justify-self: end;
+  }
   .top__list > li > .top__link :deep(svg:not(.top__morechev)) {
     display: none;
   }
