@@ -14,6 +14,7 @@ import {
 } from "@/api/rota";
 import { addDays, isIsoDate, mondayOf, toIso } from "@/app/utils/rotaHelpers";
 import { ownerKey, ownerUid } from "@/app/utils/sharedHelpers";
+import { cleanShifts, coverFor, fromHourCells, toHhmm, weekdayIndex } from "@/app/utils/scheduleHelpers";
 
 const PATTERNS = ["alternate", "split", "manual"];
 // Who looks after the baby, hour by hour. The rota still plans the nights; this lets you paint any
@@ -50,6 +51,21 @@ function legacyHours(data) {
     put(data.dayCover.afternoon, 12, 18);
   }
   return list;
+}
+
+function cleanCarerNights(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const c of list) {
+    const label = String(c?.label ?? "").trim().slice(0, 30);
+    const days = [...new Set((Array.isArray(c?.days) ? c.days : []).map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort();
+    const key = String(c?.uid || label);
+    if (!label || !days.length || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ uid: String(c?.uid ?? ""), label, days });
+  }
+  return out;
 }
 
 // Overrides are loaded for a year either side of today, which covers the rota week view and
@@ -174,6 +190,10 @@ export const useRotaStore = defineStore("app-rota", () => {
       handoverTime: /^\d{2}:\d{2}$/.test(data.handoverTime ?? "") ? data.handoverTime : base.handoverTime,
       firstOnDuty: data.firstOnDuty ?? null,
       hourCover: cleanHours(Array.isArray(data.hourCover) ? data.hourCover : legacyHours(data)),
+      // The weekly day schedule. Without one, the earlier hour list stands in for every weekday.
+      schedule: Array.isArray(data.schedule) ? data.schedule : null,
+      // Carers who take the same nights every week: [{ uid, label, days }], Monday is 0.
+      carerNights: cleanCarerNights(data.carerNights),
       updatedAt: data.updatedAt ?? null,
       updatedBy: data.updatedBy ?? null,
     };
@@ -187,14 +207,22 @@ export const useRotaStore = defineStore("app-rota", () => {
       const who = ownerKey(night?.onCall, me);
       if (who) overrides[date] = who;
     }
+    const toKind = (who) => (who === "both" || who === "other" ? who : ownerKey(who, me));
+    const schedule = plan.value.schedule
+      ? cleanShifts(plan.value.schedule.map((s) => ({ ...s, who: toKind(s?.who) })))
+      : fromHourCells(plan.value.hourCover.map((cell) => (cell ? { ...cell, who: toKind(cell.who) } : null)));
     return {
       pattern: plan.value.pattern,
       firstOnDuty: ownerKey(plan.value.firstOnDuty, me) === "partner" ? "partner" : "me",
       startDate: plan.value.startDate,
       handoverTime: plan.value.handoverTime,
-      hourCover: plan.value.hourCover.map((cell) =>
-        cell ? { ...cell, who: cell.who === "both" || cell.who === "other" ? cell.who : ownerKey(cell.who, me) } : null,
-      ),
+      schedule,
+      carerNights: plan.value.carerNights,
+      // The 24 hours of a weekday (Monday is 0) as cells, for the home page and the header.
+      coverFor: (day) => coverFor(schedule, day),
+      get hourCover() {
+        return coverFor(schedule, weekdayIndex(new Date()));
+      },
       overrides,
       swaps: swaps.value.map((s) => ({ ...s, from: ownerKey(s.from, me) ?? "me" })),
     };
@@ -243,6 +271,22 @@ export const useRotaStore = defineStore("app-rota", () => {
       return cell.who === "both" ? "both" : "";
     });
     return saveSettings({ hourCover: stored });
+  }
+  // The weekly day schedule: shifts with who as "me", "partner", "both" or "other". Saves the whole list.
+  function setSchedule(shifts) {
+    const stored = cleanShifts(shifts).map((s) => ({
+      id: s.id,
+      day: s.day,
+      start: toHhmm(s.start),
+      end: toHhmm(s.end),
+      who: s.who === "me" || s.who === "partner" ? ownerUid(s.who, meUid.value, partnerUid.value) || "" : s.who,
+      label: s.label,
+    }));
+    return saveSettings({ schedule: stored.filter((s) => s.who) });
+  }
+  // Carers who take fixed nights every week. Saves the whole list.
+  function setCarerNights(list) {
+    return saveSettings({ carerNights: cleanCarerNights(list) });
   }
   function setHandoverTime(handoverTime) {
     return saveSettings({ handoverTime });
@@ -322,7 +366,7 @@ export const useRotaStore = defineStore("app-rota", () => {
 
   // Back to the default pattern, and every loaded override cleared for both parents.
   async function reset() {
-    const ok = await saveSettings({ ...rotaDefaults(), firstOnDuty: meUid.value, hourCover: Array(HOURS).fill(""), dayShifts: [] });
+    const ok = await saveSettings({ ...rotaDefaults(), firstOnDuty: meUid.value, hourCover: Array(HOURS).fill(""), dayShifts: [], schedule: [], carerNights: [] });
     if (!ok) return false;
     const dates = Object.keys(nights.value);
     for (const date of dates) {
@@ -358,6 +402,8 @@ export const useRotaStore = defineStore("app-rota", () => {
     setStartDate,
     setHandoverTime,
     setHourCover,
+    setSchedule,
+    setCarerNights,
     setOverride,
     requestSwap,
     respondSwap,

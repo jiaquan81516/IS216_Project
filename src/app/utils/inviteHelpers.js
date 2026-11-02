@@ -55,6 +55,3 @@ export function expiresInText(expiresAt, now = new Date()) {
   return `Expires in ${days} days`;
 }
 
-export function isInviteExpired(invite, now = new Date()) {
-  return inviteState(invite, now) !== "valid";
-}

@@ -190,7 +190,7 @@ service cloud.firestore {
             && request.resource.data.accessLevel == 'caregiver'
             && request.resource.data.role in ['grandparent', 'domestic-helper', 'babysitter', 'childcare-provider', 'trusted-caregiver']
             && request.resource.data.permissions is map
-            && request.resource.data.permissions.keys().hasOnly(['careBrief', 'careLogRead', 'careLogAdd', 'careLogEdit', 'careLogMedication', 'feedingInstructions', 'allergyInfo', 'medicationInfo', 'appointments', 'napRoutine']));
+            && request.resource.data.permissions.keys().hasOnly(['careBrief', 'careLogRead', 'careLogAdd', 'careLogEdit', 'careLogMedication', 'feedingInstructions', 'allergyInfo', 'medicationInfo', 'appointments', 'napRoutine', 'dutyView']));
         allow delete: if (signedIn() && request.auth.uid == memberId)
           || (isPrimaryParent() && !isPrimaryMember(resource.data));
       }
@@ -323,14 +323,14 @@ service cloud.firestore {
       // The sleep rota plan. One document, "settings". Either parent may save it, and every
       // write says who did it.
       match /rota/{docId} {
-        allow read: if isPrimaryParent();
+        allow read: if isPrimaryParent() || hasPermission('dutyView');
         allow create, update: if isPrimaryParent() && request.resource.data.updatedBy == request.auth.uid;
         allow delete: if false;
       }
 
       // One document per night, id yyyy-mm-dd, for nights set by hand or by an accepted swap.
       match /nights/{nightId} {
-        allow read: if isPrimaryParent();
+        allow read: if isPrimaryParent() || hasPermission('dutyView');
         allow create, update: if isPrimaryParent() && request.resource.data.setBy == request.auth.uid;
         allow delete: if isPrimaryParent();
       }
@@ -493,7 +493,7 @@ service cloud.firestore {
         && (request.resource.data.kind != 'caregiver'
           || (request.resource.data.caregiverRole in ['grandparent', 'domestic-helper', 'babysitter', 'childcare-provider', 'trusted-caregiver']
             && request.resource.data.permissions is map
-            && request.resource.data.permissions.keys().hasOnly(['careBrief', 'careLogRead', 'careLogAdd', 'careLogEdit', 'careLogMedication', 'feedingInstructions', 'allergyInfo', 'medicationInfo', 'appointments', 'napRoutine'])
+            && request.resource.data.permissions.keys().hasOnly(['careBrief', 'careLogRead', 'careLogAdd', 'careLogEdit', 'careLogMedication', 'feedingInstructions', 'allergyInfo', 'medicationInfo', 'appointments', 'napRoutine', 'dutyView'])
             && request.resource.data.caregiverName is string
             && request.resource.data.caregiverName.size() <= 40));
 

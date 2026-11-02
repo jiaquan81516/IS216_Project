@@ -6,7 +6,7 @@ export const NAV = Object.freeze([
   { group: "primary", key: "today", label: "Home", icon: "home", to: ROUTES.HOME },
   { group: "primary", key: "care-log", label: "Care log", icon: "clock", to: ROUTES.CARE_LOG },
   { group: "primary", key: "checklist", label: "Checklist", icon: "check", to: ROUTES.CHECKLIST },
-  { group: "primary", key: "rota", label: "Sleep rota", icon: "moon", to: ROUTES.ROTA },
+  { group: "primary", key: "rota", label: "Duty", icon: "moon", to: ROUTES.ROTA },
   { group: "secondary", key: "return-to-work", label: "Return to work", icon: "briefcase", to: ROUTES.RETURN_TO_WORK },
   { group: "primary", key: "calendar", label: "Calendar", icon: "calendar", to: ROUTES.CALENDAR },
   { group: "secondary", key: "wellness", label: "Wellness", icon: "heart", to: ROUTES.WELLNESS },
