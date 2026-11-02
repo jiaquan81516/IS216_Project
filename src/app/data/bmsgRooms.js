@@ -1,14 +1,3 @@
-// Nursing rooms listed in the Breastfeeding Mothers' Support Group (BMSG) Nursing Room
-// Directory. BMSG is a charity; the listings are contributed by its members and parents, and
-// BMSG does not have jurisdiction over the rooms. This is NOT government data.
-//
-// - Nursing room facts (type, what is available, location text, parent feedback) are copied from
-//   the directory as retrieved on 2026-10-11 (page last updated 2026-04-13).
-// - Coordinates and addresses are reused from the earlier hand checked OneMap lookups (OneMap,
-//   Singapore Land Authority, Singapore Open Data Licence v1.0). See docs/pumping-rooms.md for
-//   the entries that are not here yet and why, and for how to add one by hand.
-// - Left out on purpose: the Embassy of the Republic of the Philippines in Singapore, because it
-//   is not a place the public can walk into.
 export const BMSG_SOURCE = Object.freeze({
   name: "Breastfeeding Mothers' Support Group, Nursing Room Directory",
   shortName: "BMSG Nursing Room Directory",

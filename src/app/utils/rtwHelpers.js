@@ -1,7 +1,7 @@
 // Pure helpers for the App Return to work page. No Vue, Pinia or storage imports.
 import { addDays, daysBetween, isIsoDate, parseIso, toIso } from "@/app/utils/rotaHelpers";
 import { ownerKey } from "@/app/utils/sharedHelpers";
-import { PUMPING_TIMES, RESPONSIBILITY_AREAS, SUGGESTED_TASKS } from "@/app/data/rtw";
+import { PUMPING_TIMES, SUGGESTED_TASKS } from "@/app/data/rtw";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -96,35 +96,6 @@ const norm = (title) => String(title).trim().toLowerCase();
 export function suggestedTasks(existingTitles = []) {
   const taken = new Set(existingTitles.map(norm));
   return SUGGESTED_TASKS.filter((s) => !taken.has(norm(s.title))).map((s) => ({ ...s }));
-}
-
-// Counts for the Responsibilities tab. Areas with no choice count as not decided. An owner
-// is a uid or "both", so the signed in user's uid decides which column an area falls into.
-export function responsibilityCounts(responsibilities = {}, meUid) {
-  const counts = { me: 0, partner: 0, both: 0, undecided: 0 };
-  for (const area of RESPONSIBILITY_AREAS) {
-    const who = ownerKey(responsibilities[area.key], meUid);
-    if (who === "me" || who === "partner" || who === "both") counts[who] += 1;
-    else counts.undecided += 1;
-  }
-  return counts;
-}
-
-// "You cover 2, Mei covers 1, shared 3, not decided 2."
-export function responsibilitySummary(counts, partnerName = "Your partner") {
-  return `You cover ${counts.me}, ${partnerName} covers ${counts.partner}, shared ${counts.both}, not decided ${counts.undecided}.`;
-}
-
-// Suggestion shown when one person has 2 or more extra areas. Empty string otherwise.
-// The fallback names are "You" and "Your partner".
-export function balanceHint(counts, names = {}) {
-  const meName = names.me || "You";
-  const partnerName = names.partner || "Your partner";
-  const asObject = (name) => (name === "You" || name === "Your partner" ? name.toLowerCase() : name);
-  const diff = counts.me - counts.partner;
-  if (Math.abs(diff) < 2) return "";
-  if (diff > 0) return `${meName} ${meName === "You" ? "have" : "has"} ${diff} more than ${asObject(partnerName)}. Consider moving one.`;
-  return `${partnerName} has ${-diff} more than ${asObject(meName)}. Consider moving one.`;
 }
 
 // "Plan for 3 breaks: morning, midday, afternoon." Empty when nothing is chosen yet.

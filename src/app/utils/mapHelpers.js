@@ -2,8 +2,6 @@
 // filtering. Nothing here touches the DOM or a map, so all of it is unit tested.
 
 export const DEFAULT_CENTER = Object.freeze({ lat: 1.3521, lng: 103.8198 });
-export const DEFAULT_ZOOM = 12;
-export const NO_CLUSTER_ZOOM = 17;
 const EARTH_RADIUS_M = 6371008.8;
 
 export function hasCoords(point) {
@@ -40,31 +38,6 @@ export function sortByDistance(rooms, origin) {
     if (a.distance === null) return 1;
     if (b.distance === null) return -1;
     return a.distance - b.distance || a.name.localeCompare(b.name);
-  });
-}
-
-// Grid clustering. The cell is about 64 px wide at the given zoom, so pins that would overlap
-// share a cell. At NO_CLUSTER_ZOOM and above every room is its own item.
-export function clusterRooms(rooms, zoom) {
-  const placed = rooms.filter(hasCoords);
-  if (zoom >= NO_CLUSTER_ZOOM) {
-    return placed.map((room) => ({ id: room.id, lat: room.lat, lng: room.lng, count: 1, rooms: [room], room }));
-  }
-  const cell = (360 / 2 ** zoom) * (64 / 256);
-  const buckets = new Map();
-  for (const room of placed) {
-    const key = `${Math.floor(room.lng / cell)}:${Math.floor(room.lat / cell)}`;
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key).push(room);
-  }
-  return [...buckets.entries()].map(([key, members]) => {
-    if (members.length === 1) {
-      const room = members[0];
-      return { id: room.id, lat: room.lat, lng: room.lng, count: 1, rooms: members, room };
-    }
-    const lat = members.reduce((sum, m) => sum + m.lat, 0) / members.length;
-    const lng = members.reduce((sum, m) => sum + m.lng, 0) / members.length;
-    return { id: `cluster:${key}`, lat, lng, count: members.length, rooms: members, room: null };
   });
 }
 
@@ -142,36 +115,3 @@ export function activeFilterCount({ features = [], verifiedOnly = false } = {}) 
   return features.length + (verifiedOnly ? 1 : 0);
 }
 
-// Marker artwork, as SVG text. Round plum pin with a white pin glyph, and a plum pill with a
-// count for a cluster. The selected pin is larger and has an apricot ring.
-export const PIN_SIZE = 32;
-export const SELECTED_PIN_SIZE = 40;
-
-export function pinSvg({ selected = false } = {}) {
-  const size = selected ? SELECTED_PIN_SIZE : PIN_SIZE;
-  const ring = selected ? '<circle cx="20" cy="20" r="18.5" fill="#3B2F3F" stroke="#F6D8C6" stroke-width="3"/>' : '<circle cx="20" cy="20" r="18.5" fill="#3B2F3F" stroke="#FFFFFF" stroke-width="2"/>';
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 40 40">` +
-    ring +
-    '<g transform="translate(8 8) scale(1)" fill="none" stroke="#FFFFFF" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' +
-    '<path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></g></svg>'
-  );
-}
-
-export function clusterLabel(count) {
-  return count === 1 ? "1 room" : `${count} rooms`;
-}
-
-export function clusterSvg(count) {
-  const label = clusterLabel(count);
-  const width = 40 + label.length * 7;
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="34" viewBox="0 0 ${width} 34">` +
-    `<rect x="1" y="1" width="${width - 2}" height="32" rx="16" fill="#3B2F3F" stroke="#FFFFFF" stroke-width="2"/>` +
-    `<text x="${width / 2}" y="22" text-anchor="middle" fill="#FFFFFF" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="600">${label}</text></svg>`
-  );
-}
-
-export function svgDataUrl(svg) {
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-}

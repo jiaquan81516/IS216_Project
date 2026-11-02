@@ -1087,7 +1087,6 @@ const highFirst = (list) => [...list].reverse();
 .wl__dot--them { left: 62%; background: var(--nt-apricot-d); }
 .wl__dot--solo { left: 50%; }
 .wl__line--them path { stroke: var(--nt-apricot-d); }
-.wl__only { font-size: 0.875rem; color: var(--nt-muted); white-space: nowrap; }
 
 /* Week plot: mood as one dot a day, joined where days are consecutive. */
 .wl__chart { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; margin-top: 8px; }
@@ -1110,7 +1109,6 @@ const highFirst = (list) => [...list].reverse();
 /* Pictures (the render functions at the top) */
 /* :where() keeps this default weaker than the tile and strip sizes above. */
 .wl :deep(:where(svg[class^="pic-"])) { display: block; width: 100%; height: auto; }
-.wl :deep(.pic-t) { transition: fill 0.6s ease, opacity 0.6s ease; }
 .wl :deep(.pic-move) { transition: transform 0.7s ease, opacity 0.6s ease; }
 .wl :deep(.pic-stones) { overflow: visible; }
 .wl :deep(.pic-stone) { opacity: 0; transform-box: fill-box; transform-origin: center; transition: opacity 0.35s ease, transform 0.45s ease; }

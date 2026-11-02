@@ -1,6 +1,6 @@
 // Pure helpers for the kids care page: links, text filter, paging and labels.
 // Distance and sorting are reused from mapHelpers (sortByDistance, formatDistance).
-import { oneMapEmbedUrl, oneMapPlaceUrl } from "@/app/utils/oneMapHelpers";
+import { oneMapPlaceUrl } from "@/app/utils/oneMapHelpers";
 
 export const KIDS_VIEWS = Object.freeze(["emergency", "clinics"]);
 export const DEFAULT_KIDS_VIEW = "emergency";
@@ -10,11 +10,6 @@ export const PAGE_SIZE = 50;
 export function normalizeView(value) {
   const v = Array.isArray(value) ? value[0] : value;
   return KIDS_VIEWS.includes(v) ? v : DEFAULT_KIDS_VIEW;
-}
-
-// OneMap embed (no key). With no place it shows the whole island.
-export function embedUrl(place) {
-  return oneMapEmbedUrl(place ? { lat: place.lat, lng: place.lng } : {});
 }
 
 export { oneMapPlaceUrl };

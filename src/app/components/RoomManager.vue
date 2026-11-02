@@ -14,12 +14,6 @@ const busy = ref(false);
 const error = ref("");
 const message = ref("");
 
-// Picking a suggestion fills in the address (with its postal code); the name is only filled if empty.
-function pickPlace(place) {
-  if (!draft.value.name) draft.value.name = place.name.slice(0, 80);
-  draft.value.address = place.address;
-}
-
 function open(room, remove = false) {
   if (busy.value) return;
   deleting.value = remove;

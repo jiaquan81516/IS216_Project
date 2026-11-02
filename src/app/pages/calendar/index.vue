@@ -216,7 +216,7 @@ function nightMarker(iso) {
   if (!layers.night) return null;
   const night = nights.value[iso];
   if (!night || night.who === "open") return null;
-  const first = names.value[night.who];
+  const first = night.who === "other" ? night.label : names.value[night.who];
   const text = night.shared ? `Night duty: ${first} then ${names.value[night.second]}` : `Night duty: ${first}`;
   return { text, who: night.who, second: night.shared ? night.second : null };
 }
@@ -903,6 +903,7 @@ button { font-family: inherit; }
 .cal__night { position: absolute; left: 0; right: 0; bottom: 0; display: flex; height: 3px; }
 .cal__nightpart { flex: 1; background: var(--g-mute); }
 .cal__nightpart[data-who="me"] { background: var(--cal-me); }
+.cal__nightpart[data-who="other"] { background: #7aa38c; }
 .cal__nightpart[data-who="partner"] { background: var(--cal-partner); }
 .cal__dots { display: none; }
 
