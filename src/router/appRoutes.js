@@ -8,7 +8,8 @@ const appPage = (name) => () => import(`@/app/pages/${name}/index.vue`);
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  scrollBehavior: () => ({ top: 0 }),
+  // New page: start at the top. Same page with a different query (a tab, an open guide): stay put.
+  scrollBehavior: (to, from, saved) => saved ?? (to.path === from.path ? false : { top: 0 }),
   routes: [
     { path: ROUTES.LANDING, name: "landing", component: appPage("landing"), meta: { public: true } },
     { path: ROUTES.JOURNEY, name: "journey", component: appPage("journey"), meta: { public: true } },

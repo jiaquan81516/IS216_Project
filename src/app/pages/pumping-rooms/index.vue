@@ -129,6 +129,8 @@ onMounted(async () => {
     message.value = "Room updates could not be loaded. Please refresh and try again.";
   });
   listed.value = await loadBmsgRooms();
+  // Open on where the person is. If they say no, the island view and search still work.
+  locate();
 });
 onBeforeUnmount(() => { roomsStore.unbind(); stopOverrides?.(); });
 
