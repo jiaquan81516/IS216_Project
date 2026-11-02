@@ -2,7 +2,14 @@
 import "@/app/app.css";
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
 import ChipGroup from "@/app/components/ChipGroup.vue";
+import Collapse from "@/app/components/Collapse.vue";
+import DateWheel from "@/app/components/DateWheel.vue";
 import Icon from "@/app/components/Icon.vue";
+import PickField from "@/app/components/PickField.vue";
+import SegToggle from "@/app/components/SegToggle.vue";
+import TimeWheel from "@/app/components/TimeWheel.vue";
+import { formatHhmm, formatIsoDate } from "@/app/utils/pickerHelpers";
+import { usePrefs } from "@/app/composables/usePrefs";
 import {
   dateRangeLabel,
   dayHeading,
@@ -35,6 +42,35 @@ const dialog = ref(null);
 const titleInput = ref(null);
 const closeButton = ref(null);
 let opener = null;
+
+const { timeFormat } = usePrefs();
+// Which rolling picker is open in the form: "", "date", "endDate", "start" or "end". One at a time.
+const picker = ref("");
+const togglePicker = (key) => {
+  picker.value = picker.value === key ? "" : key;
+};
+const dayMode = computed({
+  get: () => (form.allDay ? "all" : "timed"),
+  set: (v) => {
+    form.allDay = v === "all";
+    picker.value = "";
+    onAllDay();
+  },
+});
+const DAY_MODES = [
+  { value: "all", label: "All day" },
+  { value: "timed", label: "Set a time" },
+];
+const dateWheelValue = computed({
+  get: () => (picker.value === "endDate" ? form.endDate || form.date : form.date),
+  set: (v) => {
+    if (picker.value === "endDate") form.endDate = v < form.date ? form.date : v;
+    else {
+      form.date = v;
+      if (form.endDate && form.endDate < v) form.endDate = v;
+    }
+  },
+});
 
 const formOpen = ref(false);
 const editId = ref("");
@@ -74,6 +110,7 @@ const nightLine = computed(() => {
 });
 
 async function startForm(event = null) {
+  picker.value = "";
   confirmingId.value = "";
   error.value = "";
   editId.value = event?.id ?? "";
@@ -91,6 +128,7 @@ async function startForm(event = null) {
   titleInput.value?.focus();
 }
 function cancelForm() {
+  picker.value = "";
   formOpen.value = false;
   editId.value = "";
   error.value = "";
@@ -260,32 +298,34 @@ onBeforeUnmount(() => {
             />
           </label>
 
-          <div class="form-check form-switch cdp__switch">
-            <input id="cdp-allday" v-model="form.allDay" class="form-check-input" type="checkbox" role="switch" @change="onAllDay" />
-            <label class="form-check-label" for="cdp-allday">All day</label>
+          <SegToggle v-model="dayMode" :options="DAY_MODES" label="Length of the event" />
+
+          <div class="cdp__picks">
+            <div class="cdp__row">
+              <PickField label="Starts" :value="formatIsoDate(form.date)" :open="picker === 'date'" placeholder="Pick a day" @toggle="togglePicker('date')" />
+              <PickField label="Ends" :value="formatIsoDate(form.endDate || form.date)" :open="picker === 'endDate'" placeholder="Pick a day" @toggle="togglePicker('endDate')" />
+            </div>
+            <Collapse>
+              <div v-if="picker === 'date' || picker === 'endDate'" class="cdp__wheel">
+                <DateWheel :key="picker" v-model="dateWheelValue" :label="picker === 'date' ? 'Start date' : 'End date'" />
+              </div>
+            </Collapse>
           </div>
 
-          <div class="cdp__row">
-            <label class="cdp__field">
-              <span class="cdp__label">Start date</span>
-              <input v-model="form.date" class="app-control" type="date" />
-            </label>
-            <label class="cdp__field">
-              <span class="cdp__label">End date</span>
-              <input v-model="form.endDate" class="app-control" type="date" :min="form.date || undefined" />
-            </label>
-          </div>
-
-          <div v-if="!form.allDay" class="cdp__row">
-            <label class="cdp__field">
-              <span class="cdp__label">Start time</span>
-              <input v-model="form.start" class="app-control" type="time" />
-            </label>
-            <label class="cdp__field">
-              <span class="cdp__label">End time</span>
-              <input v-model="form.end" class="app-control" type="time" />
-            </label>
-          </div>
+          <Collapse>
+            <div v-if="!form.allDay" class="cdp__picks">
+              <div class="cdp__row">
+                <PickField label="From" icon="clock" :value="formatHhmm(form.start, timeFormat)" :open="picker === 'start'" placeholder="Pick a time" @toggle="togglePicker('start')" />
+                <PickField label="Until" icon="clock" :value="formatHhmm(form.end, timeFormat)" :open="picker === 'end'" placeholder="Pick a time" @toggle="togglePicker('end')" />
+              </div>
+              <Collapse>
+                <div v-if="picker === 'start' || picker === 'end'" class="cdp__wheel">
+                  <TimeWheel v-if="picker === 'start'" key="s" v-model="form.start" label="Start time" />
+                  <TimeWheel v-else key="e" v-model="form.end" label="End time" />
+                </div>
+              </Collapse>
+            </div>
+          </Collapse>
 
           <div class="cdp__field">
             <span class="cdp__label">Who is it for</span>
@@ -352,6 +392,13 @@ onBeforeUnmount(() => {
 .cdp__field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .cdp__label { font-size: 0.875rem; font-weight: 600; color: var(--nt-ink); }
 .cdp__row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cdp__form { --navy: #243560; --sand: #e9d9b8; --cream: #fdf9f0; }
+.cdp__picks { display: flex; flex-direction: column; gap: 10px; }
+.cdp__wheel { padding-top: 2px; }
+.cdp__form :deep(.app-chip) { background: #fffdf8; border: 1.5px solid var(--sand); color: var(--navy); transition: background-color 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.cdp__form :deep(.app-chip:hover) { border-color: var(--navy); }
+.cdp__form :deep(.app-chip:active) { transform: scale(0.96); }
+.cdp__form :deep(.app-chip[aria-checked="true"]) { background: var(--navy); border-color: var(--navy); color: #fff; }
 .cdp__switch { margin: 0; }
 .cdp__switch .form-check-label { font-size: 0.9375rem; font-weight: 500; }
 .cdp__count { margin: 0; font-size: 0.875rem; text-align: right; color: var(--nt-muted); }

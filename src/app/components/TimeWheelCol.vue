@@ -161,11 +161,12 @@ onBeforeUnmount(() => {
   font-family: var(--nt-serif, inherit);
   font-size: 1.375rem;
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "lnum" 1, "tnum" 1;
   color: var(--navy, #243560);
   --s: 3;
   --d: 3;
-  opacity: calc(1 - var(--d) * 0.3);
+  opacity: calc(1 - var(--d) * 0.38);
   transform: perspective(240px) rotateX(calc(var(--s) * -16deg)) scale(calc(1 - var(--d) * 0.07));
   user-select: none;
 }

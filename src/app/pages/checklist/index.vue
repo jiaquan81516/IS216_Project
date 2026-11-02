@@ -1,5 +1,10 @@
 <script setup>
 import BabySwitch from "@/app/components/BabySwitch.vue";
+import Collapse from "@/app/components/Collapse.vue";
+import DateWheel from "@/app/components/DateWheel.vue";
+import FilterSelect from "@/app/components/FilterSelect.vue";
+import PickField from "@/app/components/PickField.vue";
+import { formatIsoDate } from "@/app/utils/pickerHelpers";
 import SkeletonList from "@/app/components/SkeletonList.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
@@ -63,6 +68,19 @@ const title = ref("");
 const who = ref("me");
 const showDate = ref(false);
 const due = ref("");
+const dateOpen = ref(false);
+// Opening the date section fills in today and rolls the wheel open straight away.
+function openDate() {
+  const d = new Date();
+  due.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  showDate.value = true;
+  dateOpen.value = true;
+}
+function clearDate() {
+  showDate.value = false;
+  dateOpen.value = false;
+  due.value = "";
+}
 const adding = ref(false);
 
 async function add() {
@@ -76,6 +94,7 @@ async function add() {
   title.value = "";
   due.value = "";
   showDate.value = false;
+  dateOpen.value = false;
 }
 
 // Ticking a task done or undone.
@@ -148,13 +167,17 @@ function doneMeta(task) {
             <button type="button" class="ck__opt" :aria-pressed="who === 'partner' ? 'true' : 'false'" @click="who = 'partner'">{{ partnerFirst || "Partner" }}</button>
             <button type="button" class="ck__opt" :aria-pressed="who === 'both' ? 'true' : 'false'" @click="who = 'both'">Both</button>
           </div>
-          <button v-if="!showDate" type="button" class="ck__link" @click="showDate = true">Add a date</button>
-          <span v-else class="ck__date">
-            <label class="visually-hidden" for="ck-due">Due date</label>
-            <input id="ck-due" v-model="due" type="date" class="ck__input ck__input--date" />
-            <button type="button" class="ck__link" @click="showDate = false; due = ''">No date</button>
-          </span>
+          <button v-if="!showDate" type="button" class="ck__link" @click="openDate">Add a date</button>
+          <button v-else type="button" class="ck__link" @click="clearDate">No date</button>
         </div>
+        <Collapse>
+          <div v-if="showDate" class="ck__datebox">
+            <PickField label="Due" :value="formatIsoDate(due)" :open="dateOpen" placeholder="Pick a day" @toggle="dateOpen = !dateOpen" />
+            <Collapse>
+              <div v-if="dateOpen" class="ck__wheel"><DateWheel v-model="due" label="Due date" /></div>
+            </Collapse>
+          </div>
+        </Collapse>
       </form>
       <p v-if="rtw.writeError" class="ck__row-error" role="alert">{{ rtw.writeError }}</p>
     </section>
@@ -162,9 +185,7 @@ function doneMeta(task) {
     <section class="ck__list" aria-label="Checklist">
       <div class="ck__row-head">
         <h2 class="ck__h2">Tasks</h2>
-        <div class="ck__filters" role="group" aria-label="Show tasks for">
-          <button v-for="item in tabs" :key="item.key" type="button" class="ck__chip-btn" :aria-pressed="tab === item.key ? 'true' : 'false'" @click="tab = item.key">{{ item.label }}</button>
-        </div>
+        <FilterSelect v-model="tab" :options="tabs" label="Show tasks for" />
       </div>
 
       <p v-if="ownListEmpty" class="ck__empty">Nothing on the list yet. Add the first task above.</p>
@@ -233,7 +254,11 @@ function doneMeta(task) {
 .ck__btn:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
 .ck__add-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .ck__who { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.ck__opt { padding: 6px 16px; background: transparent; border: 1.5px solid var(--navy); border-radius: 999px; font-family: inherit; font-size: 0.875rem; font-weight: 600; color: var(--navy); cursor: pointer; }
+.ck__opt { padding: 6px 16px; background: transparent; transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); border: 1.5px solid var(--navy); border-radius: 999px; font-family: inherit; font-size: 0.875rem; font-weight: 600; color: var(--navy); cursor: pointer; }
+.ck__opt:active { transform: scale(0.95); }
+.ck__opt:hover:not([aria-pressed="true"]) { background: var(--sand); }
+.ck__datebox { display: flex; flex-direction: column; gap: 10px; max-width: 340px; }
+.ck__wheel { padding-top: 2px; }
 .ck__opt[aria-pressed="true"] { background: var(--navy); color: #fff; }
 .ck__opt:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
 .ck__date { display: inline-flex; align-items: center; gap: 12px; }
