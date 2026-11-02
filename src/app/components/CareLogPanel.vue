@@ -420,20 +420,23 @@ onBeforeUnmount(() => {
           </div>
 
           <div v-if="form.type !== 'sleep'" class="clp__group">
-            <div class="clp__when">
-              <p class="clp__label">
-                When: <span class="clp__when-value">{{ form.whenMode === "now" ? "Now" : "Set below" }}</span>
-              </p>
+            <p id="clp-when-label" class="clp__label">When</p>
+            <div class="clp__seg" :class="{ 'clp__seg--later': form.whenMode === 'custom' }" role="radiogroup" aria-labelledby="clp-when-label">
+              <span class="clp__seg-thumb" aria-hidden="true"></span>
+              <button type="button" role="radio" class="clp__seg-btn" :aria-checked="form.whenMode === 'now' ? 'true' : 'false'" @click="form.whenMode = 'now'">
+                Just now
+              </button>
               <button
                 type="button"
-                class="clp__link"
-                :aria-expanded="form.whenMode === 'custom' ? 'true' : 'false'"
+                role="radio"
+                class="clp__seg-btn"
+                :aria-checked="form.whenMode === 'custom' ? 'true' : 'false'"
                 @click="
-                  form.whenMode = form.whenMode === 'now' ? 'custom' : 'now';
-                  if (form.whenMode === 'custom' && !form.time) form.time = toTimeInput(new Date());
+                  form.whenMode = 'custom';
+                  if (!form.time) form.time = toTimeInput(new Date());
                 "
               >
-                {{ form.whenMode === "now" ? "Change time" : "Use now" }}
+                Pick a time
               </button>
             </div>
             <Collapse>
@@ -560,6 +563,62 @@ onBeforeUnmount(() => {
   --navy: #243560;
   --sand: #e9d9b8;
 }
+.clp__seg {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  background: #fffdf8;
+  border: 1.5px solid var(--sand);
+  border-radius: 999px;
+}
+.clp__seg-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  background: var(--navy);
+  border-radius: 999px;
+  transition: transform 280ms cubic-bezier(0.34, 1.25, 0.64, 1);
+}
+.clp__seg--later .clp__seg-thumb {
+  transform: translateX(100%);
+}
+.clp__seg-btn {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--navy);
+  cursor: pointer;
+  transition: color 200ms ease;
+}
+.clp__seg-btn[aria-checked="true"] {
+  color: #fff;
+}
+.clp__seg-btn:not([aria-checked="true"]):hover {
+  color: #5b6692;
+}
+.clp__seg-btn:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .clp__seg-thumb,
+  .clp__seg-btn {
+    transition: none;
+  }
+}
 .clp__custom {
   display: flex;
   flex-direction: column;
@@ -587,9 +646,6 @@ onBeforeUnmount(() => {
 }
 .clp__panel :deep(.app-chip:focus-visible) {
   outline-color: var(--navy);
-}
-.clp__link {
-  transition: color 160ms ease;
 }
 .clp__foot .btn-primary {
   background: var(--navy);
@@ -622,36 +678,6 @@ onBeforeUnmount(() => {
   font-weight: 500;
   line-height: 1.4;
   color: var(--nt-ink);
-}
-.clp__when {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.clp__when-value {
-  font-weight: 400;
-  color: var(--nt-muted);
-}
-.clp__link {
-  padding: 4px 0;
-  background: none;
-  border: 0;
-  font-family: inherit;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--nt-plum);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-.clp__link:hover {
-  color: var(--nt-plum-hover);
-}
-.clp__link:focus-visible {
-  outline: 2px solid var(--nt-plum);
-  outline-offset: 2px;
-  border-radius: 4px;
 }
 .clp__times {
   display: grid;
