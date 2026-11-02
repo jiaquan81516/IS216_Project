@@ -74,7 +74,6 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", onPointer));
       @keydown="onButtonKey"
     >
       <svg class="fs__ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8z" /></svg>
-      <span class="fs__lead">{{ label }}</span>
       <span class="fs__value">{{ current?.label }}</span>
       <Icon name="chevron-down" :size="18" class="fs__chev" />
     </button>
@@ -107,8 +106,8 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", onPointer));
 .fs__btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px 8px 16px;
+  gap: 6px;
+  padding: 8px 12px 8px 14px;
   background: transparent;
   border: 1.5px solid var(--navy, #243560);
   border-radius: 999px;
@@ -131,12 +130,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", onPointer));
   outline: 3px solid var(--navy, #243560);
   outline-offset: 2px;
 }
-.fs__lead {
-  font-weight: 500;
-  opacity: 0.75;
-}
 .fs__value {
-  min-width: 3.5rem;
   text-align: left;
 }
 .fs__chev {
@@ -150,7 +144,8 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", onPointer));
   top: calc(100% + 8px);
   right: 0;
   z-index: 15;
-  min-width: 13rem;
+  min-width: 100%;
+  width: max-content;
   margin: 0;
   padding: 8px;
   list-style: none;
