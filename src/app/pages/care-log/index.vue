@@ -1,5 +1,6 @@
 <script setup>
 import BabySwitch from "@/app/components/BabySwitch.vue";
+import FilterSelect from "@/app/components/FilterSelect.vue";
 import { useToast } from "@/app/composables/useToast";
 import SkeletonList from "@/app/components/SkeletonList.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
@@ -370,9 +371,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
   <section class="cl__timeline" aria-labelledby="cl-timeline">
     <div class="cl__row-head cl__row-head--wrap">
       <h2 id="cl-timeline" class="cl__h2 cl__h2--lg">Timeline</h2>
-      <div class="cl__filters" role="group" aria-label="Filter the timeline">
-        <button v-for="f in FILTERS" :key="f.key" type="button" class="cl__chip" :aria-pressed="filter === f.key ? 'true' : 'false'" @click="filter = f.key">{{ f.label }}</button>
-      </div>
+      <FilterSelect v-model="filter" :options="FILTERS" label="Show" />
     </div>
 
     <div aria-live="polite">
@@ -476,10 +475,6 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 .cl__big { margin: 0; font-family: var(--nt-serif); font-size: 2.25rem; font-weight: 700; line-height: 1.1; }
 
 .cl__timeline { padding: 24px 28px 28px; background: var(--cream); border: 1px solid var(--sand); border-bottom-width: 4px; border-radius: 24px; }
-.cl__filters { display: flex; flex-wrap: wrap; gap: 8px; }
-.cl__chip { padding: 8px 20px; background: transparent; border: 1.5px solid var(--navy); border-radius: 999px; font-family: inherit; font-size: 0.9375rem; font-weight: 600; color: var(--navy); cursor: pointer; }
-.cl__chip[aria-pressed="true"] { background: var(--navy); color: #fff; }
-.cl__chip:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
 
 .cl__day { margin-top: 12px; }
 .cl__day-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
