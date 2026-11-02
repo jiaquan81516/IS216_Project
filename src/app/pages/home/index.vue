@@ -12,7 +12,7 @@ import { ownerKey, ownerLabel } from "@/app/utils/sharedHelpers";
 import { agendaGroups, agendaHeading, eventTimeLabel } from "@/app/utils/calendarHelpers";
 import { buildStream } from "@/app/utils/stream";
 import { agoText, todaySummary, tonightDate } from "@/app/utils/homeSummary";
-import { mondayOf, toIso, weekNights } from "@/app/utils/rotaHelpers";
+import { joinNames, mondayOf, toIso, weekNights } from "@/app/utils/rotaHelpers";
 import { isStruggling, moodStageFor } from "@/app/utils/moodStage";
 import { formatMinutes, formatTime as clockTime, lastOfType, toDate } from "@/app/utils/entryHelpers";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
@@ -190,6 +190,8 @@ const sleepToday = computed(() => babyNow.value.sleep);
 // With more than one baby, Home shows every baby, so a parent never misses one.
 const { babies, selectBaby } = useSelectedBaby();
 const multiBabies = computed(() => babies.value.length > 1);
+// The duty plan covers every baby, so the duty card names them all.
+const dutyBabies = computed(() => joinNames(babies.value.map((b, i) => b.babyName || `Baby ${i + 1}`)) || babyName.value);
 const babyCards = computed(() => {
   const all = entriesShared.raw?.value ?? [];
   return babies.value.map((b, i) => {
@@ -309,7 +311,7 @@ const lookingAfter = computed(() => {
     open,
     who: open ? "open" : current.who,
     initial: open ? "?" : current.who === "both" ? "&" : carerName(current).charAt(0).toUpperCase(),
-    headline: open ? `No one is set to look after ${babyName.value} yet` : `${carerName(current)} ${carerVerb(current)} looking after ${babyName.value}`,
+    headline: open ? `No one is set to look after ${dutyBabies.value} yet` : `${carerName(current)} ${carerVerb(current)} looking after ${dutyBabies.value}`,
     until: open ? "" : `Until ${current.end}`,
     next: !next || next === current ? "" : next.who === "open" ? "Then: not planned yet" : `Then ${carerName(next)}, from ${next.start}`,
   };

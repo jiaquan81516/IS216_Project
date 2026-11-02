@@ -250,3 +250,10 @@ export function suggest(nights, names = {}) {
 export function cancelSwap(swaps, id) {
   return swaps.filter((s) => !(s.id === id && s.status === "pending" && s.from === "me"));
 }
+
+// "Tiara", "Tiara and Noah", "Tiara, Noah and Mei": every baby the plan covers.
+export function joinNames(names) {
+  const list = names.filter(Boolean);
+  if (list.length <= 1) return list[0] ?? "";
+  return `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`;
+}
