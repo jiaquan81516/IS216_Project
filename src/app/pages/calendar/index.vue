@@ -121,6 +121,24 @@ const dayNumber = (day) => {
 
 // Calendar list: which layers are shown.
 const layers = reactive({ me: true, partner: true, both: true, night: true });
+const sidebarOpen = ref(true);
+const mobileSidebarOpen = ref(false);
+const compactViewport = ref(false);
+let sidebarMedia = null;
+function onSidebarMediaChange(event) {
+  compactViewport.value = event.matches;
+  if (!event.matches) mobileSidebarOpen.value = false;
+}
+function toggleSidebar() {
+  if (compactViewport.value) {
+    mobileSidebarOpen.value = !mobileSidebarOpen.value;
+    return;
+  }
+  sidebarOpen.value = !sidebarOpen.value;
+}
+function closeMobileSidebar() {
+  mobileSidebarOpen.value = false;
+}
 
 // Mini month in the sidebar. It pages on its own, and snaps back when the main view moves.
 const mini = reactive({ year: cursor.value.year, month: cursor.value.month });
@@ -307,7 +325,8 @@ const nowTop = computed(() => `${(nowMin.value / 60) * HOUR_PX}px`);
 let clock = 0;
 function onKey(event) {
   if (event.key === "Escape") {
-      viewMenu.value = false;
+    viewMenu.value = false;
+    closeMobileSidebar();
     return;
   }
   if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented || panelOpen.value) return;
@@ -326,6 +345,9 @@ function onKey(event) {
   }
 }
 onMounted(() => {
+  sidebarMedia = window.matchMedia("(max-width: 1023px)");
+  compactViewport.value = sidebarMedia.matches;
+  sidebarMedia.addEventListener("change", onSidebarMediaChange);
   if (view.value !== "month") restoreScroll();
   clock = window.setInterval(() => (nowMin.value = minutesNow()), 60000);
   document.addEventListener("click", onDocClick);
@@ -333,6 +355,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   window.clearInterval(clock);
+  sidebarMedia?.removeEventListener("change", onSidebarMediaChange);
   document.removeEventListener("click", onDocClick);
   document.removeEventListener("keydown", onKey);
 });
@@ -401,6 +424,16 @@ function onDelete(id) {
     <BabySwitch />
 
     <section class="cal__toolbar" :class="{ 'cal__toolbar--searching': searchOpen }" aria-label="Calendar controls">
+      <button
+        type="button"
+        class="cal__icon cal__menu-toggle"
+        :aria-expanded="(compactViewport ? mobileSidebarOpen : sidebarOpen) ? 'true' : 'false'"
+        aria-controls="cal-side"
+        :aria-label="(compactViewport ? mobileSidebarOpen : sidebarOpen) ? 'Hide calendars sidebar' : 'Show calendars sidebar'"
+        @click="toggleSidebar"
+      >
+        <Icon name="menu" :size="20" />
+      </button>
       <button type="button" class="cal__today" aria-label="Today" @click="goToday">
         <span class="cal__todaytxt">Today</span>
         <span class="cal__todaynum" aria-hidden="true">{{ todayNum }}</span>
@@ -476,7 +509,8 @@ function onDelete(id) {
 
     <p v-if="store.writeError" class="app-error-text" role="alert">{{ store.writeError }}</p>
 
-    <div class="cal__layout">
+    <div class="cal__layout" :class="{ 'cal__layout--side-hidden': !sidebarOpen, 'cal__layout--drawer-open': mobileSidebarOpen }">
+      <button v-if="mobileSidebarOpen" type="button" class="cal__drawer-scrim" aria-label="Close calendars sidebar" @click="closeMobileSidebar"></button>
       <aside id="cal-side" class="cal__side" aria-label="Dates and calendars">
         <button type="button" class="cal__create" @click="openAdd">
           <Icon name="plus" :size="24" />
@@ -779,8 +813,9 @@ function onDelete(id) {
 button { font-family: inherit; }
 
 /* Toolbar */
-.cal__toolbar { display: flex; align-items: center; gap: 4px; min-height: 64px; }
+.cal__toolbar { display: flex; align-items: center; gap: 4px; min-height: 64px; padding: 0 12px; background: rgb(255 255 255 / 88%); border: 1px solid rgb(31 58 104 / 12%); border-radius: 16px; }
 .cal__icon { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; background: transparent; border: 0; border-radius: 50%; color: var(--g-mute); cursor: pointer; }
+.cal__menu-toggle { margin-right: 4px; }
 .cal__icon--sm { width: 32px; height: 32px; }
 .cal__icon:hover { background: var(--g-hover); }
 .cal__today { display: inline-flex; align-items: center; justify-content: center; height: 40px; margin: 0 12px 0 8px; padding: 0 20px; background: transparent; border: 1px solid #747775; border-radius: 20px; font-size: 0.875rem; font-weight: 500; color: var(--g-ink); cursor: pointer; }
@@ -805,7 +840,10 @@ button { font-family: inherit; }
 
 /* Sidebar */
 .cal__layout { position: relative; display: flex; align-items: flex-start; gap: 16px; }
-.cal__side { display: flex; flex-direction: column; gap: 24px; flex: none; width: 256px; }
+.cal__layout--side-hidden { gap: 0; }
+.cal__layout--side-hidden .cal__side { display: none; }
+.cal__side { display: flex; flex-direction: column; gap: 24px; flex: none; width: 256px; padding: 16px; background: rgb(255 255 255 / 92%); border: 1px solid rgb(31 58 104 / 12%); border-radius: 18px; color: #16233b; }
+.cal__drawer-scrim { display: none; }
 .cal__create { display: inline-flex; align-self: flex-start; align-items: center; gap: 12px; height: 56px; padding: 0 24px 0 16px; background: #fff; border: 0; border-radius: 16px; box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15); font-size: 0.875rem; font-weight: 500; color: var(--g-ink); cursor: pointer; transition: box-shadow 0.2s ease, background-color 0.2s ease; }
 .cal__create:hover { background: #f8f9fa; box-shadow: 0 1px 3px rgba(60, 64, 67, 0.3), 0 6px 10px 4px rgba(60, 64, 67, 0.15); }
 
@@ -814,7 +852,7 @@ button { font-family: inherit; }
 .cal__minititle { flex: 1; margin: 0; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--g-ink); }
 .cal__minigrid { display: grid; grid-template-columns: repeat(7, 1fr); justify-items: center; row-gap: 2px; }
 .cal__minidow { display: flex; align-items: center; justify-content: center; height: 24px; font-size: 0.6875rem; font-weight: 500; color: var(--g-mute); }
-.cal__miniday { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; background: transparent; border: 0; border-radius: 50%; font-size: 0.6875rem; font-weight: 500; color: var(--g-ink); cursor: pointer; }
+.cal__miniday { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; background: transparent; border: 0; border-radius: 50%; font-size: 0.6875rem; font-weight: 600; color: #16233b; cursor: pointer; }
 .cal__miniday:hover { background: var(--g-hover); }
 .cal__miniday--focus, .cal__miniday--focus:hover { background: var(--g-blue-soft); color: var(--g-blue-ink); }
 .cal__miniday--today, .cal__miniday--today:hover { background: var(--g-blue); color: #fff; }
@@ -945,6 +983,8 @@ button { font-family: inherit; }
   .cal__layout { display: block; }
   .cal__fab { display: inline-flex; }
   .cal__side { display: none; }
+  .cal__layout--drawer-open .cal__side { position: fixed; top: 132px; bottom: 24px; left: 16px; z-index: 31; display: flex; width: min(288px, calc(100vw - 32px)); overflow-y: auto; box-shadow: 0 12px 36px rgb(22 35 59 / 24%); }
+  .cal__layout--drawer-open .cal__drawer-scrim { position: fixed; inset: 112px 0 0; z-index: 30; display: block; padding: 0; background: rgb(22 35 59 / 24%); border: 0; cursor: pointer; }
   .cal__month { font-size: 1.25rem; }
   .cal__grid { min-height: calc(100dvh - 200px); }
 }
