@@ -1,5 +1,10 @@
 <script setup>
 import BabySwitch from "@/app/components/BabySwitch.vue";
+import Collapse from "@/app/components/Collapse.vue";
+import DateWheel from "@/app/components/DateWheel.vue";
+import FilterSelect from "@/app/components/FilterSelect.vue";
+import PickField from "@/app/components/PickField.vue";
+import { formatIsoDate } from "@/app/utils/pickerHelpers";
 import SkeletonList from "@/app/components/SkeletonList.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
@@ -53,11 +58,29 @@ const view = computed(() =>
 const isEmpty = computed(() => !view.value.groups.length && !view.value.done.length);
 const ownListEmpty = computed(() => !tasks.value.length);
 
+const sharedBy = computed(() => (partnerFirst.value ? `${myName.value} and ${partnerFirst.value}` : myName.value));
+const openCount = computed(() => tasks.value.filter((t) => !t.done).length);
+const doneCount = computed(() => tasks.value.filter((t) => t.done).length);
+const progressLine = computed(() => `${doneCount.value} of ${tasks.value.length} done`);
+
 // Adding a task: one line, who does it, and an optional date.
 const title = ref("");
 const who = ref("me");
 const showDate = ref(false);
 const due = ref("");
+const dateOpen = ref(false);
+// Opening the date section fills in today and rolls the wheel open straight away.
+function openDate() {
+  const d = new Date();
+  due.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  showDate.value = true;
+  dateOpen.value = true;
+}
+function clearDate() {
+  showDate.value = false;
+  dateOpen.value = false;
+  due.value = "";
+}
 const adding = ref(false);
 
 async function add() {
@@ -71,6 +94,7 @@ async function add() {
   title.value = "";
   due.value = "";
   showDate.value = false;
+  dateOpen.value = false;
 }
 
 // Ticking a task done or undone.
@@ -110,183 +134,171 @@ function doneMeta(task) {
     </div>
 
     <template v-if="!loading && !error">
-      <header class="ck__head">
-        <div>
-          <h1 class="nt-title ck__title">Our checklist</h1>
-          <p class="ck__sub">Who is doing what, in one place.</p>
-        </div>
-      </header>
-      <BabySwitch />
+  <header class="ck__hero">
+    <div class="ck__hero-text">
+      <p class="ck__eyebrow">Shared by {{ sharedBy }}</p>
+      <h1 class="ck__title">Our checklist</h1>
+      <p class="ck__lead">Who is doing what, in one place.</p>
+      <p v-if="tasks.length" class="ck__pill"><span class="ck__pill-dot"></span>{{ progressLine }}</p>
+    </div>
+  </header>
+  <BabySwitch />
 
-      <SkeletonList v-if="listLoading" :rows="4" :height="56" label="Loading the checklist" />
-      <div v-if="!listLoading && listErrorInfo" class="ck__error alert alert-danger" role="alert">
-        <div>
-          <p class="mb-0">{{ listErrorInfo.text }}</p>
-          <p v-if="listErrorInfo.detail" class="ck__muted">{{ listErrorInfo.detail }}</p>
+  <SkeletonList v-if="listLoading" :rows="4" :height="56" label="Loading the checklist" />
+  <div v-if="!listLoading && listErrorInfo" class="ck__error alert alert-danger" role="alert">
+    <div>
+      <p class="mb-0">{{ listErrorInfo.text }}</p>
+      <p v-if="listErrorInfo.detail" class="ck__muted">{{ listErrorInfo.detail }}</p>
+    </div>
+  </div>
+
+  <template v-if="!listLoading && !listErrorInfo">
+    <section class="ck__add-card" aria-label="Add a task">
+      <form class="ck__add" @submit.prevent="add">
+        <div class="ck__add-row">
+          <label class="visually-hidden" for="ck-title">Add a task</label>
+          <input id="ck-title" v-model="title" type="text" class="ck__input" :maxlength="TITLE_MAX" placeholder="Add a task, e.g. book vaccination" />
+          <button type="submit" class="ck__btn" :disabled="!title.trim() || adding">{{ adding ? "Adding..." : "Add" }}</button>
         </div>
+        <div class="ck__add-opts">
+          <div v-if="hasPartner" class="ck__who" role="group" aria-label="Who does it">
+            <span class="ck__muted">Who does it</span>
+            <button type="button" class="ck__opt" :aria-pressed="who === 'me' ? 'true' : 'false'" @click="who = 'me'">Me</button>
+            <button type="button" class="ck__opt" :aria-pressed="who === 'partner' ? 'true' : 'false'" @click="who = 'partner'">{{ partnerFirst || "Partner" }}</button>
+            <button type="button" class="ck__opt" :aria-pressed="who === 'both' ? 'true' : 'false'" @click="who = 'both'">Both</button>
+          </div>
+          <button v-if="!showDate" type="button" class="ck__link" @click="openDate">Add a date</button>
+          <button v-else type="button" class="ck__link" @click="clearDate">No date</button>
+        </div>
+        <Collapse>
+          <div v-if="showDate" class="ck__datebox">
+            <PickField label="Due" :value="formatIsoDate(due)" :open="dateOpen" placeholder="Pick a day" @toggle="dateOpen = !dateOpen" />
+            <Collapse>
+              <div v-if="dateOpen" class="ck__wheel"><DateWheel v-model="due" label="Due date" /></div>
+            </Collapse>
+          </div>
+        </Collapse>
+      </form>
+      <p v-if="rtw.writeError" class="ck__row-error" role="alert">{{ rtw.writeError }}</p>
+    </section>
+
+    <section class="ck__list" aria-label="Checklist">
+      <div class="ck__row-head">
+        <h2 class="ck__h2">Tasks</h2>
+        <FilterSelect v-model="tab" :options="tabs" label="Show tasks for" />
       </div>
 
-      <section v-if="!listLoading && !listErrorInfo" class="ck__card" aria-label="Checklist">
-        <div class="ck__tabs" role="group" aria-label="Show tasks for">
-          <button
-            v-for="item in tabs"
-            :key="item.key"
-            type="button"
-            class="ck__tab"
-            :aria-pressed="tab === item.key ? 'true' : 'false'"
-            @click="tab = item.key"
-          >
-            {{ item.label }}
-          </button>
+      <p v-if="ownListEmpty" class="ck__empty">Nothing on the list yet. Add the first task above.</p>
+      <p v-else-if="isEmpty" class="ck__empty">Nothing here.</p>
+
+      <div v-for="group in view.groups" :key="group.key" class="ck__group">
+        <div class="ck__day-head"><span class="ck__day-pill">{{ group.label }}</span><span class="ck__day-line"></span></div>
+        <TransitionGroup tag="ul" name="li" class="ck__rows">
+          <li v-for="task in group.tasks" :key="task.id" class="ck__row">
+            <label class="ck__label">
+              <input type="checkbox" class="ck__box" :checked="task.done" :disabled="busy === task.id" @change="toggle(task)" />
+              <span class="ck__text">
+                <span class="ck__name">{{ task.title }}</span>
+                <span v-if="dueOf(task)" class="ck__due" :class="{ 'ck__due--late': /overdue/i.test(dueOf(task)) }">{{ dueOf(task) }}</span>
+              </span>
+            </label>
+            <span class="ck__owner"><span class="ck__initial" aria-hidden="true">{{ chip(task).initial }}</span>{{ chip(task).name }}</span>
+          </li>
+        </TransitionGroup>
+      </div>
+
+      <div v-if="view.done.length" class="ck__group">
+        <div class="ck__day-head">
+          <span class="ck__day-pill ck__day-pill--muted">Done</span>
+          <span class="ck__day-line"></span>
+          <span class="ck__muted">{{ view.done.length }} finished</span>
+          <button type="button" class="ck__link" :aria-expanded="showDone ? 'true' : 'false'" aria-controls="ck-done-list" @click="showDone = !showDone">{{ showDone ? "Hide" : "Show" }}</button>
         </div>
-
-        <form class="ck__add" @submit.prevent="add">
-          <div class="ck__add-row">
-            <label class="visually-hidden" for="ck-title">Add a task</label>
-            <input
-              id="ck-title"
-              v-model="title"
-              type="text"
-              class="app-control"
-              :maxlength="TITLE_MAX"
-              placeholder="Add a task, e.g. book vaccination"
-            />
-            <button type="submit" class="btn btn-primary" :disabled="!title.trim() || adding">
-              {{ adding ? "Adding..." : "Add" }}
-            </button>
-          </div>
-          <div class="ck__add-opts">
-            <div v-if="hasPartner" class="ck__who" role="group" aria-label="Who does it">
-              <span class="ck__muted">Who does it</span>
-              <button type="button" class="ck__opt" :aria-pressed="who === 'me' ? 'true' : 'false'" @click="who = 'me'">Me</button>
-              <button type="button" class="ck__opt" :aria-pressed="who === 'partner' ? 'true' : 'false'" @click="who = 'partner'">
-                {{ partnerFirst || "Partner" }}
-              </button>
-              <button type="button" class="ck__opt" :aria-pressed="who === 'both' ? 'true' : 'false'" @click="who = 'both'">Both</button>
-            </div>
-            <button v-if="!showDate" type="button" class="app-textbtn" @click="showDate = true">Add a date</button>
-            <span v-else class="ck__date">
-              <label class="visually-hidden" for="ck-due">Due date</label>
-              <input id="ck-due" v-model="due" type="date" class="app-control" />
-              <button type="button" class="app-textbtn" @click="showDate = false; due = ''">No date</button>
-            </span>
-          </div>
-        </form>
-
-        <p v-if="rtw.writeError" class="ck__row-error" role="alert">{{ rtw.writeError }}</p>
-
-        <p v-if="ownListEmpty" class="ck__empty">Nothing on the list yet. Add the first task above.</p>
-        <p v-else-if="isEmpty" class="ck__empty">Nothing here.</p>
-
-        <section v-for="group in view.groups" :key="group.key" class="ck__group" :aria-labelledby="`ck-g-${group.key}`">
-          <h2 :id="`ck-g-${group.key}`" class="ck__h2">{{ group.label }}</h2>
-          <TransitionGroup tag="ul" name="li" class="ck__rows">
-            <li v-for="task in group.tasks" :key="task.id" class="ck__row">
-              <label class="ck__label">
-                <input
-                  type="checkbox"
-                  class="ck__box"
-                  :checked="task.done"
-                  :disabled="busy === task.id"
-                  @change="toggle(task)"
-                />
-                <span class="ck__text">
-                  <span class="ck__name">{{ task.title }}</span>
-                  <span v-if="dueOf(task)" class="ck__due" :class="{ 'ck__due--late': /overdue/i.test(dueOf(task)) }">{{ dueOf(task) }}</span>
-                </span>
-              </label>
-              <div class="ck__side">
-                <span class="ck__chip"><span class="ck__initial" aria-hidden="true">{{ chip(task).initial }}</span>{{ chip(task).name }}</span>
-              </div>
-            </li>
-          </TransitionGroup>
-        </section>
-
-        <section v-if="view.done.length" class="ck__group" aria-labelledby="ck-g-done">
-          <div class="ck__done-head">
-            <h2 id="ck-g-done" class="ck__h2 ck__h2--muted">Done</h2>
-            <span class="ck__muted">{{ view.done.length }} finished</span>
-            <button
-              type="button"
-              class="app-textbtn"
-              :aria-expanded="showDone ? 'true' : 'false'"
-              aria-controls="ck-done-list"
-              @click="showDone = !showDone"
-            >
-              {{ showDone ? "Hide" : "Show" }}
-            </button>
-          </div>
-          <TransitionGroup tag="ul" name="li" v-if="showDone" id="ck-done-list" class="ck__rows">
-            <li v-for="task in view.done" :key="task.id" class="ck__row ck__row--done">
-              <label class="ck__label">
-                <input type="checkbox" class="ck__box" checked :disabled="busy === task.id" @change="toggle(task)" />
-                <span class="ck__text"><span class="ck__name">{{ task.title }}</span></span>
-              </label>
-              <span class="ck__muted">{{ doneMeta(task) }}</span>
-            </li>
-          </TransitionGroup>
-        </section>
-      </section>
-    </template>
+        <TransitionGroup tag="ul" name="li" v-if="showDone" id="ck-done-list" class="ck__rows">
+          <li v-for="task in view.done" :key="task.id" class="ck__row ck__row--done">
+            <label class="ck__label">
+              <input type="checkbox" class="ck__box" checked :disabled="busy === task.id" @change="toggle(task)" />
+              <span class="ck__text"><span class="ck__name">{{ task.title }}</span></span>
+            </label>
+            <span class="ck__muted">{{ doneMeta(task) }}</span>
+          </li>
+        </TransitionGroup>
+      </div>
+    </section>
+  </template>
+</template>
   </div>
 </template>
 
 <style scoped>
-.ck { display: flex; flex-direction: column; gap: 24px; margin: 0; font-size: 1rem; }
-.ck__status { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
-.ck__muted { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
-.ck__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 0; font-size: 0.875rem; border-radius: 8px; }
+.ck { --navy: #243560; --navy-2: #2d3f70; --ink: #1f2a52; --cream: #fdf9f0; --sand: #e9d9b8; display: flex; flex-direction: column; gap: 24px; width: 100%; max-width: 1020px; margin: 0 auto; color: var(--ink); }
+.ck__status, .ck__muted { margin: 0; font-size: 0.875rem; color: #6b7392; }
+.ck__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; border-radius: 8px; }
 
-.ck__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.ck__title { font-size: 2.5rem; line-height: 1.2; margin: 0 0 8px; }
-.ck__sub { margin: 0; font-size: 1rem; color: var(--nt-muted); }
+.ck__hero { padding: 32px 40px; background: var(--navy-2); border-radius: 28px; border-bottom: 5px solid #182246; color: #fff; }
+.ck__hero-text { display: flex; flex-direction: column; gap: 10px; }
+.ck__eyebrow { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #f2a477; }
+.ck__title { margin: 0; font-family: var(--nt-serif); font-size: 3rem; line-height: 1.05; font-weight: 700; color: #fff; }
+.ck__lead { margin: 0; font-size: 1.0625rem; color: #dfe5f7; }
+.ck__pill { display: inline-flex; align-items: center; align-self: flex-start; gap: 8px; margin: 6px 0 0; padding: 8px 16px; border: 1px solid rgb(255 255 255 / 35%); border-radius: 999px; background: rgb(255 255 255 / 10%); font-size: 0.9375rem; }
+.ck__pill-dot { width: 10px; height: 10px; border-radius: 50%; background: #8fd19e; }
 
-.ck__card { display: flex; flex-direction: column; gap: 20px; max-width: 760px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; padding: 24px; }
-
-.ck__tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--nt-line); }
-.ck__tab { padding: 0 0 10px; margin-bottom: -1px; background: none; border: 0; border-bottom: 2px solid transparent; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-muted); cursor: pointer; }
-.ck__tab[aria-pressed="true"] { color: var(--nt-ink); font-weight: 600; border-bottom-color: var(--nt-plum); }
-.ck__tab:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
-
+.ck__add-card { padding: 20px 24px; background: #fbf0d6; border: 1px solid #ecd9a8; border-bottom-width: 3px; border-radius: 24px; }
 .ck__add { display: flex; flex-direction: column; gap: 12px; }
 .ck__add-row { display: flex; gap: 12px; align-items: stretch; }
-.ck__add-row .app-control { flex: 1; min-width: 0; }
+.ck__input { flex: 1; min-width: 0; height: 48px; padding: 0 16px; background: #fff; border: 1.5px solid var(--sand); border-radius: 14px; font-family: inherit; font-size: 1rem; color: var(--ink); }
+.ck__input:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
+.ck__input--date { flex: none; width: auto; height: 40px; }
+.ck__btn { flex: none; padding: 0 28px; background: var(--navy); border: 0; border-bottom: 3px solid #182246; border-radius: 14px; font-family: inherit; font-size: 1rem; font-weight: 600; color: #fff; cursor: pointer; }
+.ck__btn:disabled { opacity: 0.5; cursor: default; }
+.ck__btn:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
 .ck__add-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .ck__who { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.ck__opt { min-height: 32px; padding: 4px 14px; font-family: inherit; font-size: 0.875rem; color: var(--nt-ink); background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 8px; cursor: pointer; }
-.ck__opt:hover { border-color: var(--nt-muted); }
-.ck__opt[aria-pressed="true"] { border-color: var(--nt-plum); background: var(--nt-apricot); font-weight: 600; }
-.ck__opt:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
+.ck__opt { padding: 6px 16px; background: transparent; transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); border: 1.5px solid var(--navy); border-radius: 999px; font-family: inherit; font-size: 0.875rem; font-weight: 600; color: var(--navy); cursor: pointer; }
+.ck__opt:active { transform: scale(0.95); }
+.ck__opt:hover:not([aria-pressed="true"]) { background: var(--sand); }
+.ck__datebox { display: flex; flex-direction: column; gap: 10px; max-width: 340px; }
+.ck__wheel { padding-top: 2px; }
+.ck__opt[aria-pressed="true"] { background: var(--navy); color: #fff; }
+.ck__opt:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
 .ck__date { display: inline-flex; align-items: center; gap: 12px; }
-.ck__date .app-control { width: auto; }
-.ck__row-error { margin: 0; font-size: 0.875rem; color: var(--nt-coral); }
-.ck__empty { margin: 0; padding: 16px 0; font-size: 0.875rem; color: var(--nt-muted); }
+.ck__link { padding: 4px 0; background: none; border: 0; font-family: inherit; font-size: 0.875rem; font-weight: 600; color: var(--navy); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.ck__row-error { margin: 8px 0 0; font-size: 0.875rem; color: var(--nt-coral); }
 
-.ck__group { display: flex; flex-direction: column; gap: 4px; }
-.ck__h2 { margin: 0; padding-bottom: 8px; font-size: 1rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); border-bottom: 1px solid var(--nt-line); }
-.ck__h2--muted { color: var(--nt-muted); padding-bottom: 0; border-bottom: 0; }
-.ck__done-head { display: flex; align-items: baseline; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--nt-line); }
-.ck__done-head .ck__muted { margin-left: auto; }
+.ck__list { padding: 24px 28px 28px; background: var(--cream); border: 1px solid var(--sand); border-bottom-width: 4px; border-radius: 24px; }
+.ck__row-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.ck__h2 { margin: 0; font-family: var(--nt-serif); font-size: 1.75rem; font-weight: 700; }
+.ck__filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.ck__chip-btn { padding: 8px 20px; background: transparent; border: 1.5px solid var(--navy); border-radius: 999px; font-family: inherit; font-size: 0.9375rem; font-weight: 600; color: var(--navy); cursor: pointer; }
+.ck__chip-btn[aria-pressed="true"] { background: var(--navy); color: #fff; }
+.ck__chip-btn:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
+.ck__empty { margin: 0; padding: 16px 0; font-size: 0.9375rem; color: #6b7392; }
 
-.ck__rows { margin: 0; padding: 0; list-style: none; }
-.ck__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--nt-line); }
-.ck__row--done .ck__name { color: var(--nt-muted); text-decoration: line-through; }
-.ck__label { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; min-width: 0; }
-.ck__box { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--nt-plum); cursor: pointer; }
-.ck__box:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
+.ck__group { margin-top: 12px; }
+.ck__day-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.ck__day-pill { padding: 4px 12px; background: var(--navy); border-radius: 8px; font-size: 0.8125rem; font-weight: 600; color: #fff; }
+.ck__day-pill--muted { background: #6b7392; }
+.ck__day-line { flex: 1; border-top: 2px dashed var(--sand); }
+.ck__rows { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.ck__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; background: #fff; border: 1px solid var(--sand); border-radius: 18px; }
+.ck__row--done .ck__name { color: #6b7392; text-decoration: line-through; }
+.ck__label { display: flex; align-items: center; gap: 14px; min-width: 0; cursor: pointer; }
+.ck__box { flex: none; appearance: none; width: 28px; height: 28px; margin: 0; background: #fff; border: 3px solid #a8532f; border-radius: 50%; cursor: pointer; }
+.ck__box:checked { background: #a8532f radial-gradient(circle, #fff 0 30%, transparent 32%); }
+.ck__box:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
 .ck__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ck__name { font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); overflow-wrap: anywhere; }
-.ck__due { font-size: 0.875rem; color: var(--nt-muted); }
-.ck__due--late { color: var(--nt-coral); }
-.ck__side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 0.875rem; }
-.ck__chip { display: inline-flex; align-items: center; gap: 8px; color: var(--nt-ink); }
-.ck__initial { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; font-size: 0.75rem; border: 1px solid var(--nt-ink); border-radius: 50%; }
-
+.ck__name { font-family: var(--nt-serif); font-size: 1.125rem; font-weight: 700; overflow-wrap: anywhere; }
+.ck__due { align-self: flex-start; font-size: 0.8125rem; color: #4a5272; }
+.ck__due--late { padding: 1px 10px; background: #f3e1dc; border-radius: 999px; font-weight: 600; color: #a8473f; }
+.ck__owner { flex: none; display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; background: #f1ead9; border-radius: 999px; font-size: 0.875rem; font-weight: 600; }
+.ck__initial { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; background: var(--navy); border-radius: 50%; font-size: 0.75rem; color: #fff; }
 
 @media (max-width: 575px) {
-  .ck__card { padding: 20px 16px; }
-  .ck__title { font-size: 2rem; }
-  .ck__row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
-  .ck__side { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; padding-left: 30px; }
+  .ck__hero { padding: 24px; }
+  .ck__title { font-size: 2.25rem; }
+  .ck__list { padding: 20px 16px; }
+  .ck__add-row { flex-direction: column; }
+  .ck__btn { height: 48px; }
+  .ck__row { flex-wrap: wrap; }
 }
 </style>

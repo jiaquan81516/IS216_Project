@@ -10,7 +10,6 @@ const label = (b, i) => b.babyName || `Baby ${i + 1}`;
 
 <template>
   <div v-if="babies.length > 1" class="bsw" role="group" aria-label="Which baby">
-    <span class="bsw__lead">Showing</span>
     <button
       v-for="(b, i) in babies"
       :key="b.id"
@@ -33,11 +32,6 @@ const label = (b, i) => b.babyName || `Baby ${i + 1}`;
   align-items: center;
   gap: 8px;
   margin: 0 0 16px;
-}
-.bsw__lead {
-  margin-right: 4px;
-  font-size: 0.875rem;
-  color: var(--nt-muted);
 }
 .bsw__pill {
   display: inline-flex;
