@@ -876,7 +876,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__label { margin: 0; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; line-height: 1.4; text-transform: uppercase; color: var(--fg-muted, var(--muted)); }
 .hp__label--attention { color: var(--warm); }
 .hp__title { margin: 0; font-family: var(--serif); font-size: clamp(2rem, 3.8vw, 3rem); font-weight: 500; line-height: 1.1; letter-spacing: -0.02em; text-wrap: balance; color: #fbf3e6; }
-.hp__lead { margin: 0; max-width: 28em; font-family: var(--serif); font-size: 1.25rem; line-height: 1.5; color: #c3cfe4; }
+.hp__lead { margin: 0; max-width: none; font-family: var(--serif); font-size: 1.25rem; line-height: 1.5; color: #c3cfe4; }
 .hp__card-title { margin: 0; font-family: var(--serif); font-size: 1.25rem; font-weight: 500; line-height: 1.35; color: var(--fg, var(--ink)); text-wrap: balance; }
 .hp__focus { margin: 0; max-width: 24em; font-family: var(--serif); font-size: 1.5rem; font-weight: 500; line-height: 1.3; letter-spacing: -0.01em; color: var(--fg, var(--ink)); }
 .hp__small { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--fg-muted, var(--muted)); }
