@@ -359,7 +359,6 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
   <section aria-labelledby="cl-now">
     <div class="cl__row-head">
       <h2 id="cl-now" class="cl__h2">Log now</h2>
-      <p class="cl__hint">Pick one, then adjust the time if needed</p>
     </div>
     <ul class="cl__tiles">
       <li v-for="t in quickTypes" :key="t.key">
