@@ -2,9 +2,17 @@
 import BabySwitch from "@/app/components/BabySwitch.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
-import { computed, inject, ref } from "vue";
+import { computed, inject, nextTick, onMounted, ref } from "vue";
+import Collapse from "@/app/components/Collapse.vue";
+import DaySchedule from "@/app/components/DaySchedule.vue";
+import DateWheel from "@/app/components/DateWheel.vue";
 import Icon from "@/app/components/Icon.vue";
-import Tabs from "@/app/components/Tabs.vue";
+import PickField from "@/app/components/PickField.vue";
+import SegToggle from "@/app/components/SegToggle.vue";
+import TimeWheel from "@/app/components/TimeWheel.vue";
+import { formatHhmm, formatIsoDate } from "@/app/utils/pickerHelpers";
+import { usePrefs } from "@/app/composables/usePrefs";
+import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 import {
   addDays,
   dateLabel,
@@ -20,11 +28,7 @@ import {
   weekLabel,
   weekNights,
 } from "@/app/utils/rotaHelpers";
-import {
-  describeSharedError,
-  ownerKey,
-  updatedLine,
-} from "@/app/utils/sharedHelpers";
+import { describeSharedError } from "@/app/utils/sharedHelpers";
 import { displayName, HOME_KEY } from "@/app/composables/useHome";
 import { SHARED_KEY } from "@/app/composables/useShared";
 import { useRotaStore } from "@/app/stores/rota";
@@ -51,9 +55,6 @@ const names = computed(() => ({
 }));
 const nameOf = (who) => names.value[who] ?? "";
 const initialOf = (who) => nameOf(who).trim().charAt(0).toUpperCase();
-const myUid = computed(() => home?.me?.value?.uid || store.meUid);
-const isMine = (owner) => ownerKey(owner, myUid.value) === "me";
-
 // Shared data state. The page waits for the household id, so it never shows an error first.
 const householdId = computed(
   () => home?.householdId?.value ?? store.householdId,
@@ -65,17 +66,63 @@ const errorInfo = computed(() =>
 function retry() {
   shared?.retry();
 }
-const savedLine = computed(() =>
-  updatedLine(store.plan, myUid.value, "you", partnerName.value, new Date()),
+
+const settingsOpen = ref(false);
+// The home card sends you here with #day.
+onMounted(async () => {
+  if (window.location.hash !== "#day") return;
+  await nextTick();
+  document.getElementById("day")?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+const { selectedBaby } = useSelectedBaby();
+// Carers who can see the duty page (the "View who is on duty" permission) can also take nights.
+const firstWord = (full) => {
+  const w = String(full ?? "").trim().split(/\s+/)[0] || "";
+  return w.charAt(0).toUpperCase() + w.slice(1);
+};
+const carers = computed(() =>
+  (home?.members?.value ?? [])
+    .filter((m) => m?.uid && m.accessLevel === "caregiver" && m.permissions?.dutyView === true)
+    .map((m) => ({ uid: m.uid, label: firstWord(m.displayName) || "Carer" })),
 );
-
-const TABS = [
-  { id: "week", label: "This week" },
-  { id: "settings", label: "Plan settings" },
-];
-const tab = ref("settings");
-
+const carerNames = computed(() => [...new Set([...carers.value.map((c) => c.label), ...(store.view.carerNights ?? []).map((c) => c.label)])]);
+const CARER_DAYS = ["M", "T", "W", "T", "F", "S", "S"];
+const CARER_DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const carerDays = (c) => (store.view.carerNights ?? []).find((x) => x.uid === c.uid)?.days ?? [];
+function toggleCarerDay(c, day) {
+  const days = new Set(carerDays(c));
+  if (days.has(day)) days.delete(day);
+  else days.add(day);
+  const rest = (store.view.carerNights ?? []).filter((x) => x.uid !== c.uid);
+  store.setCarerNights([...rest, { uid: c.uid, label: c.label, days: [...days] }]);
+}
+const markText = (night) => (night.who === "other" ? String(night.label || "?").charAt(0).toUpperCase() : initialOf(night.who));
+const babyLabel = computed(() => selectedBaby.value?.babyName || home?.baby?.value?.name || "the baby");
 const todayIso = toIso(new Date());
+const { timeFormat } = usePrefs();
+// Who has the baby right now, for the pill in the header: a painted daytime hour first, then the night plan.
+const carerNow = computed(() => {
+  try {
+    const d = new Date();
+    const hour = d.getHours();
+    const cell = store.view.coverFor?.((d.getDay() + 6) % 7)?.[hour];
+    const label = (who, other) => (who === "me" ? "You" : who === "both" ? "You both" : who === "other" ? other || "Someone else" : nameOf(who));
+    if (cell?.who) return { text: label(cell.who, cell.label), verb: cell.who === "me" || cell.who === "both" ? "are" : "is" };
+    if (hour >= 18 || hour < 6) {
+      const day = new Date(d);
+      if (hour < 6) day.setDate(day.getDate() - 1);
+      const iso = toIso(day);
+      const night = (weekNights(store.view, mondayOf(iso)) || []).find((n) => n.date === iso);
+      if (!night || night.who === "open") return null;
+      const who = night.shared && hour >= 0 && hour < 6 ? night.second : night.who;
+      return { text: who === "other" ? night.label : label(who), verb: who === "me" ? "are" : "is" };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+});
 const currentWeek = mondayOf(new Date());
 const weekStart = ref(currentWeek);
 const nights = computed(() => {
@@ -126,13 +173,6 @@ async function applySuggestion() {
   if (result === "taken")
     sentMessage.value = `You are on duty on ${dateLabel(action.date)} now.`;
 }
-const nightsText = (n) => `${n} ${n === 1 ? "night" : "nights"}`;
-const restLine = computed(
-  () =>
-    `${myName.value} ${nightsText(summary.value.me.onDuty)}, ${partnerName.value} ${nightsText(summary.value.partner.onDuty)}, ` +
-    `longest run ${Math.max(summary.value.me.longestRun, summary.value.partner.longestRun)}.`,
-);
-
 // Night strip and the detail row under it
 const selectedDate = ref(null);
 const selectedNight = computed(
@@ -146,6 +186,12 @@ function selectNight(night) {
 function describeNight(night) {
   if (night.who === "open")
     return { title: "Open", detail: "Nobody is on duty yet." };
+  if (night.who === "other") {
+    return {
+      title: `${night.label} on duty`,
+      detail: `${night.label} has this night every week. Handover at ${handover.value}.`,
+    };
+  }
   if (night.shared) {
     return {
       title: `${nameOf(night.who)} first half, then ${nameOf(night.second)}`,
@@ -163,54 +209,11 @@ function cellLabel(night) {
   return `${dateLabel(night.date)}${today}. ${d.title}`;
 }
 
-// History: earlier weeks, newest first, from the same shared plan.
-const PAGE_WEEKS = 4;
-const historyCount = ref(PAGE_WEEKS);
-const planStart = computed(() =>
-  isIsoDate(store.view.startDate) ? store.view.startDate : null,
-);
-const weekInPlan = (ws) =>
-  !planStart.value || addDays(ws, 6) >= planStart.value;
-const historyWeeks = computed(() => {
-  const out = [];
-  for (let i = 1; i <= historyCount.value; i += 1) {
-    const ws = addDays(currentWeek, -7 * i);
-    if (!weekInPlan(ws)) break;
-    const sum = restSummary(weekNights(store.view, ws));
-    const parts = [
-      `${myName.value} ${nightsText(sum.me.onDuty)}`,
-      `${partnerName.value} ${nightsText(sum.partner.onDuty)}`,
-    ];
-    if (sum.shared) parts.push(`${sum.shared} shared`);
-    if (sum.open) parts.push(`${sum.open} open`);
-    parts.push(
-      `longest run ${Math.max(sum.me.longestRun, sum.partner.longestRun)}`,
-    );
-    out.push({
-      weekStart: ws,
-      label: weekLabel(ws),
-      text: parts.join(", "),
-      me: sum.me.onDuty,
-      partner: sum.partner.onDuty,
-      shared: sum.shared,
-    });
-  }
-  return out;
-});
-const canShowEarlier = computed(
-  () =>
-    historyCount.value < 52 &&
-    weekInPlan(addDays(currentWeek, -7 * (historyCount.value + 1))),
-);
-function showEarlier() {
-  historyCount.value += PAGE_WEEKS;
-}
-
 // Plan settings
 const PATTERN_OPTIONS = [
-  { value: "manual", label: "Set rotation schedule yourself" },
-  { value: "alternate", label: "Alternate nights" },
-  { value: "smart", label: "Use NurtureTrack smart rotation system" },
+  { value: "manual", label: "I will set each night", hint: "Every night starts open. Assign them yourselves from This week." },
+  { value: "alternate", label: "Alternate nights", hint: "You take turns owning the whole night." },
+  { value: "smart", label: "Plan around early starts", hint: "Tell us your early mornings and we protect them." },
 ];
 const selectedPattern = ref("alternate");
 
@@ -280,25 +283,6 @@ function readLocalPlan() {
   }
 }
 
-function buildLocalPlan() {
-  return setupDays.value.map((day, index) => {
-    const followingMorning = addDateOnly(day.date, 1);
-    let who = index % 2 === 0 ? "me" : "partner";
-    let resting = null;
-
-    if (earlyStarts.value.me.includes(followingMorning)) {
-      who = "partner";
-      resting = "me";
-    }
-    if (earlyStarts.value.partner.includes(followingMorning)) {
-      who = "me";
-      resting = "partner";
-    }
-
-    return { date: day.date, who, resting, shared: false, source: "smart" };
-  });
-}
-
 readLocalPlan();
 
 function addDateOnly(value, amount) {
@@ -317,6 +301,31 @@ const setupDays = computed(() => {
     return { date, label: weekdayShort(date), number: dayNumber(date) };
   });
 });
+const startOpen = ref(false);
+const handoverOpen = ref(false);
+const startModel = computed({
+  get: () => setupStartDate.value,
+  set: (v) => {
+    if (!isIsoDate(v)) return;
+    setupStartDate.value = v;
+    store.setStartDate(v);
+  },
+});
+const handoverMode = computed({
+  get: () => (handoverEnabled.value ? "on" : "off"),
+  set: (v) => {
+    handoverEnabled.value = v === "on";
+    if (v !== "on") handoverOpen.value = false;
+  },
+});
+const HANDOVER_MODES = [
+  { value: "off", label: "Whole night" },
+  { value: "on", label: "Hand over mid-night" },
+];
+const takeoverOptions = computed(() => [
+  { value: "me", label: myName.value },
+  { value: "partner", label: partnerName.value },
+]);
 const confirmReset = ref(false);
 const setupStatus = ref("");
 async function doReset() {
@@ -333,20 +342,11 @@ async function doReset() {
     confirmReset.value = false;
     selectedDate.value = null;
     weekStart.value = currentWeek;
-    tab.value = "week";
+    settingsOpen.value = false;
   } catch (error) {
     console.error("Could not reset rota", error);
   }
 }
-function onStart(event) {
-  if (!event.target.value) return;
-  setupStartDate.value = event.target.value;
-  store.setStartDate(event.target.value);
-}
-function onHandover(event) {
-  if (event.target.value) store.setHandoverTime(event.target.value);
-}
-
 function toggleEarlyStart(who, date) {
   const current = earlyStarts.value[who];
   earlyStarts.value = {
@@ -385,7 +385,7 @@ async function finishSetup() {
     return;
   }
 
-  tab.value = "week";
+  settingsOpen.value = false;
   weekStart.value = mondayOf(new Date(`${setupStartDate.value}T00:00:00`));
   setupStatus.value = "Your plan is being prepared…";
 
@@ -450,21 +450,18 @@ async function finishSetup() {
 
 <template>
   <div class="rt">
-    <header class="rt__head">
-      <h1 class="nt-title rt__title">Sleep rotation</h1>
-      <p class="rt__sub">
-        Set up the week around both parents’ early starts, then review the
-        shared calendar.
-      </p>
+    <header class="rt__hero">
+      <div class="rt__hero-text">
+        <p class="rt__eyebrow">Taking turns with {{ partnerName }}</p>
+        <h1 class="rt__title">Duty</h1>
+        <p class="rt__lead">Who is looking after {{ babyLabel }}, day and night.</p>
+        <p v-if="carerNow" class="rt__pill">
+          <span class="rt__pill-dot" aria-hidden="true"></span>
+          <span>Now: {{ carerNow.text }} {{ carerNow.verb }} looking after {{ babyLabel }}</span>
+        </p>
+      </div>
     </header>
     <BabySwitch />
-
-    <Tabs
-      v-model="tab"
-      :tabs="TABS"
-      label="Sleep rotation sections"
-      id-base="rota"
-    />
 
     <div aria-live="polite">
       <LoadingScreen v-if="loading" variant="inline" label="Loading the rota" />
@@ -477,7 +474,7 @@ async function finishSetup() {
     >
       <p class="mb-0">{{ errorInfo.text }}</p>
       <p v-if="errorInfo.detail" class="rt__muted">{{ errorInfo.detail }}</p>
-      <button type="button" class="app-textbtn" @click="retry">
+      <button type="button" class="rt__link" @click="retry">
         Try again
       </button>
     </div>
@@ -487,19 +484,17 @@ async function finishSetup() {
         {{ store.writeError }}
       </p>
 
-      <!-- This week -->
-      <div
-        v-if="tab === 'week'"
-        id="rota-panel-week"
-        class="rt__week-panel"
-        role="tabpanel"
-        aria-labelledby="rota-tab-week"
-      >
-        <div class="rt__main">
-          <section
-            class="rt__block rt__card"
-            aria-labelledby="rota-week-heading"
-          >
+      <!-- Day -->
+      <section id="day" class="rt__card rt__daycard" aria-labelledby="rt-day">
+        <h2 id="rt-day" class="rt__h2">Day</h2>
+        <p class="rt__muted">Who looks after {{ babyLabel }} from 6 AM to 6 PM. Tap or drag on a day to add a shift.</p>
+        <DaySchedule :rota="store.view" :names="names" :has-partner="Boolean(home?.partner?.value)" :baby-label="babyLabel" :carers="carerNames" @save="store.setSchedule" />
+      </section>
+
+      <!-- Night -->
+      <section class="rt__card rt__nightcard" aria-labelledby="rt-night">
+        <h2 id="rt-night" class="rt__h2">Night</h2>
+        <div class="rt__block rt__weekblock">
             <h2 id="rota-week-heading" class="visually-hidden">
               Nights this week
             </h2>
@@ -526,7 +521,7 @@ async function finishSetup() {
               <button
                 v-if="weekStart !== currentWeek"
                 type="button"
-                class="app-textbtn"
+                class="rt__link"
                 @click="goToThisWeek"
               >
                 This week
@@ -579,7 +574,7 @@ async function finishSetup() {
                       />
                     </svg>
                     <template v-else-if="night.who === 'open'"></template>
-                    <template v-else>{{ initialOf(night.who) }}</template>
+                    <template v-else>{{ markText(night) }}</template>
                   </span>
                   <span class="rt__tonight">{{
                     night.date === todayIso ? "Tonight" : ""
@@ -593,8 +588,10 @@ async function finishSetup() {
             </p>
             <div v-else class="visually-hidden" role="status"></div>
 
+            <Collapse>
             <div
               v-if="selectedNight"
+              :key="selectedNight.date"
               class="rt__detail"
               :data-detail="selectedNight.date"
             >
@@ -609,14 +606,14 @@ async function finishSetup() {
                 <template v-if="selectedNight.who === 'open'">
                   <button
                     type="button"
-                    class="app-textbtn"
+                    class="rt__link"
                     @click="assignSelectedNight('me')"
                   >
                     I take it
                   </button>
                   <button
                     type="button"
-                    class="app-textbtn"
+                    class="rt__link"
                     @click="assignSelectedNight('partner')"
                   >
                     {{ partnerName }} takes it
@@ -626,7 +623,7 @@ async function finishSetup() {
                   <button
                     v-if="selectedNight.source === 'override'"
                     type="button"
-                    class="app-textbtn"
+                    class="rt__link"
                     @click="store.setOverride(selectedNight.date, null)"
                   >
                     {{
@@ -638,147 +635,104 @@ async function finishSetup() {
                 </template>
               </p>
             </div>
-          </section>
-        </div>
+            </Collapse>
+                  </div>
 
-        <div class="rt__rail">
-          <section class="rt__block rt__card" aria-labelledby="rota-rest">
+        <div class="rt__rest">
             <div class="rt__card-head">
               <span class="rt__icon-sq" aria-hidden="true"
                 ><Icon name="moon" :size="18"
               /></span>
               <h2 id="rota-rest" class="rt__h2">Rest check</h2>
             </div>
-            <p class="rt__text">{{ restLine }}</p>
-            <div
-              class="rt__bar"
-              role="img"
-              :aria-label="`${myName}: ${summary.me.onDuty} of 7 nights on duty. ${partnerName}: ${summary.partner.onDuty} of 7 nights on duty.`"
-            >
-              <span
-                class="rt__seg rt__seg--me"
-                :style="{ flexGrow: summary.me.onDuty }"
-              ></span>
-              <span
-                class="rt__seg rt__seg--shared"
-                :style="{ flexGrow: summary.shared }"
-              ></span>
-              <span
-                class="rt__seg rt__seg--partner"
-                :style="{ flexGrow: summary.partner.onDuty }"
-              ></span>
-            </div>
-            <p v-if="summary.shared || summary.open" class="rt__muted">
-              <span v-if="summary.shared"
-                >{{ summary.shared }} shared nights.
-              </span>
-              <span v-if="summary.open"
-                >{{ summary.open }} nights still open.</span
-              >
-            </p>
-            <p class="rt__text">{{ suggestion.text }}</p>
-            <p v-if="suggestion.action" class="rt__detail-actions">
-              <button
-                type="button"
-                class="app-textbtn"
-                @click="applySuggestion"
-              >
-                Apply suggestion
-              </button>
-            </p>
-            <p class="rt__muted">
-              Discuss any changes together, then adjust the night card directly.
-            </p>
-          </section>
-
-          <section class="rt__block rt__card" aria-labelledby="rota-past">
-            <h2 id="rota-past" class="rt__h2">History</h2>
-            <p v-if="!historyWeeks.length" class="rt__muted">
-              No earlier weeks yet.
-            </p>
-            <ul v-else class="rt__weeks">
-              <li
-                v-for="w in historyWeeks"
-                :key="w.weekStart"
-                class="rt__past"
-                :data-week="w.weekStart"
-              >
-                <p class="rt__text">
-                  <strong>{{ w.label }}</strong
-                  >: {{ w.text }}.
-                </p>
-                <div class="rt__bar rt__bar--thin" aria-hidden="true">
-                  <span
-                    class="rt__seg rt__seg--me"
-                    :style="{ flexGrow: w.me }"
-                  ></span>
-                  <span
-                    class="rt__seg rt__seg--shared"
-                    :style="{ flexGrow: w.shared }"
-                  ></span>
-                  <span
-                    class="rt__seg rt__seg--partner"
-                    :style="{ flexGrow: w.partner }"
-                  ></span>
-                </div>
+            <ul class="rt__counts" aria-label="Nights on duty this week">
+              <li class="rt__count">
+                <span class="rt__mark rt__mark--me" aria-hidden="true">{{ initialOf("me") }}</span>
+                <span><strong>{{ summary.me.onDuty }}</strong> {{ summary.me.onDuty === 1 ? "night" : "nights" }}</span>
+              </li>
+              <li class="rt__count">
+                <span class="rt__mark rt__mark--partner" aria-hidden="true">{{ initialOf("partner") }}</span>
+                <span><strong>{{ summary.partner.onDuty }}</strong> {{ summary.partner.onDuty === 1 ? "night" : "nights" }}</span>
+              </li>
+              <li v-if="summary.carer" class="rt__count">
+                <span class="rt__mark rt__mark--other" aria-hidden="true">+</span>
+                <span><strong>{{ summary.carer }}</strong> {{ summary.carer === 1 ? "night" : "nights" }} with a carer</span>
               </li>
             </ul>
-            <p v-if="canShowEarlier" class="rt__detail-actions">
-              <button type="button" class="app-textbtn" @click="showEarlier">
-                Show earlier weeks
-              </button>
+            <p class="rt__text">{{ suggestion.short || suggestion.text }}</p>
+            <p v-if="suggestion.action" class="rt__detail-actions">
+              <button type="button" class="rt__link" @click="applySuggestion">Apply</button>
             </p>
-          </section>
-        </div>
-      </div>
+                  </div>
 
-      <!-- Plan settings -->
-      <div
-        v-else
-        id="rota-panel-settings"
-        class="rt__single rt__card rt__settings"
-        role="tabpanel"
-        aria-labelledby="rota-tab-settings"
-      >
-        <div class="rt__cols">
-          <div class="rt__col">
-            <fieldset class="rt__fieldset">
-              <legend class="rt__label">Pattern</legend>
-              <label
-                v-for="o in PATTERN_OPTIONS"
-                :key="o.value"
-                class="rt__radio"
-              >
-                <input
-                  type="radio"
-                  name="rota-pattern"
-                  :value="o.value"
-                  :checked="selectedPattern === o.value"
-                  @change="onPatternChange(o.value)"
-                />
-                <span>{{ o.label }}</span>
-              </label>
-              <p v-if="selectedPattern === 'manual'" class="rt__muted">
-                Every night starts open. You can assign each night yourself from
-                This week.
-              </p>
-              <p v-else-if="selectedPattern === 'alternate'" class="rt__muted">
-                Mum and Dad take turns owning the whole night.
-              </p>
-              <p v-else class="rt__muted">
-                NurtureTrack uses early starts and whole-night balance to
-                suggest the plan for you.
-              </p>
-            </fieldset>
+        <button type="button" class="rt__settingsbtn" :aria-expanded="settingsOpen ? 'true' : 'false'" aria-controls="rt-settings" @click="settingsOpen = !settingsOpen">
+          <span>Night plan settings</span>
+          <Icon name="chevron-down" :size="16" class="rt__settingschev" />
+        </button>
+        <Collapse>
+          <div v-if="settingsOpen" id="rt-settings" class="rt__settings">
+        <section class="rt__sec" aria-labelledby="rt-s-pattern">
+          <h2 id="rt-s-pattern" class="rt__h2">How should nights be shared?</h2>
+          <div class="rt__choices" role="radiogroup" aria-labelledby="rt-s-pattern">
+            <label
+              v-for="o in PATTERN_OPTIONS"
+              :key="o.value"
+              class="rt__choice"
+              :class="{ 'rt__choice--on': selectedPattern === o.value }"
+            >
+              <input type="radio" name="rota-pattern" :value="o.value" :checked="selectedPattern === o.value" @change="onPatternChange(o.value)" />
+              <span class="rt__choice-text">
+                <span class="rt__choice-title">{{ o.label }}</span>
+                <span class="rt__choice-hint">{{ o.hint }}</span>
+              </span>
+            </label>
+          </div>
+        </section>
 
+        <section class="rt__sec" aria-labelledby="rt-s-carers">
+          <h2 id="rt-s-carers" class="rt__h2">Night carers</h2>
+          <p v-if="!carers.length" class="rt__muted">
+            Helpers and family you invite can take fixed nights once "View who is on duty" is on for them in Caregiver access.
+          </p>
+          <template v-else>
+            <p class="rt__muted">Pick the nights each carer takes every week. You and your partner share the rest.</p>
+            <div v-for="c in carers" :key="c.uid" class="rt__carer">
+              <span class="rt__carer-name">{{ c.label }}</span>
+              <div class="rt__dchips" role="group" :aria-label="`Nights for ${c.label}`">
+                <button
+                  v-for="(d, i) in CARER_DAYS"
+                  :key="i"
+                  type="button"
+                  class="rt__dchip"
+                  :class="{ 'rt__dchip--on': carerDays(c).includes(i) }"
+                  :aria-pressed="carerDays(c).includes(i) ? 'true' : 'false'"
+                  :aria-label="CARER_DAY_NAMES[i]"
+                  @click="toggleCarerDay(c, i)"
+                >{{ d }}</button>
+              </div>
+            </div>
+          </template>
+        </section>
+
+        <section class="rt__sec" aria-labelledby="rt-s-start">
+          <h2 id="rt-s-start" class="rt__h2">When does it start?</h2>
+          <div class="rt__field">
+            <PickField label="Plan starts" :value="formatIsoDate(setupStartDate)" :open="startOpen" placeholder="Pick a day" @toggle="startOpen = !startOpen" />
+            <Collapse>
+              <div v-if="startOpen" class="rt__wheel"><DateWheel v-model="startModel" label="Plan start date" /></div>
+            </Collapse>
+          </div>
+        </section>
+
+        <Collapse>
+          <section v-if="selectedPattern === 'smart'" class="rt__sec" aria-label="Early starts">
             <fieldset
               v-if="selectedPattern === 'smart'"
               class="rt__fieldset rt__early-fieldset"
             >
-              <legend class="rt__label">Early start planning</legend>
+              <legend>Early starts</legend>
               <p class="rt__muted">
-                Select the mornings when each parent needs extra protected
-                sleep. The other parent will handle the night before.
+                Tap the mornings each of you needs extra sleep. The other parent covers the night before.
               </p>
 
               <div class="rt__early-section">
@@ -817,7 +771,7 @@ async function finishSetup() {
                     v-for="day in setupDays"
                     :key="`dad-${day.date}`"
                     type="button"
-                    class="rt__early-day rt__early-day--dad"
+                    class="rt__early-day"
                     :class="{
                       'rt__early-day--selected-dad': hasEarlyStart(
                         'partner',
@@ -838,75 +792,34 @@ async function finishSetup() {
                 </div>
               </div>
             </fieldset>
-          </div>
-          <div class="rt__col">
-            <div class="rt__fields">
-              <label class="rt__field">
-                <span class="rt__label">Start date</span>
-                <input
-                  class="app-control"
-                  type="date"
-                  :value="setupStartDate"
-                  @change="onStart"
-                />
-              </label>
-              <fieldset
-                v-if="selectedPattern === 'manual'"
-                class="rt__fieldset rt__handover-fieldset"
-              >
-                <legend class="rt__label">Optional mid-night handover</legend>
-                <label class="rt__radio">
-                  <input v-model="handoverEnabled" type="checkbox" />
-                  <span>Use a handover in the middle of the night</span>
-                </label>
-                <template v-if="handoverEnabled">
-                  <label class="rt__field">
-                    <span class="rt__label">Handover at</span>
-                    <input
-                      v-model="handoverClock"
-                      class="app-control"
-                      type="time"
-                    />
-                  </label>
-                  <label class="rt__field">
-                    <span class="rt__label">Who takes over?</span>
-                    <select v-model="handoverParent" class="app-control">
-                      <option value="me">{{ myName }}</option>
-                      <option value="partner">{{ partnerName }}</option>
-                    </select>
-                  </label>
-                  <p class="rt__muted">
-                    The primary parent starts the night. The selected parent
-                    takes over at this time.
-                  </p>
-                </template>
-              </fieldset>
-            </div>
+          </section>
+        </Collapse>
 
-            <p v-if="savedLine" class="rt__muted">{{ savedLine }}</p>
-          </div>
-        </div>
+        <Collapse>
+          <section v-if="selectedPattern === 'manual'" class="rt__sec" aria-labelledby="rt-s-hand">
+            <h2 id="rt-s-hand" class="rt__h2">Hand over in the night?</h2>
+            <p class="rt__muted">Split a night so one of you sleeps first and the other takes over.</p>
+            <SegToggle v-model="handoverMode" :options="HANDOVER_MODES" label="Night style" class="rt__seg" />
+            <Collapse>
+              <div v-if="handoverEnabled" class="rt__stack">
+                <div class="rt__field">
+                  <PickField label="Handover at" icon="clock" :value="formatHhmm(handoverClock, timeFormat)" :open="handoverOpen" placeholder="Pick a time" @toggle="handoverOpen = !handoverOpen" />
+                  <Collapse>
+                    <div v-if="handoverOpen" class="rt__wheel"><TimeWheel v-model="handoverClock" label="Handover time" /></div>
+                  </Collapse>
+                </div>
+                <div class="rt__field">
+                  <span class="rt__label">Who takes over?</span>
+                  <SegToggle v-model="handoverParent" :options="takeoverOptions" label="Who takes over" />
+                </div>
+              </div>
+            </Collapse>
+          </section>
+        </Collapse>
 
-        <div class="rt__setup-next">
-          <p class="rt__muted">
-            Your settings and early starts will be used to fill the This week
-            calendar.
-          </p>
-          <button
-            type="button"
-            class="app-button rt__save-button"
-            @click.stop.prevent="finishSetup"
-          >
-            {{
-              selectedPattern === "smart"
-                ? "Generate suggested plan →"
-                : "Save settings and view This week →"
-            }}
-          </button>
-          <p v-if="setupStatus" class="rt__setup-status" role="status">
-            {{ setupStatus }}
-          </p>
-        </div>
+        <button type="button" class="rt__btn rt__go" @click.stop.prevent="finishSetup">
+          {{ selectedPattern === "smart" ? "Generate suggested plan" : "Save and view This week" }}
+        </button>
 
         <div v-if="!confirmReset" class="rt__foot">
           <button type="button" class="rt__danger" @click="confirmReset = true">
@@ -927,550 +840,169 @@ async function finishSetup() {
           </button>
           <button
             type="button"
-            class="app-textbtn"
+            class="rt__link"
             @click="confirmReset = false"
           >
             Keep plan
           </button>
         </div>
-      </div>
+                </div>
+        </Collapse>
+      </section>
     </template>
   </div>
 </template>
 
 <style scoped>
 .rt {
+  --navy: #243560;
+  --navy-2: #2d3f70;
+  --ink: #1f2a52;
+  --cream: #fdf9f0;
+  --sand: #e9d9b8;
+  --apricot: #f2a477;
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  margin: 0;
-  font-size: 1rem;
-}
-.rt__head {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.rt__title {
-  font-size: 2.5rem;
-  line-height: 1.2;
-}
-.rt__sub {
-  margin: 0;
-  font-size: 1rem;
-  color: var(--nt-muted);
-}
-.rt__muted {
-  margin: 0;
-  font-size: 0.875rem;
-  line-height: 1.45;
-  color: var(--nt-muted);
-}
-.rt__text {
-  margin: 0;
-  font-size: 0.9375rem;
-  line-height: 1.5;
-  color: var(--nt-ink);
-}
-.rt__h2 {
-  margin: 0;
-  font-family: inherit;
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--nt-ink);
-}
-
-.rt__card {
-  background: var(--nt-surface, #fff);
-  border: 1px solid var(--nt-line);
-  border-radius: 12px;
-  padding: 24px;
-}
-.rt__card-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.rt__icon-sq {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--nt-powder);
-  color: var(--nt-plum);
-}
-
-.rt__week-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
-}
-.rt__main,
-.rt__rail {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  min-width: 0;
-}
-.rt__block {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  align-items: flex-start;
-  min-width: 0;
-}
-.rt__block > * {
-  max-width: 100%;
-}
-
-.rt__nav {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.rt__week {
-  margin: 0 8px;
-  min-width: 150px;
-  text-align: center;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--nt-ink);
-}
-.rt__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  color: var(--nt-muted);
-  cursor: pointer;
-}
-.rt__icon:hover {
-  color: var(--nt-ink);
-}
-.rt__icon:focus-visible {
-  outline: 2px solid var(--nt-plum);
-  outline-offset: 2px;
-}
-
-.rt__strip {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 8px;
+  gap: 20px;
   width: 100%;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.rt__cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  min-height: 168px;
-  padding: 14px 2px 12px;
-  background: var(--nt-surface, #fff);
-  border: 1px solid var(--nt-line);
-  border-radius: 10px;
-  font: inherit;
-  color: var(--nt-ink);
-  cursor: pointer;
-}
-.rt__cell:hover {
-  background: rgb(59 47 63 / 4%);
-}
-.rt__cell:focus-visible {
-  outline: 2px solid var(--nt-plum);
-  outline-offset: 2px;
-}
-.rt__cell--on {
-  background: rgb(59 47 63 / 6%);
-  border-color: var(--nt-muted);
-}
-.rt__cell--today {
-  border-color: var(--nt-plum);
-}
-.rt__dow {
-  font-size: 0.875rem;
-  color: var(--nt-muted);
-}
-.rt__num {
-  font-size: 1.75rem;
-  font-weight: 600;
-  line-height: 1.15;
-}
-.rt__mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--nt-muted);
-  border-radius: 50%;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--nt-ink);
-}
-.rt__mark--me {
-  border-color: var(--nt-apricot-d);
-  background: var(--nt-apricot);
-}
-.rt__mark--partner {
-  border-color: var(--nt-powder-d);
-  background: var(--nt-powder);
-}
-.rt__mark--open {
-  border-style: dashed;
-  border-color: var(--nt-muted);
-}
-.rt__mark--split {
-  border: 0;
-  color: var(--nt-plum);
-}
-.rt__moon {
-  display: block;
-}
-.rt__tonight {
-  min-height: 18px;
-  white-space: nowrap;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 18px;
-  color: var(--nt-plum);
+  max-width: 1020px;
+  margin: 0 auto;
+  color: var(--ink);
 }
 
-.rt__detail {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  padding: 16px 0 0;
-  border-top: 1px solid var(--nt-line);
-}
-.rt__detail-title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--nt-ink);
-}
-.rt__detail-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 20px;
-  margin: 0;
-}
-.rt__label {
-  margin: 0;
-  padding: 0;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--nt-ink);
-}
-.rt__fieldset {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.rt__fieldset legend {
-  float: none;
-  width: auto;
-  margin-bottom: 4px;
-}
-.rt__radio {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 32px;
-  font-size: 0.9375rem;
-  color: var(--nt-ink);
-  cursor: pointer;
-}
-.rt__radio input {
-  width: 18px;
-  height: 18px;
-  margin: 0;
-  accent-color: var(--nt-plum);
-  cursor: pointer;
-}
-.rt__radio input:focus-visible {
-  outline: 2px solid var(--nt-plum);
-  outline-offset: 2px;
-}
-.rt__select {
-  max-width: 280px;
-}
+/* Hero, the same as the Care log and Checklist */
+.rt__hero { padding: 32px 40px; background: var(--navy-2); border-radius: 28px; border-bottom: 5px solid #182246; color: #fff; }
+.rt__hero-text { display: flex; flex-direction: column; gap: 10px; }
+.rt__eyebrow { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--apricot); }
+.rt__title { margin: 0; font-family: var(--nt-serif); font-size: 2.5rem; line-height: 1.05; font-weight: 700; color: #fff; }
+.rt__lead { margin: 0; font-size: 1.0625rem; color: #dfe5f7; }
+.rt__pill { display: inline-flex; align-items: center; align-self: flex-start; gap: 8px; margin: 6px 0 0; padding: 8px 16px; border: 1px solid rgb(255 255 255 / 35%); border-radius: 999px; background: rgb(255 255 255 / 10%); font-size: 0.9375rem; }
+.rt__pill-dot { width: 10px; height: 10px; border-radius: 50%; background: #8fd19e; }
+.rt__daycard, .rt__nightcard { display: flex; flex-direction: column; gap: 14px; }
+.rt__weekblock { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+.rt__rest { display: flex; flex-direction: column; gap: 12px; padding-top: 18px; border-top: 1.5px dashed var(--sand); }
+.rt__settingsbtn { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 14px 18px; background: #fffdf8; border: 1.5px solid var(--sand); border-radius: 16px; font-family: inherit; font-size: 1rem; font-weight: 600; color: var(--navy); cursor: pointer; transition: border-color 0.18s ease, background-color 0.18s ease; }
+.rt__settingsbtn:hover { border-color: var(--navy); background: #fff; }
+.rt__settingsbtn:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
+.rt__settingschev { transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.rt__settingsbtn[aria-expanded="true"] .rt__settingschev { transform: rotate(180deg); }
+.rt__settings { display: flex; flex-direction: column; gap: 24px; padding-top: 8px; }
 
-.rt__bar {
-  display: flex;
-  width: 100%;
-  height: 6px;
-  overflow: hidden;
-  background: var(--nt-line);
-  border-radius: 3px;
-}
-.rt__bar--thin {
-  height: 4px;
-}
-.rt__seg {
-  display: block;
-  flex-basis: 0;
-  flex-shrink: 0;
-  min-width: 0;
-}
-.rt__seg--me {
-  background: var(--nt-apricot-d);
-}
-.rt__seg--partner {
-  background: var(--nt-powder-d);
-}
-.rt__seg--shared {
-  background: #b9b0bc;
-}
+.rt__counts { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 0; list-style: none; }
+.rt__count { display: flex; align-items: center; gap: 8px; font-size: 0.9375rem; color: var(--ink); }
+.rt__muted { margin: 0; font-size: 0.875rem; line-height: 1.45; color: #6b7392; }
+.rt__text { margin: 0; font-size: 0.9375rem; line-height: 1.5; color: var(--ink); }
+.rt__h2 { margin: 0; font-family: var(--nt-serif); font-size: 1.5rem; font-weight: 700; color: var(--ink); }
+.rt__label { margin: 0; padding: 0; font-size: 0.875rem; font-weight: 600; color: var(--ink); }
 
-.rt__weeks {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border-top: 1px solid var(--nt-line);
-}
-.rt__past {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--nt-line);
-}
+/* Cards */
+.rt__card { background: var(--cream); border: 1px solid var(--sand); border-bottom-width: 4px; border-radius: 24px; padding: 24px 28px 28px; }
+.rt__card-head { display: flex; align-items: center; gap: 12px; }
+.rt__icon-sq { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; border-radius: 12px; background: var(--navy); color: #fff; }
 
-.rt__error {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  max-width: 720px;
-}
-.rt__single {
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-}
-.rt__single section .rt__h2 {
-  margin-bottom: 8px;
-}
-.rt__list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border-top: 1px solid var(--nt-line);
-}
-.rt__item {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--nt-line);
-}
-.rt__name {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 500;
-  color: var(--nt-ink);
-}
-.rt__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 20px;
-}
-.rt__cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 28px;
-}
-.rt__col {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  min-width: 0;
-}
-.rt__fields {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.rt__field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 280px;
-}
-.rt__foot {
-  padding-top: 20px;
-  border-top: 1px solid var(--nt-line);
-}
-.rt__confirm {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 20px;
-}
-.rt__danger {
-  padding: 0;
-  background: none;
-  border: 0;
-  font: inherit;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--nt-coral);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-.rt__danger:focus-visible {
-  outline: 2px solid var(--nt-plum);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
+.rt__block { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; min-width: 0; }
+.rt__block > * { max-width: 100%; }
 
-@media (min-width: 900px) {
-  .rt__cols {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 48px;
-  }
-}
-@media (min-width: 1100px) {
-  .rt__week-panel {
-    grid-template-columns: minmax(0, 1fr) 360px;
-  }
-}
+/* Week navigation */
+.rt__nav { display: flex; align-items: center; gap: 8px; }
+.rt__week { margin: 0 6px; min-width: 150px; text-align: center; font-family: var(--nt-serif); font-size: 1.25rem; font-weight: 700; color: var(--ink); }
+.rt__icon { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; background: #fffdf8; border: 1.5px solid var(--sand); border-radius: 50%; color: var(--navy); cursor: pointer; transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.rt__icon:hover { border-color: var(--navy); background: #fff; }
+.rt__icon:active { transform: scale(0.92); }
+.rt__icon:focus-visible, .rt__cell:focus-visible, .rt__link:focus-visible, .rt__btn:focus-visible, .rt__early-day:focus-visible, .rt__choice:focus-within { outline: 3px solid var(--navy); outline-offset: 2px; }
+
+/* The seven nights */
+.rt__strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; width: 100%; margin: 0; padding: 0; list-style: none; }
+.rt__cell { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; min-height: 160px; padding: 14px 2px 12px; background: #fffdf8; border: 1.5px solid var(--sand); border-bottom-width: 3px; border-radius: 20px; font: inherit; color: var(--ink); cursor: pointer; transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.2s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.rt__cell:hover { background: #fff; transform: translateY(-2px); }
+.rt__cell:active { transform: scale(0.97); }
+.rt__cell--on { background: #fff; border-color: var(--navy); box-shadow: 0 0 0 3px rgb(36 53 96 / 12%); }
+.rt__cell--today { border-color: var(--apricot); }
+.rt__cell--today.rt__cell--on { border-color: var(--navy); }
+.rt__dow { font-size: 0.875rem; font-weight: 500; color: #6b7392; }
+.rt__num { font-family: var(--nt-serif); font-size: 1.75rem; font-weight: 700; line-height: 1.15; }
+.rt__mark { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border: 1.5px solid var(--navy); border-radius: 50%; font-size: 0.875rem; font-weight: 700; color: var(--navy); }
+.rt__mark--me { background: var(--navy); color: #fff; }
+.rt__mark--partner { background: var(--sand); }
+.rt__mark--other { background: #cfe3d4; color: #2f5d43; border-color: #aecab7; }
+.rt__carer { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; background: #fffdf8; border: 1.5px solid var(--sand); border-radius: 16px; }
+.rt__carer-name { font-weight: 700; color: var(--ink); }
+.rt__dchips { display: flex; gap: 6px; flex-wrap: wrap; }
+.rt__dchip { width: 40px; height: 40px; border-radius: 50%; border: 1.5px solid var(--sand); background: #fff; font-family: inherit; font-size: 0.8125rem; font-weight: 700; color: var(--navy); cursor: pointer; transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease; }
+.rt__dchip:hover { border-color: var(--navy); }
+.rt__dchip--on { background: #cfe3d4; border-color: #2f5d43; color: #2f5d43; }
+.rt__dchip:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
+.rt__mark--open { border-style: dashed; border-color: #9aa3c4; }
+.rt__mark--split { border: 0; color: var(--navy); }
+.rt__moon { display: block; }
+.rt__tonight { min-height: 18px; white-space: nowrap; font-size: 0.8125rem; font-weight: 700; line-height: 18px; color: #c4642f; }
+
+.rt__detail { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 16px 0 0; border-top: 1.5px dashed var(--sand); }
+.rt__detail-title { margin: 0; font-size: 1rem; font-weight: 600; color: var(--ink); }
+.rt__detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+
+/* Text buttons become small navy pills */
+.rt__link { padding: 6px 16px; background: transparent; border: 1.5px solid var(--navy); border-radius: 999px; font-family: inherit; font-size: 0.875rem; font-weight: 600; color: var(--navy); cursor: pointer; transition: background-color 0.18s ease, color 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.rt__link:hover { background: var(--navy); color: #fff; }
+.rt__link:active { transform: scale(0.96); }
+
+/* History */
+
+/* Settings */
+.rt__error { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-width: 720px; }
+.rt__sec { display: flex; flex-direction: column; gap: 12px; padding-bottom: 24px; border-bottom: 1.5px dashed var(--sand); }
+.rt__choices { display: flex; flex-direction: column; gap: 10px; }
+.rt__choice-text { display: flex; flex-direction: column; gap: 2px; }
+.rt__choice-title { font-size: 1rem; font-weight: 600; }
+.rt__choice-hint { font-size: 0.875rem; font-weight: 400; color: #6b7392; }
+.rt__stack { display: flex; flex-direction: column; gap: 16px; padding-top: 4px; }
+.rt__seg { max-width: 420px; }
+.rt__fields { display: flex; flex-direction: column; gap: 18px; }
+.rt__field { display: flex; flex-direction: column; gap: 8px; max-width: 340px; }
+.rt__wheel { padding-top: 2px; }
+.rt__fieldset { display: flex; flex-direction: column; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.rt__fieldset legend { float: none; width: auto; margin-bottom: 4px; font-family: var(--nt-serif); font-size: 1.375rem; font-weight: 700; color: var(--ink); }
+
+.rt__choice { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #fffdf8; border: 1.5px solid var(--sand); border-radius: 16px; font-size: 0.9375rem; font-weight: 500; color: var(--ink); cursor: pointer; transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease; }
+.rt__choice:hover { border-color: var(--navy); background: #fff; }
+.rt__choice input { width: 18px; height: 18px; margin: 0; accent-color: var(--navy); cursor: pointer; }
+.rt__choice--on { border-color: var(--navy); background: #fff; box-shadow: 0 0 0 3px rgb(36 53 96 / 12%); font-weight: 600; }
+
+.rt__early-fieldset { width: 100%; }
+.rt__early-section { margin-top: 10px; }
+.rt__early-heading { margin: 0 0 12px; font-size: 0.9375rem; font-weight: 600; color: var(--ink); }
+.rt__early-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.rt__early-day { display: grid; gap: 4px; min-width: 0; padding: 10px 4px; background: #fffdf8; border: 1.5px solid var(--sand); border-radius: 14px; color: #6b7392; font-family: inherit; cursor: pointer; transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.rt__early-day:hover { border-color: var(--navy); }
+.rt__early-day:active { transform: scale(0.95); }
+.rt__early-day span { font-size: 0.6875rem; }
+.rt__early-day strong { color: var(--ink); font-size: 1rem; }
+.rt__early-day small { font-size: 0.625rem; }
+.rt__early-day--selected { background: var(--navy); border-color: var(--navy); color: #fff; }
+.rt__early-day--selected-dad { background: var(--sand); border-color: var(--navy); color: var(--navy); }
+.rt__early-day--selected strong { color: #fff; }
+.rt__early-day--selected-dad strong { color: var(--navy); }
+
+.rt__btn { flex: none; padding: 12px 28px; background: var(--navy); border: 0; border-bottom: 3px solid #182246; border-radius: 14px; font-family: inherit; font-size: 1rem; font-weight: 600; color: #fff; cursor: pointer; transition: background-color 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.rt__go { align-self: flex-start; }
+.rt__btn:hover { background: var(--navy-2); }
+.rt__btn:active { transform: translateY(1px) scale(0.98); }
+
+.rt__foot { padding-top: 4px; }
+.rt__confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.rt__danger { padding: 0; background: none; border: 0; font: inherit; font-size: 0.875rem; font-weight: 600; color: #a8473f; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.rt__danger:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; border-radius: 4px; }
 @media (max-width: 575px) {
-  .rt__title {
-    font-size: 2rem;
-  }
-  .rt__card {
-    padding: 20px 16px;
-  }
-  .rt__strip {
-    gap: 4px;
-  }
-  .rt__cell {
-    min-height: 128px;
-  }
-  .rt__num {
-    font-size: 1.25rem;
-  }
-  .rt__mark {
-    width: 24px;
-    height: 24px;
-  }
+  .rt__hero { padding: 24px 20px; }
+  .rt__title { font-size: 2rem; }
+  .rt__card { padding: 20px 16px; }
+  .rt__strip { gap: 4px; }
+  .rt__cell { min-height: 124px; border-radius: 14px; }
+  .rt__num { font-size: 1.25rem; }
+  .rt__mark { width: 26px; height: 26px; }
 }
-.rt__setup-next {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid var(--nt-line);
-}
-.rt__setup-next .rt__muted {
-  max-width: 460px;
-}
-@media (max-width: 640px) {
-  .rt__setup-next {
-    align-items: stretch;
-    flex-direction: column;
-  }
-}
-.rt__early-fieldset {
-  width: 100%;
-}
-.rt__early-section {
-  margin-top: 22px;
-  padding-top: 18px;
-  border-top: 1px solid var(--nt-line);
-}
-.rt__early-heading {
-  margin: 0 0 11px;
-  color: var(--nt-ink);
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-.rt__early-days {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
-}
-.rt__early-day {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  padding: 9px 4px;
-  border: 1px solid var(--nt-line);
-  border-radius: 9px;
-  background: var(--nt-paper, #fff);
-  color: var(--nt-muted);
-  cursor: pointer;
-}
-.rt__early-day:hover {
-  border-color: var(--nt-plum);
-}
-.rt__early-day span {
-  font-size: 0.625rem;
-}
-.rt__early-day strong {
-  color: var(--nt-ink);
-  font-size: 0.875rem;
-}
-.rt__early-day small {
-  font-size: 0.5625rem;
-}
-.rt__early-day--selected {
-  border-color: #d88868;
-  background: #f8e2d8;
-  color: #8b4e3b;
-}
-.rt__early-day--selected-dad {
-  border-color: #7eafa1;
-  background: #e1f0eb;
-  color: #416c5b;
-}
-.rt__early-day--selected strong,
-.rt__early-day--selected-dad strong {
-  color: currentColor;
-}
-.rt__early-example {
-  margin: 18px 0 0;
-  padding: 11px 13px;
-  border-radius: 8px;
-  background: var(--nt-powder);
-  color: var(--nt-muted);
-  font-size: 0.75rem;
-}
-.rt__save-button {
-  border: 0;
-  cursor: pointer;
-}
-.rt__setup-status {
-  margin: 8px 0 0;
-  color: var(--nt-muted);
-  font-size: 0.8125rem;
+@media (prefers-reduced-motion: reduce) {
+  .rt__cell, .rt__icon, .rt__link, .rt__btn, .rt__early-day, .rt__choice { transition: none; }
+  .rt__cell:hover { transform: none; }
 }
 </style>

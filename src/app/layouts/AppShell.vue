@@ -35,7 +35,7 @@ const isHome = computed(() => route.path === ROUTES.HOME);
 const tone = computed(() => {
   if (route.path === ROUTES.WELLNESS) return "personal";
   if (route.path === ROUTES.SUPPORT || route.path.startsWith(ROUTES.SUPPORT + "/")) return "care";
-  if (route.path === ROUTES.CARE_LOG || route.path === ROUTES.CHECKLIST) return "carelog";
+  if (route.path === ROUTES.CARE_LOG || route.path === ROUTES.CHECKLIST || route.path === ROUTES.ROTA) return "carelog";
   return "";
 });
 
@@ -99,7 +99,6 @@ const { toasts: appToasts, closeToast: closeAppToast } = useToast();
 const menuOpen = ref(false);
 const menuButton = ref(null);
 
-const ready = computed(() => !home.loading.value && !home.error.value);
 const userName = computed(() => displayName(home.me.value.displayName || home.me.value.firstName));
 // A small dot on Home while there are posts from your partner you have not
 // acknowledged. The stream on Home is where you clear them.

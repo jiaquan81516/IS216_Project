@@ -9,13 +9,11 @@ import SkeletonList from "@/app/components/SkeletonList.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
 import { computed, inject, onBeforeUnmount, onMounted, ref } from "vue";
-import { RouterLink } from "vue-router";
-import { checklistView, dueLabel, ownerChip, taskOwner, TITLE_MAX } from "@/app/utils/checklistHelpers";
+import { checklistView, dueLabel, ownerChip, TITLE_MAX } from "@/app/utils/checklistHelpers";
 import { dayLabel } from "@/app/utils/entryHelpers";
 import { describeSharedError } from "@/app/utils/sharedHelpers";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { useShared, SHARED_KEY } from "@/app/composables/useShared";
-import { ROUTES } from "@/app/routes";
 
 defineOptions({ name: "ChecklistPage" });
 
@@ -59,7 +57,6 @@ const isEmpty = computed(() => !view.value.groups.length && !view.value.done.len
 const ownListEmpty = computed(() => !tasks.value.length);
 
 const sharedBy = computed(() => (partnerFirst.value ? `${myName.value} and ${partnerFirst.value}` : myName.value));
-const openCount = computed(() => tasks.value.filter((t) => !t.done).length);
 const doneCount = computed(() => tasks.value.filter((t) => t.done).length);
 const progressLine = computed(() => `${doneCount.value} of ${tasks.value.length} done`);
 
@@ -232,7 +229,7 @@ function doneMeta(task) {
 
 <style scoped>
 .ck { --navy: #243560; --navy-2: #2d3f70; --ink: #1f2a52; --cream: #fdf9f0; --sand: #e9d9b8; display: flex; flex-direction: column; gap: 24px; width: 100%; max-width: 1020px; margin: 0 auto; color: var(--ink); }
-.ck__status, .ck__muted { margin: 0; font-size: 0.875rem; color: #6b7392; }
+.ck__muted { margin: 0; font-size: 0.875rem; color: #6b7392; }
 .ck__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; border-radius: 8px; }
 
 .ck__hero { padding: 32px 40px; background: var(--navy-2); border-radius: 28px; border-bottom: 5px solid #182246; color: #fff; }
@@ -248,7 +245,6 @@ function doneMeta(task) {
 .ck__add-row { display: flex; gap: 12px; align-items: stretch; }
 .ck__input { flex: 1; min-width: 0; height: 48px; padding: 0 16px; background: #fff; border: 1.5px solid var(--sand); border-radius: 14px; font-family: inherit; font-size: 1rem; color: var(--ink); }
 .ck__input:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
-.ck__input--date { flex: none; width: auto; height: 40px; }
 .ck__btn { flex: none; padding: 0 28px; background: var(--navy); border: 0; border-bottom: 3px solid #182246; border-radius: 14px; font-family: inherit; font-size: 1rem; font-weight: 600; color: #fff; cursor: pointer; }
 .ck__btn:disabled { opacity: 0.5; cursor: default; }
 .ck__btn:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
@@ -268,10 +264,6 @@ function doneMeta(task) {
 .ck__list { padding: 24px 28px 28px; background: var(--cream); border: 1px solid var(--sand); border-bottom-width: 4px; border-radius: 24px; }
 .ck__row-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .ck__h2 { margin: 0; font-family: var(--nt-serif); font-size: 1.75rem; font-weight: 700; }
-.ck__filters { display: flex; flex-wrap: wrap; gap: 8px; }
-.ck__chip-btn { padding: 8px 20px; background: transparent; border: 1.5px solid var(--navy); border-radius: 999px; font-family: inherit; font-size: 0.9375rem; font-weight: 600; color: var(--navy); cursor: pointer; }
-.ck__chip-btn[aria-pressed="true"] { background: var(--navy); color: #fff; }
-.ck__chip-btn:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
 .ck__empty { margin: 0; padding: 16px 0; font-size: 0.9375rem; color: #6b7392; }
 
 .ck__group { margin-top: 12px; }

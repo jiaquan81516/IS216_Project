@@ -1,9 +1,3 @@
-import { ref } from "vue";
-
-// Shared search text for the Help pages (Right now and Reading).
-export const helpQuery = ref("");
-
-export const DEFAULT_GUIDE = "settle";
 
 export const DOCTOR_CALL = [
   "Baby is under 3 months with a temperature of 38 C or higher",
@@ -123,60 +117,3 @@ export const guides = [
   },
 ];
 
-export const articles = [
-  {
-    id: "first-six-weeks",
-    group: "For dads",
-    title: "What the first six weeks actually look like",
-    minutes: 6,
-    blurb: "A plain timeline of feeds, sleep and what is normal.",
-  },
-  {
-    id: "cannot-feed",
-    group: "For dads",
-    title: "How to help when you cannot feed the baby",
-    minutes: 5,
-    blurb: "Eight things to do that are not holding the baby.",
-  },
-  {
-    id: "dad-low-mood",
-    group: "For dads",
-    title: "Dads get postnatal low mood too",
-    minutes: 7,
-    blurb: "Signs to watch for in yourself, and what helps.",
-  },
-  {
-    id: "splitting-nights",
-    group: "For both of you",
-    title: "Splitting the nights without a fight",
-    minutes: 4,
-    blurb: "How to agree a rota and revisit it every week.",
-  },
-  {
-    id: "how-you-are-doing",
-    group: "For both of you",
-    title: "Talking about how you are really doing",
-    minutes: 3,
-    blurb: "Three questions to ask each other, once a week.",
-  },
-];
-
-export const ARTICLE_GROUPS = ["For dads", "For both of you"];
-
-function matches(query, ...fields) {
-  const q = String(query || "").trim().toLowerCase();
-  if (!q) return true;
-  return fields.some((f) => String(f).toLowerCase().includes(q));
-}
-
-export function filterGuides(query) {
-  return guides.filter((g) => matches(query, g.title, g.blurb));
-}
-
-export function filterArticles(query) {
-  return articles.filter((a) => matches(query, a.title, a.blurb));
-}
-
-export function findGuide(slug) {
-  return guides.find((g) => g.slug === slug) || guides.find((g) => g.slug === DEFAULT_GUIDE);
-}

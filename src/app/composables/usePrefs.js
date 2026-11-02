@@ -29,10 +29,6 @@ export function setDisplay(next) {
   applyMotion(display.value.reduceMotion);
 }
 
-export function resetDisplay() {
-  setDisplay(DEFAULT_SETTINGS.display);
-}
-
 export function usePrefs() {
   const timeFormat = computed(() => display.value.timeFormat);
   const weekStartsOn = computed(() => display.value.weekStartsOn);

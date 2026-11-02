@@ -76,13 +76,39 @@ export function formatHandover(time) {
   return `${h % 12 === 0 ? 12 : h % 12}:${match[2]} ${suffix}`;
 }
 
+// Monday is 0, like the day schedule.
+const weekdayOf = (iso) => (parseIso(iso).getDay() + 6) % 7;
+
+// A carer (a helper, a nanny) who takes the same nights every week: { label, days: [0..6] }.
+export function carerOn(store, date) {
+  const day = weekdayOf(date);
+  return (store.carerNights ?? []).find((c) => Array.isArray(c?.days) && c.days.includes(day)) ?? null;
+}
+
+// Which turn of the parents this night is. Carer nights don't use up a turn, so a fixed carer night
+// never takes more nights off one parent than the other.
+function parentTurn(store, date) {
+  const n = daysBetween(store.startDate, date);
+  const taken = new Set();
+  for (const c of store.carerNights ?? []) for (const d of c?.days ?? []) taken.add(d);
+  if (!taken.size) return n;
+  const start = weekdayOf(store.startDate);
+  const free = (i) => (taken.has((((start + i) % 7) + 7) % 7) ? 0 : 1);
+  let count = 0;
+  if (n >= 0) for (let i = 0; i < n; i += 1) count += free(i);
+  else for (let i = n; i < 0; i += 1) count -= free(i);
+  return count;
+}
+
 function baseNight(store, date) {
   const override = store.overrides?.[date];
   if (override === "me" || override === "partner" || override === "open") {
     return { who: override, source: "override", shared: false };
   }
+  const carer = carerOn(store, date);
+  if (carer) return { who: "other", label: carer.label || "Carer", source: "carer", shared: false };
   if (store.pattern === "manual") return { who: "open", source: "pattern", shared: false };
-  const even = ((daysBetween(store.startDate, date) % 2) + 2) % 2 === 0;
+  const even = ((parentTurn(store, date) % 2) + 2) % 2 === 0;
   const first = store.firstOnDuty === "partner" ? "partner" : "me";
   return { who: even ? first : otherOf(first), source: "pattern", shared: store.pattern === "split" };
 }
@@ -102,6 +128,7 @@ export function weekNights(store, weekStart) {
     return {
       date,
       who: night.who,
+      label: night.who === "other" ? night.label || "Carer" : "",
       resting: single && !night.shared ? otherOf(night.who) : null,
       second: night.shared ? otherOf(night.who) : null,
       shared: night.shared,
@@ -132,6 +159,7 @@ export function restSummary(nights) {
     me: personStats(nights, "me"),
     partner: personStats(nights, "partner"),
     shared: nights.filter((n) => n.shared).length,
+    carer: nights.filter((n) => n.who === "other").length,
     open: nights.filter((n) => n.who === "open").length,
   };
 }
@@ -171,7 +199,11 @@ export function suggest(nights, names = {}) {
       if (!best || better(sc, best.sc)) best = { action, sc };
     }
     if (best) {
-      return { text: `Swap ${dateLabel(best.action.date)} so ${nameOf[heavy]} has one more night off`, action: best.action };
+      return {
+        text: `Swap ${dateLabel(best.action.date)} so ${nameOf[heavy]} has one more night off`,
+        short: `Swap ${weekdayShort(best.action.date)} ${dayNumber(best.action.date)} to even out the nights.`,
+        action: best.action,
+      };
     }
   }
 
@@ -204,6 +236,7 @@ export function suggest(nights, names = {}) {
     if (best) {
       return {
         text: `${nameOf[runner]} is on duty ${runLength} nights in a row. Swap ${dateLabel(best.action.date)} with ${dateLabel(best.action.withDate)} to break the run`,
+        short: `${runLength} nights in a row for ${nameOf[runner].split(" ")[0]}. Swap ${weekdayShort(best.action.date)} ${dayNumber(best.action.date)} with ${weekdayShort(best.action.withDate)} ${dayNumber(best.action.withDate)}.`,
         action: best.action,
       };
     }
@@ -211,29 +244,6 @@ export function suggest(nights, names = {}) {
 
   if (sum.open > 0) return { text: "Some nights are still open.", action: null };
   return { text: "This week is balanced.", action: null };
-}
-
-export function makeSwapId() {
-  return `sw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-// Returns a new swaps array with one accepted swap added (the plan changes at once).
-export function applySwap(swaps, { date, withDate = null, from, message = "", id } = {}) {
-  return [...swaps, { id: id ?? makeSwapId(), date, withDate, from, status: "accepted", message }];
-}
-
-// Returns a new swaps array with a pending swap added.
-export function addPendingSwap(swaps, { date, withDate = null, from = "me", message = "", id } = {}) {
-  return [...swaps, { id: id ?? makeSwapId(), date, withDate, from, status: "pending", message }];
-}
-
-// Accept or decline a pending request that came from the partner. Other swaps are untouched.
-export function resolveSwap(swaps, id, accept) {
-  return swaps.map((s) =>
-    s.id === id && s.status === "pending" && s.from === "partner"
-      ? { ...s, status: accept ? "accepted" : "declined" }
-      : s,
-  );
 }
 
 // Remove a pending request of mine.

@@ -62,7 +62,7 @@ const NAV = [
 const router = useRouter();
 const route = useRoute();
 const home = inject(HOME_KEY, null) ?? useHome();
-const { loading, error, reload, me, partner, profile, household, householdId, inviteCode } = home;
+const { loading, error, reload, me, partner, profile, householdId, inviteCode } = home;
 
 // Settings. One local copy, saved field by field with a debounce.
 const form = ref(normaliseSettings(null));
