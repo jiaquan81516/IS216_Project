@@ -2,6 +2,8 @@
 import "@/app/app.css";
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
 import ChipGroup from "@/app/components/ChipGroup.vue";
+import Collapse from "@/app/components/Collapse.vue";
+import TimeWheel from "@/app/components/TimeWheel.vue";
 import Icon from "@/app/components/Icon.vue";
 import { dayLabel, ENTRY_TYPES, startOfDay, toDate, toTimeInput } from "@/app/utils/entryHelpers";
 
@@ -368,14 +370,14 @@ onBeforeUnmount(() => {
               <ChipGroup v-model="form.day" :options="dayOptions" label="Day" />
             </div>
             <div class="clp__times">
-              <label class="clp__field">
+              <div class="clp__field">
                 <span class="clp__label">Started</span>
-                <input v-model="form.sleepStart" class="form-control" type="time" />
-              </label>
-              <label v-if="!form.stillSleeping" class="clp__field">
+                <TimeWheel v-model="form.sleepStart" label="Sleep started" />
+              </div>
+              <div v-if="!form.stillSleeping" class="clp__field">
                 <span class="clp__label">Ended</span>
-                <input v-model="form.sleepEnd" class="form-control" type="time" />
-              </label>
+                <TimeWheel v-model="form.sleepEnd" label="Sleep ended" />
+              </div>
             </div>
             <div>
               <button
@@ -434,13 +436,15 @@ onBeforeUnmount(() => {
                 {{ form.whenMode === "now" ? "Change time" : "Use now" }}
               </button>
             </div>
-            <template v-if="form.whenMode === 'custom'">
-              <ChipGroup v-model="form.day" :options="dayOptions" label="Day" />
-              <label class="clp__field">
-                <span class="clp__label">Time</span>
-                <input v-model="form.time" class="form-control" type="time" />
-              </label>
-            </template>
+            <Collapse>
+              <div v-if="form.whenMode === 'custom'" class="clp__custom">
+                <ChipGroup v-model="form.day" :options="dayOptions" label="Day" />
+                <div class="clp__field">
+                  <span class="clp__label">Time</span>
+                  <TimeWheel v-model="form.time" label="Time" />
+                </div>
+              </div>
+            </Collapse>
           </div>
 
           <p v-if="timeError" class="clp__alert" role="alert">{{ timeError }}</p>
@@ -551,6 +555,66 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.clp__panel {
+  --navy: #243560;
+  --sand: #e9d9b8;
+}
+.clp__custom {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+/* The accents follow the care log: navy when chosen, sand when touched, and they ease between. */
+.clp__panel :deep(.app-chip) {
+  padding: 8px 16px;
+  border-color: var(--sand);
+  color: var(--navy);
+  font-weight: 600;
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease, transform 160ms ease;
+}
+.clp__panel :deep(.app-chip:hover) {
+  background: var(--sand);
+}
+.clp__panel :deep(.app-chip:active) {
+  transform: scale(0.97);
+}
+.clp__panel :deep(.app-chip[aria-checked="true"]) {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.clp__panel :deep(.app-chip:focus-visible) {
+  outline-color: var(--navy);
+}
+.clp__link {
+  transition: color 160ms ease;
+}
+.clp__foot .btn-primary {
+  background: var(--navy);
+  border-color: var(--navy);
+  border-radius: 999px;
+  transition: background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 160ms ease;
+}
+.clp__foot .btn-primary:not(:disabled):hover {
+  background: #2d3f70;
+  border-color: #2d3f70;
+}
+.clp__foot .btn-primary:not(:disabled):active {
+  transform: scale(0.98);
+}
+.clp__foot .btn-primary:disabled {
+  opacity: 0.45;
+}
+.clp__foot .btn:not(.btn-primary) {
+  border-radius: 999px;
+  border-color: var(--navy);
+  color: var(--navy);
+  transition: background-color 180ms ease;
+}
+.clp__foot .btn:not(.btn-primary):hover {
+  background: var(--sand);
 }
 .clp__label {
   margin: 0;
