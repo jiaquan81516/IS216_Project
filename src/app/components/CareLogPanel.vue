@@ -2,6 +2,8 @@
 import "@/app/app.css";
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from "vue";
 import ChipGroup from "@/app/components/ChipGroup.vue";
+import Collapse from "@/app/components/Collapse.vue";
+import TimeWheel from "@/app/components/TimeWheel.vue";
 import Icon from "@/app/components/Icon.vue";
 import { dayLabel, ENTRY_TYPES, startOfDay, toDate, toTimeInput } from "@/app/utils/entryHelpers";
 
@@ -14,6 +16,7 @@ const props = defineProps({
   saving: { type: Boolean, default: false },
   error: { type: String, default: "" },
   allowedTypes: { type: Array, default: null },
+  lockType: { type: Boolean, default: false },
 });
 const emit = defineEmits(["close", "save"]);
 
@@ -128,7 +131,10 @@ function init() {
 
 const isEditing = computed(() => Boolean(props.entry));
 const typeLabel = computed(() => ENTRY_TYPES[form.type]?.label ?? "");
-const title = computed(() => (isEditing.value ? `Edit ${typeLabel.value.toLowerCase()}` : "Log care"));
+const title = computed(() => {
+  if (isEditing.value) return `Edit ${typeLabel.value.toLowerCase()}`;
+  return props.lockType ? `Log ${typeLabel.value.toLowerCase()}` : "Log care";
+});
 const saveLabel = computed(() => (props.saving ? "Saving..." : isEditing.value ? "Save changes" : "Save"));
 
 const dayOptions = computed(() => {
@@ -310,7 +316,7 @@ onBeforeUnmount(() => {
 
       <form class="clp__form" novalidate @submit.prevent="submit">
         <div class="clp__body">
-          <div v-if="!isEditing" class="clp__group">
+          <div v-if="!isEditing && !lockType" class="clp__group">
             <p class="clp__label">What are you logging?</p>
             <ChipGroup v-model="form.type" :options="typeOptions" label="Type of care" />
           </div>
@@ -364,14 +370,14 @@ onBeforeUnmount(() => {
               <ChipGroup v-model="form.day" :options="dayOptions" label="Day" />
             </div>
             <div class="clp__times">
-              <label class="clp__field">
+              <div class="clp__field">
                 <span class="clp__label">Started</span>
-                <input v-model="form.sleepStart" class="form-control" type="time" />
-              </label>
-              <label v-if="!form.stillSleeping" class="clp__field">
+                <TimeWheel v-model="form.sleepStart" label="Sleep started" />
+              </div>
+              <div v-if="!form.stillSleeping" class="clp__field">
                 <span class="clp__label">Ended</span>
-                <input v-model="form.sleepEnd" class="form-control" type="time" />
-              </label>
+                <TimeWheel v-model="form.sleepEnd" label="Sleep ended" />
+              </div>
             </div>
             <div>
               <button
@@ -414,29 +420,34 @@ onBeforeUnmount(() => {
           </div>
 
           <div v-if="form.type !== 'sleep'" class="clp__group">
-            <div class="clp__when">
-              <p class="clp__label">
-                When: <span class="clp__when-value">{{ form.whenMode === "now" ? "Now" : "Set below" }}</span>
-              </p>
+            <p id="clp-when-label" class="clp__label">When</p>
+            <div class="clp__seg" :class="{ 'clp__seg--later': form.whenMode === 'custom' }" role="radiogroup" aria-labelledby="clp-when-label">
+              <span class="clp__seg-thumb" aria-hidden="true"></span>
+              <button type="button" role="radio" class="clp__seg-btn" :aria-checked="form.whenMode === 'now' ? 'true' : 'false'" @click="form.whenMode = 'now'">
+                Just now
+              </button>
               <button
                 type="button"
-                class="clp__link"
-                :aria-expanded="form.whenMode === 'custom' ? 'true' : 'false'"
+                role="radio"
+                class="clp__seg-btn"
+                :aria-checked="form.whenMode === 'custom' ? 'true' : 'false'"
                 @click="
-                  form.whenMode = form.whenMode === 'now' ? 'custom' : 'now';
-                  if (form.whenMode === 'custom' && !form.time) form.time = toTimeInput(new Date());
+                  form.whenMode = 'custom';
+                  if (!form.time) form.time = toTimeInput(new Date());
                 "
               >
-                {{ form.whenMode === "now" ? "Change time" : "Use now" }}
+                Pick a time
               </button>
             </div>
-            <template v-if="form.whenMode === 'custom'">
-              <ChipGroup v-model="form.day" :options="dayOptions" label="Day" />
-              <label class="clp__field">
-                <span class="clp__label">Time</span>
-                <input v-model="form.time" class="form-control" type="time" />
-              </label>
-            </template>
+            <Collapse>
+              <div v-if="form.whenMode === 'custom'" class="clp__custom">
+                <ChipGroup v-model="form.day" :options="dayOptions" label="Day" />
+                <div class="clp__field">
+                  <span class="clp__label">Time</span>
+                  <TimeWheel v-model="form.time" label="Time" />
+                </div>
+              </div>
+            </Collapse>
           </div>
 
           <p v-if="timeError" class="clp__alert" role="alert">{{ timeError }}</p>
@@ -469,20 +480,28 @@ onBeforeUnmount(() => {
 .clp__backdrop {
   position: absolute;
   inset: 0;
-  background: rgb(31 41 55 / 35%);
+  background: rgb(24 34 70 / 45%);
 }
 .clp__panel {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
-  width: 420px;
-  max-width: 100%;
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
   background: var(--nt-bg);
-  border-left: 1px solid var(--nt-line);
+  border: 0;
+  border-radius: 24px;
+  box-shadow: 0 24px 60px rgb(24 34 70 / 35%);
+  overflow: hidden;
   color: var(--nt-ink);
+  animation: clp-pop 0.18s ease-out;
+}
+@keyframes clp-pop {
+  from { opacity: 0; transform: translate(-50%, -47%); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
 }
 .clp__head {
   display: flex;
@@ -540,42 +559,125 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 8px;
 }
+.clp__panel {
+  --navy: #243560;
+  --sand: #e9d9b8;
+}
+.clp__seg {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  background: #fffdf8;
+  border: 1.5px solid var(--sand);
+  border-radius: 999px;
+}
+.clp__seg-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  background: var(--navy);
+  border-radius: 999px;
+  transition: transform 280ms cubic-bezier(0.34, 1.25, 0.64, 1);
+}
+.clp__seg--later .clp__seg-thumb {
+  transform: translateX(100%);
+}
+.clp__seg-btn {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--navy);
+  cursor: pointer;
+  transition: color 200ms ease;
+}
+.clp__seg-btn[aria-checked="true"] {
+  color: #fff;
+}
+.clp__seg-btn:not([aria-checked="true"]):hover {
+  color: #5b6692;
+}
+.clp__seg-btn:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .clp__seg-thumb,
+  .clp__seg-btn {
+    transition: none;
+  }
+}
+.clp__custom {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
+/* The accents follow the care log: navy when chosen, sand when touched, and they ease between. */
+.clp__panel :deep(.app-chip) {
+  padding: 8px 16px;
+  border-color: var(--sand);
+  color: var(--navy);
+  font-weight: 600;
+  transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease, transform 160ms ease;
+}
+.clp__panel :deep(.app-chip:hover) {
+  background: var(--sand);
+}
+.clp__panel :deep(.app-chip:active) {
+  transform: scale(0.97);
+}
+.clp__panel :deep(.app-chip[aria-checked="true"]) {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.clp__panel :deep(.app-chip:focus-visible) {
+  outline-color: var(--navy);
+}
+.clp__foot .btn-primary {
+  background: var(--navy);
+  border-color: var(--navy);
+  border-radius: 999px;
+  transition: background-color 180ms ease, border-color 180ms ease, opacity 180ms ease, transform 160ms ease;
+}
+.clp__foot .btn-primary:not(:disabled):hover {
+  background: #2d3f70;
+  border-color: #2d3f70;
+}
+.clp__foot .btn-primary:not(:disabled):active {
+  transform: scale(0.98);
+}
+.clp__foot .btn-primary:disabled {
+  opacity: 0.45;
+}
+.clp__foot .btn:not(.btn-primary) {
+  border-radius: 999px;
+  border-color: var(--navy);
+  color: var(--navy);
+  transition: background-color 180ms ease;
+}
+.clp__foot .btn:not(.btn-primary):hover {
+  background: var(--sand);
+}
 .clp__label {
   margin: 0;
   font-size: 0.875rem;
   font-weight: 500;
   line-height: 1.4;
   color: var(--nt-ink);
-}
-.clp__when {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.clp__when-value {
-  font-weight: 400;
-  color: var(--nt-muted);
-}
-.clp__link {
-  padding: 4px 0;
-  background: none;
-  border: 0;
-  font-family: inherit;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--nt-plum);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-.clp__link:hover {
-  color: var(--nt-plum-hover);
-}
-.clp__link:focus-visible {
-  outline: 2px solid var(--nt-plum);
-  outline-offset: 2px;
-  border-radius: 4px;
 }
 .clp__times {
   display: grid;
@@ -619,8 +721,14 @@ onBeforeUnmount(() => {
 
 @media (max-width: 575px) {
   .clp__panel {
+    top: auto;
+    left: 0;
+    bottom: 0;
+    transform: none;
     width: 100%;
-    border-left: 0;
+    max-height: 92vh;
+    border-radius: 24px 24px 0 0;
+    animation: none;
   }
   .clp__head,
   .clp__body,

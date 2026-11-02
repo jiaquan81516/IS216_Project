@@ -35,6 +35,7 @@ const isHome = computed(() => route.path === ROUTES.HOME);
 const tone = computed(() => {
   if (route.path === ROUTES.WELLNESS) return "personal";
   if (route.path === ROUTES.SUPPORT || route.path.startsWith(ROUTES.SUPPORT + "/")) return "care";
+  if (route.path === ROUTES.CARE_LOG || route.path === ROUTES.CHECKLIST) return "carelog";
   return "";
 });
 
@@ -683,6 +684,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   .top__user {
     order: 3;
   }
+}
+
+/* Care log and Checklist sit on a soft dotted periwinkle page. */
+.appshell__main--carelog {
+  background-color: #9fb0d0;
+  background-image: radial-gradient(rgb(255 255 255 / 35%) 1.5px, transparent 1.5px);
+  background-size: 22px 22px;
 }
 </style>
 
