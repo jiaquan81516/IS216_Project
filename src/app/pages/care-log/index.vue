@@ -1,6 +1,7 @@
 <script setup>
 import BabySwitch from "@/app/components/BabySwitch.vue";
 import FilterSelect from "@/app/components/FilterSelect.vue";
+import { agoText } from "@/app/utils/homeSummary";
 import { useToast } from "@/app/composables/useToast";
 import SkeletonList from "@/app/components/SkeletonList.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
@@ -101,7 +102,15 @@ const todayLabel = computed(() => {
   const d = now.value;
   return `${d.toLocaleDateString("en-GB", { weekday: "short" })} ${d.getDate()} ${d.toLocaleDateString("en-GB", { month: "short" })}`;
 });
-const statusLine = computed(() => (lastFeed.value ? lastFeedTitle.value : "No feeds logged yet"));
+// The last feed as "17 h ago" plus the clock time, with a tone: green under 3 h, amber to 4 h, coral after.
+const feedStatus = computed(() => {
+  const at = lastFeed.value ? toDate(lastFeed.value.at) : null;
+  if (!at) return null;
+  const minutes = (now.value.getTime() - at.getTime()) / 60000;
+  const tone = minutes >= 240 ? "due" : minutes >= 180 ? "soon" : "ok";
+  const word = tone === "due" ? "Feed is due" : tone === "soon" ? "Feed due soon" : "Recently fed";
+  return { ago: agoText(at, now.value), clock: prefTime(lastFeed.value.at), tone, word };
+});
 
 function byLabel(entry) {
   if (isMine(entry)) return "you";
@@ -324,8 +333,16 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
     <div class="cl__hero-text">
       <p class="cl__eyebrow">Shared by {{ sharedBy }}</p>
       <h1 class="cl__title">Care log</h1>
-      <p class="cl__lead">Tap what just happened.<template v-if="partnerFirst"> {{ partnerFirst }} sees it straight away.</template></p>
-      <p class="cl__pill"><span class="cl__pill-dot"></span>{{ statusLine }}</p>
+      <p class="cl__lead">Tap what just happened.<template v-if="partnerFirst">{{ " " }}{{ partnerFirst }} sees it straight away.</template></p>
+      <p class="cl__pill" :class="`cl__pill--${feedStatus ? feedStatus.tone : 'none'}`">
+        <span class="cl__pill-ico" aria-hidden="true"><Icon name="feed" :size="18" /></span>
+        <template v-if="feedStatus">
+          <span class="visually-hidden">{{ feedStatus.word }}.</span>
+          <span class="cl__pill-main">Last feed <strong>{{ feedStatus.ago }}</strong></span>
+          <span class="cl__pill-time">{{ feedStatus.clock }}</span>
+        </template>
+        <span v-else class="cl__pill-main">No feeds logged yet</span>
+      </p>
     </div>
     <svg class="cl__art" viewBox="0 0 150 180" aria-hidden="true">
       <path d="M5 175V75a70 70 0 0 1 140 0v100z" fill="#f6e3c4" stroke="#e8cf9f" stroke-width="4"/>
@@ -441,8 +458,13 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 .cl__eyebrow--rose { color: #a8473f; }
 .cl__title { margin: 0; font-family: var(--nt-serif); font-size: 2.25rem; line-height: 1.05; font-weight: 700; color: #fff; }
 .cl__lead { margin: 0; font-size: 1.0625rem; color: #dfe5f7; }
-.cl__pill { display: inline-flex; align-items: center; align-self: flex-start; gap: 8px; margin: 6px 0 0; padding: 8px 16px; border: 1px solid rgb(255 255 255 / 35%); border-radius: 999px; background: rgb(255 255 255 / 10%); font-size: 0.9375rem; }
-.cl__pill-dot { width: 10px; height: 10px; border-radius: 50%; background: #8fd19e; }
+.cl__pill { --tone: #cfd6ea; display: inline-flex; align-items: center; align-self: flex-start; gap: 10px; margin: 8px 0 0; padding: 6px 18px 6px 6px; background: var(--cream); border-radius: 999px; box-shadow: 0 3px 0 rgb(0 0 0 / 18%); font-size: 1rem; color: var(--navy); }
+.cl__pill--ok { --tone: #b9e4c4; }
+.cl__pill--soon { --tone: #f6d88e; }
+.cl__pill--due { --tone: #f4a98c; }
+.cl__pill-ico { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: var(--tone); border-radius: 50%; color: var(--navy); transition: background-color 400ms ease; }
+.cl__pill-main strong { font-weight: 700; }
+.cl__pill-time { padding-left: 10px; border-left: 1.5px solid var(--sand); color: #5b6692; font-size: 0.9375rem; }
 .cl__art { flex: none; width: 140px; height: auto; align-self: flex-end; margin-bottom: -32px; }
 
 .cl__row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
