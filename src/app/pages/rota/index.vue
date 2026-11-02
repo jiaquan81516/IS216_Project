@@ -6,6 +6,8 @@ import { computed, inject, nextTick, onMounted, ref } from "vue";
 import Collapse from "@/app/components/Collapse.vue";
 import DaySchedule from "@/app/components/DaySchedule.vue";
 import DateWheel from "@/app/components/DateWheel.vue";
+import PageHero from "@/app/components/PageHero.vue";
+import StatusPill from "@/app/components/StatusPill.vue";
 import Icon from "@/app/components/Icon.vue";
 import PickField from "@/app/components/PickField.vue";
 import SegToggle from "@/app/components/SegToggle.vue";
@@ -19,6 +21,7 @@ import {
   dayNumber,
   formatHandover,
   isIsoDate,
+  joinNames,
   mondayOf,
   otherOf,
   restSummary,
@@ -75,7 +78,7 @@ onMounted(async () => {
   document.getElementById("day")?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
-const { selectedBaby } = useSelectedBaby();
+const { babies, selectedBaby } = useSelectedBaby();
 // Carers who can see the duty page (the "View who is on duty" permission) can also take nights.
 const firstWord = (full) => {
   const w = String(full ?? "").trim().split(/\s+/)[0] || "";
@@ -98,7 +101,8 @@ function toggleCarerDay(c, day) {
   store.setCarerNights([...rest, { uid: c.uid, label: c.label, days: [...days] }]);
 }
 const markText = (night) => (night.who === "other" ? String(night.label || "?").charAt(0).toUpperCase() : initialOf(night.who));
-const babyLabel = computed(() => selectedBaby.value?.babyName || home?.baby?.value?.name || "the baby");
+// The plan covers every baby, so the text names them all.
+const babyLabel = computed(() => joinNames(babies.value.map((b, i) => b.babyName || `Baby ${i + 1}`)) || selectedBaby.value?.babyName || home?.baby?.value?.name || "the baby");
 const todayIso = toIso(new Date());
 const { timeFormat } = usePrefs();
 // Who has the baby right now, for the pill in the header: a painted daytime hour first, then the night plan.
@@ -450,17 +454,9 @@ async function finishSetup() {
 
 <template>
   <div class="rt">
-    <header class="rt__hero">
-      <div class="rt__hero-text">
-        <p class="rt__eyebrow">Taking turns with {{ partnerName }}</p>
-        <h1 class="rt__title">Duty</h1>
-        <p class="rt__lead">Who is looking after {{ babyLabel }}, day and night.</p>
-        <p v-if="carerNow" class="rt__pill">
-          <span class="rt__pill-dot" aria-hidden="true"></span>
-          <span>Now: {{ carerNow.text }} {{ carerNow.verb }} looking after {{ babyLabel }}</span>
-        </p>
-      </div>
-    </header>
+    <PageHero :eyebrow="`Taking turns with ${partnerName}`" title="Duty" :lead="`Who is looking after ${babyLabel}, day and night.`">
+      <StatusPill v-if="carerNow" icon="moon" tone="ok">Now: {{ carerNow.text }} {{ carerNow.verb }} looking after {{ babyLabel }}</StatusPill>
+    </PageHero>
     <BabySwitch />
 
     <div aria-live="polite">
@@ -871,13 +867,6 @@ async function finishSetup() {
 }
 
 /* Hero, the same as the Care log and Checklist */
-.rt__hero { padding: 32px 40px; background: var(--navy-2); border-radius: 28px; border-bottom: 5px solid #182246; color: #fff; }
-.rt__hero-text { display: flex; flex-direction: column; gap: 10px; }
-.rt__eyebrow { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--apricot); }
-.rt__title { margin: 0; font-family: var(--nt-serif); font-size: 2.5rem; line-height: 1.05; font-weight: 700; color: #fff; }
-.rt__lead { margin: 0; font-size: 1.0625rem; color: #dfe5f7; }
-.rt__pill { display: inline-flex; align-items: center; align-self: flex-start; gap: 8px; margin: 6px 0 0; padding: 8px 16px; border: 1px solid rgb(255 255 255 / 35%); border-radius: 999px; background: rgb(255 255 255 / 10%); font-size: 0.9375rem; }
-.rt__pill-dot { width: 10px; height: 10px; border-radius: 50%; background: #8fd19e; }
 .rt__daycard, .rt__nightcard { display: flex; flex-direction: column; gap: 14px; }
 .rt__weekblock { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
 .rt__rest { display: flex; flex-direction: column; gap: 12px; padding-top: 18px; border-top: 1.5px dashed var(--sand); }
@@ -993,8 +982,6 @@ async function finishSetup() {
 .rt__danger { padding: 0; background: none; border: 0; font: inherit; font-size: 0.875rem; font-weight: 600; color: #a8473f; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .rt__danger:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; border-radius: 4px; }
 @media (max-width: 575px) {
-  .rt__hero { padding: 24px 20px; }
-  .rt__title { font-size: 2rem; }
   .rt__card { padding: 20px 16px; }
   .rt__strip { gap: 4px; }
   .rt__cell { min-height: 124px; border-radius: 14px; }
