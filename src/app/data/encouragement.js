@@ -43,23 +43,3 @@ export function encouragementFor(date = new Date()) {
   return list[dayOfYear(date) % list.length];
 }
 
-// One small thing for the two of you to do today. "text" is what is shown, "send" is the short
-// message that can go to your partner in one tap. Plain and warm, never a task list.
-const RITUALS = Object.freeze([
-  { text: "Ten minutes tonight with no phones and no baby talk. Just the two of you.", send: "Could we have ten minutes tonight, just us?" },
-  { text: "Tell your partner one thing you noticed them do well today.", send: "I noticed how much you did today. Thank you." },
-  { text: "Swap one chore today, so each of you gets a break from your usual.", send: "Want to swap one job today so we each get a break?" },
-  { text: "Ask what would make tomorrow easier, and listen before you answer.", send: "What would make tomorrow easier for you?" },
-  { text: "Make each other a drink without being asked.", send: "I am making us a drink. What would you like?" },
-  { text: "Agree who sleeps first tonight, and protect that block for them.", send: "Shall we agree who sleeps first tonight? I will protect your block." },
-  { text: "Share one worry out loud. It does not need fixing, only hearing.", send: "I have one worry on my mind. Could I tell you about it later?" },
-  { text: "Sit together for five minutes before the evening rush.", send: "Can we sit together for five minutes before the evening?" },
-  { text: "Name one thing you are proud of as a team this week.", send: "I am proud of how we are doing this together." },
-  { text: "Plan one small treat this weekend that is for both of you.", send: "Shall we plan one small treat for the two of us this weekend?" },
-]);
-
-export function ritualFor(date = new Date()) {
-  return RITUALS[dayOfYear(date) % RITUALS.length];
-}
-
-export const BREAK_REQUEST = "Could you take over for twenty minutes so I can rest?";

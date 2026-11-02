@@ -477,8 +477,6 @@ watch(supportTab, (id) => {
 .pr__field { position: relative; margin: 24px 24px 8px; }
 .pr__input { width: 100%; padding: 24px 44px 8px 16px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 8px; font: inherit; font-size: 0.875rem; color: var(--nt-ink); }
 .pr__input:focus { outline: 2px solid var(--nt-plum); outline-offset: 1px; border-color: var(--nt-plum); }
-.pr__label { position: absolute; left: 16px; top: 16px; font-size: 0.875rem; color: var(--nt-muted); pointer-events: none; }
-.pr__input:focus + .pr__label, .pr__input:not(:placeholder-shown) + .pr__label { top: 6px; font-size: 0.875rem; line-height: 1.1; }
 .pr__icon { position: absolute; right: 14px; top: 50%; display: inline-flex; transform: translateY(-50%); color: var(--nt-muted); pointer-events: none; }
 .pr__notice { margin: 8px 24px; padding: 10px 12px; background: var(--nt-gray); border: 1px solid var(--nt-line); border-radius: 8px; font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); }
 .pr__bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; }
@@ -536,7 +534,6 @@ watch(supportTab, (id) => {
 .pr__field--plain { display: flex; flex-direction: column; gap: 6px; }
 .pr__plainwrap { position: relative; }
 .pr__input--plain { padding: 12px 44px 12px 16px; }
-.pr__off { display: flex; flex-direction: column; gap: 16px; }
 .pr--list { display: block; height: auto; min-height: calc(100vh - 92px); }
 .pr--list .pr__side { border-right: 0; overflow: visible; }
 .pr--list .pr__scroll { height: auto; overflow: visible; max-width: 1120px; margin: 0 auto; }

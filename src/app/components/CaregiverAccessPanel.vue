@@ -296,13 +296,11 @@ onMounted(refresh);
 .cg__field :deep(textarea) { resize: vertical; font-weight: 400; }
 .cg__permissions { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 14px; border: 1px solid var(--nt-line); border-radius: 8px; }
 .cg__permissions legend { padding: 0 6px; font-size: .875rem; font-weight: 600; }
-.cg__row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border: 1px solid var(--nt-line); border-radius: 8px; }
 .cg__pending { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
 .cg__pending h4 { margin: 0; font-size: .9375rem; font-weight: 600; }
 .cg__invite-ready { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid var(--nt-plum); border-radius: 8px; background: var(--nt-surface, #fff); }
 .cg__invite-details { display: flex; flex-direction: column; gap: 4px; width: 100%; font-size: .875rem; }
 .cg__invite-url { display: block; max-width: 100%; margin-top: 4px; overflow-wrap: anywhere; font-size: .875rem; }
-.cg__row > div:first-child { display: flex; flex-direction: column; gap: 4px; }
 .cg__actions, .cg__member-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .cg__actions { justify-content: flex-end; }
 .cg__member-head h4 { margin: 0 0 4px; font-size: 1rem; }

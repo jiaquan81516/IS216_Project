@@ -105,6 +105,7 @@ const nightLine = computed(() => {
   if (!n) return "";
   const nameOf = (who) => props.names[who] ?? "";
   if (n.who === "open") return "Night duty: open";
+  if (n.who === "other") return `Night duty: ${n.label || "Carer"}`;
   if (n.shared) return `Night duty: ${nameOf(n.who)} first half, ${nameOf(n.second)} second half`;
   return `Night duty: ${nameOf(n.who)}`;
 });
@@ -399,8 +400,6 @@ onBeforeUnmount(() => {
 .cdp__form :deep(.app-chip:hover) { border-color: var(--navy); }
 .cdp__form :deep(.app-chip:active) { transform: scale(0.96); }
 .cdp__form :deep(.app-chip[aria-checked="true"]) { background: var(--navy); border-color: var(--navy); color: #fff; }
-.cdp__switch { margin: 0; }
-.cdp__switch .form-check-label { font-size: 0.9375rem; font-weight: 500; }
 .cdp__count { margin: 0; font-size: 0.875rem; text-align: right; color: var(--nt-muted); }
 .cdp__form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 

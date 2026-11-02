@@ -10,17 +10,6 @@ export function statusText(room) {
   return `Verified ${d ?? 0} days ago`;
 }
 
-// status: "all" | "verified" | "needs verification". Features combine with AND.
-export function filterRooms(rooms, { status = "all", features = [], search = "" } = {}) {
-  const q = String(search).trim().toLowerCase();
-  return rooms.filter((r) => {
-    if (status !== "all" && r.status !== status) return false;
-    if (!features.every((f) => r.features.includes(f))) return false;
-    if (q && !`${r.name} ${r.address}`.toLowerCase().includes(q)) return false;
-    return true;
-  });
-}
-
 // Firestore keeps features as a map so a rule can check them; the UI uses labels. These two
 // helpers are the only place the two shapes meet.
 export const ROOM_FEATURES = Object.freeze([

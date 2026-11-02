@@ -117,7 +117,9 @@ const shift = computed(() => {
   if (rotaView.value) {
     const date = tonightDate(n, rotaView.value.handoverTime);
     const night = weekNights(rotaView.value, mondayOf(date)).find((x) => x.date === date);
-    if (night && (night.who === "me" || night.who === "partner")) {
+    if (night?.who === "other") {
+      segments = [{ who: "other", label: `${night.label} on duty`, from: 0, to: 100 }];
+    } else if (night && (night.who === "me" || night.who === "partner")) {
       const other = night.who === "me" ? "partner" : "me";
       segments = night.shared
         ? [
@@ -218,74 +220,14 @@ async function offerShift() {
 // The whole day, 6 AM to 6 AM: morning, afternoon, evening and late night, and who looks after the baby.
 // Nights come from the sleep rota. The morning and afternoon come from the "Daytime cover" choice on
 // the rota page, which can be a parent, both, or someone else such as a nanny or grandparent.
-// Painting the day: pick who, then drag across the hours. Every hour of the 24 can be someone different.
-const editorOpen = ref(false);
-const CARER_LABELS = ["Nanny", "Grandma", "Grandpa", "Childcare", "Helper"];
-const hourPlan = computed(() => rotaStore.value?.view.hourCover ?? Array(24).fill(null));
-const paintDraft = ref(null);
-const brush = ref("me");
-const paintStrip = ref(null);
-const brushes = computed(() => [
-  { value: "me", label: "You" },
-  ...(partner.value ? [{ value: "partner", label: partnerFirst.value }] : []),
-  { value: "both", label: "Both of us" },
-  ...CARER_LABELS.map((name) => ({ value: `other:${name}`, label: name })),
-  { value: "clear", label: "Clear" },
-]);
+// The day schedule repeats weekly, so the cells come from the weekday this "day" started on (it runs 6 AM to 6 AM).
+const hourPlan = computed(() => {
+  const d = new Date(now.value);
+  if (d.getHours() < 6) d.setDate(d.getDate() - 1);
+  return rotaStore.value?.view.coverFor?.((d.getDay() + 6) % 7) ?? Array(24).fill(null);
+});
 const hourName = (h) => `${h % 12 === 0 ? 12 : h % 12} ${h >= 12 ? "PM" : "AM"}`;
 const periodFor = (h) => (h >= 6 && h < 12 ? "Morning" : h >= 12 && h < 17 ? "Afternoon" : h >= 17 && h < 21 ? "Evening" : "Night");
-const brushCell = () => {
-  if (brush.value === "clear") return null;
-  if (brush.value.startsWith("other:")) return { who: "other", label: brush.value.slice(6) };
-  return { who: brush.value, label: "" };
-};
-let painting = false;
-let lastIndex = null;
-const indexAt = (event) => {
-  const box = paintStrip.value.getBoundingClientRect();
-  return Math.min(23, Math.max(0, Math.floor(((event.clientX - box.left) / box.width) * 24)));
-};
-function paintTo(index) {
-  const from = lastIndex === null ? index : Math.min(lastIndex, index);
-  const to = lastIndex === null ? index : Math.max(lastIndex, index);
-  for (let i = from; i <= to; i += 1) paintDraft.value[(6 + i) % 24] = brushCell();
-  lastIndex = index;
-}
-function startPaint(event) {
-  if (event.button > 0 || !paintStrip.value) return;
-  paintDraft.value = hourPlan.value.map((cell) => (cell ? { ...cell } : null));
-  paintStrip.value.setPointerCapture?.(event.pointerId);
-  painting = true;
-  lastIndex = null;
-  paintTo(indexAt(event));
-}
-function movePaint(event) {
-  if (painting) paintTo(indexAt(event));
-}
-async function endPaint() {
-  if (!painting) return;
-  painting = false;
-  lastIndex = null;
-  const draft = paintDraft.value;
-  await rotaStore.value?.setHourCover(draft);
-  paintDraft.value = null;
-}
-// Start over: every painted hour goes back to the default. Asks for a second tap first.
-const confirmClear = ref(false);
-async function clearAllHours() {
-  if (!confirmClear.value) {
-    confirmClear.value = true;
-    return;
-  }
-  confirmClear.value = false;
-  await rotaStore.value?.setHourCover(Array(24).fill(null));
-}
-// One hour at a time from the keyboard.
-async function paintOneHour(index) {
-  const draft = hourPlan.value.map((cell) => (cell ? { ...cell } : null));
-  draft[(6 + index) % 24] = brushCell();
-  await rotaStore.value?.setHourCover(draft);
-}
 const dayPlan = computed(() => {
   const n = now.value;
   const anchor = new Date(n);
@@ -299,17 +241,18 @@ const dayPlan = computed(() => {
   const nightOf = (iso) => (rotaView.value ? weekNights(rotaView.value, mondayOf(iso)).find((x) => x.date === iso) : null);
   
   const tonight = nightOf(anchorIso);
-  const nightFirst = tonight && (tonight.who === "me" || tonight.who === "partner") ? tonight.who : "open";
+  const nightFirst = tonight && (tonight.who === "me" || tonight.who === "partner" || tonight.who === "other") ? tonight.who : "open";
+  const nightLabel = tonight?.who === "other" ? tonight.label : "";
   const nightSecond = tonight?.shared ? (tonight.who === "me" ? "partner" : "me") : nightFirst;
-  const painted = paintDraft.value ?? hourPlan.value;
+  const painted = hourPlan.value;
   // One cell for each hour from 6 AM to 6 AM. A painted hour wins; otherwise the evening and night
   // follow the sleep rota and the day is open.
   const grid = Array.from({ length: 24 }, (_, i) => {
     const hour = (6 + i) % 24;
     const set = painted[hour];
     if (set?.who) return { who: set.who, label: set.label, hour };
-    if (i >= 18) return { who: nightSecond, label: "", hour };
-    if (i >= 12) return { who: nightFirst, label: "", hour };
+    if (i >= 18) return { who: nightSecond, label: nightSecond === "other" ? nightLabel : "", hour };
+    if (i >= 12) return { who: nightFirst, label: nightFirst === "other" ? nightLabel : "", hour };
     return { who: "open", label: "", hour };
   });
   const nameFor = (cell) => (cell.who === "open" ? "Not planned yet" : cell.who === "both" ? "Together" : cell.who === "other" ? cell.label : nameOf(cell.who));
@@ -504,10 +447,6 @@ const coming = computed(() => {
   });
 });
 
-// Setup messages about database rules are for the team, never for a parent. Anything that mentions them
-// is replaced with a neutral line before it reaches the screen.
-const friendly = (text) => (/firestore\.rules|database rules/i.test(text ?? "") ? "That is not available right now. Please try again later." : text);
-
 // ---- The stream, tucked away ----
 const items = computed(() =>
   buildStream({
@@ -608,7 +547,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
                 <li v-for="swap in incomingSwaps" :key="swap.id" class="hp__todo">
                   <div class="hp__todo-text">
                     <p class="hp__text">{{ swapLine(swap) }}</p>
-                    <p class="hp__small">Sleep rota</p>
+                    <p class="hp__small">Duty</p>
                   </div>
                   <div class="hp__action">
                     <button type="button" class="hp__btn hp__btn--primary" @click="answerSwap(swap, true)">Say yes</button>
@@ -684,29 +623,8 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
               <p v-if="lookingAfter.until" class="hp__incharge"><strong>{{ lookingAfter.until }}</strong></p>
               <p v-if="lookingAfter.next" class="hp__rule">{{ lookingAfter.next }}</p>
               <div class="hp__nowact">
-                <button type="button" class="hp__btn hp__btn--primary" :aria-expanded="editorOpen ? 'true' : 'false'" aria-controls="hp-planner" @click="editorOpen = !editorOpen">{{ editorOpen ? "Done" : lookingAfter.open ? "Choose who" : "Change who" }}</button>
-                <AppLink class="hp__link hp__link--sm" :to="ROUTES.ROTA">Open the sleep rota</AppLink>
-              </div>
-              <div v-if="editorOpen" id="hp-planner" class="hp__cover" role="group" aria-label="Plan who looks after the baby, hour by hour">
-                <p class="hp__cover-title">Pick a person, then drag across the hours.</p>
-                <div class="hp__chips" role="radiogroup" aria-label="Who">
-                  <button v-for="b in brushes" :key="b.value" type="button" role="radio" class="hp__chip" :class="[{ 'is-on': brush === b.value }, `hp__chip--${b.value.split(':')[0]}`]" :aria-checked="brush === b.value ? 'true' : 'false'" @click="brush = b.value">{{ b.label }}</button>
-                </div>
-                <div class="hp__paint">
-                  <div ref="paintStrip" class="hp__strip2" role="group" aria-label="Hours of the day, 6 AM to 6 AM. Drag to paint, or press Enter on an hour." @pointerdown.prevent="startPaint" @pointermove="movePaint" @pointerup="endPaint" @pointercancel="endPaint">
-                    <button v-for="(cell, i) in dayPlan.grid" :key="i" type="button" class="hp__hour" :class="`hp__hour--${cell.who}`" :aria-label="`${hourName(cell.hour)}, ${cell.who === 'open' ? 'not planned' : cell.who === 'both' ? 'both of you' : cell.who === 'other' ? cell.label : cell.who === 'me' ? 'you' : partnerFirst}`" @keydown.enter.prevent="paintOneHour(i)" @keydown.space.prevent="paintOneHour(i)"></button>
-                    <span class="hp__paint-now" :style="{ left: `${dayPlan.now}%` }" aria-hidden="true"></span>
-                  </div>
-                  <div class="hp__paint-hours" aria-hidden="true"><span v-for="(label, i) in ['6 AM', '9 AM', '12 PM', '3 PM', '6 PM', '9 PM', '12 AM', '3 AM', '6 AM']" :key="i" :style="{ left: `${i * 12.5}%` }">{{ label }}</span></div>
-                </div>
-                <div class="hp__cover-foot">
-                  <p class="hp__small">Evening and night follow the sleep rota until you paint over them.</p>
-                  <span class="hp__cover-actions">
-                    <button type="button" class="hp__link hp__link--sm" @click="clearAllHours">{{ confirmClear ? "Tap again to clear every hour" : "Clear all hours" }}</button>
-                    <button type="button" class="hp__link hp__link--sm" @click="editorOpen = false; confirmClear = false">Done</button>
-                  </span>
-                </div>
-                <p v-if="rotaStore?.writeError" class="hp__problem" role="alert">{{ friendly(rotaStore.writeError) }}</p>
+                <AppLink class="hp__btn hp__btn--primary" :to="`${ROUTES.ROTA}#day`">{{ lookingAfter.open ? "Choose who" : "Change who" }}</AppLink>
+                <AppLink class="hp__link hp__link--sm" :to="ROUTES.ROTA">Open Duty</AppLink>
               </div>
             </article>
           </div>
@@ -867,18 +785,15 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
   display: flex; flex-direction: column; gap: var(--s5); width: 100%; max-width: 1320px; margin: 0 auto; font-size: 1rem; line-height: 1.5; color: var(--ink);
 }
 .hp__live { position: absolute; }
-.hp__status { margin: 0; font-size: 0.875rem; color: #c3cfe4; }
 .hp__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s2) var(--s3); background: #fbe3da; border-radius: 16px; font-size: 0.875rem; color: #6e2a14; }
 .hp__error p { margin: 0; }
 .hp__problem { margin: 0; font-size: 0.875rem; color: var(--warm); }
 
 /* Type. Inside a card the colours come from the card, so every colour field stays readable. */
 .hp__label { margin: 0; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; line-height: 1.4; text-transform: uppercase; color: var(--fg-muted, var(--muted)); }
-.hp__label--attention { color: var(--warm); }
 .hp__title { margin: 0; font-family: var(--serif); font-size: clamp(2rem, 3.8vw, 3rem); font-weight: 500; line-height: 1.1; letter-spacing: -0.02em; text-wrap: balance; color: #fbf3e6; }
 .hp__lead { margin: 0; max-width: none; font-family: var(--serif); font-size: 1.25rem; line-height: 1.5; color: #c3cfe4; }
 .hp__card-title { margin: 0; font-family: var(--serif); font-size: 1.25rem; font-weight: 500; line-height: 1.35; color: var(--fg, var(--ink)); text-wrap: balance; }
-.hp__focus { margin: 0; max-width: 24em; font-family: var(--serif); font-size: 1.5rem; font-weight: 500; line-height: 1.3; letter-spacing: -0.01em; color: var(--fg, var(--ink)); }
 .hp__small { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--fg-muted, var(--muted)); }
 .hp__text { margin: 0; font-size: 1rem; line-height: 1.5; overflow-wrap: anywhere; color: var(--fg, var(--ink)); }
 .hp__name { margin: 0; font-size: 1rem; font-weight: 600; color: var(--fg, var(--ink)); }
@@ -912,17 +827,12 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__check:hover { background: var(--navy); color: #fff; }
 .hp__check:focus-visible { outline: 2px solid var(--navy); outline-offset: 3px; }
 /* Two accent cards only: navy for the night, and one warm card for the day's idea. Every other card is plain. */
-.hp__card--warm { background: #fbeadf; border-color: rgb(181 83 47 / 18%); --fg-muted: #7a4a35; }
-.hp__card--navy { background: #1f3a68; border-color: rgb(251 243 230 / 20%); --fg: #fbf3e6; --fg-muted: #c3cfe4; --link: #fbf3e6; }
-.hp__icon { flex: none; color: var(--navy); }
-.hp__card--navy .hp__icon { color: #fbf3e6; }
 
 /* Layout */
 /* Two columns, as in the reference: the daily check-in on the left, the carousel and tonight on the right */
 .hp__head { display: flex; flex-direction: column; gap: var(--s2); }
 .hp__layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 8fr); gap: var(--s4); align-items: start; }
 .hp__lcol, .hp__rcol { display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
-.hp__car.hp__car--framed { --pad: 28px; width: 100%; margin: 0; border-radius: 18px; }
 .hp__lcol .hp__list, .hp__rcol .hp__tonight { max-width: none; }
 .hp__layout + .hp__layout { margin-top: calc(-1 * var(--s2)); }
 /* The note lives inside the daily check-in, under the flowers, in the same dark glass */
@@ -934,45 +844,18 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__us .hp__starter, .hp__us .hp__starter:visited { color: #cfdcf2; }
 .hp__us .hp__small, .hp__us .hp__starts { color: #9fb0cc; }
 /* Shift tiles, like the reference's shift rotation: who is on, and when */
-.hp__tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: var(--s1); margin: 0; padding: 0; list-style: none; }
-.hp__tile { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; background: rgb(251 243 230 / 10%); border: 1px solid rgb(251 243 230 / 16%); border-radius: 12px; }
-.hp__tile--me { background: rgb(251 243 230 / 16%); }
-.hp__tile-initial { display: grid; place-items: center; width: 28px; height: 28px; margin-bottom: 6px; background: #fbf3e6; border-radius: 50%; font-size: 0.875rem; font-weight: 600; color: var(--navy); }
-.hp__tile--partner .hp__tile-initial { background: #f6d8c6; color: #5a2a14; }
-.hp__tile--open .hp__tile-initial { background: transparent; border: 1.5px dashed rgb(251 243 230 / 50%); color: #c3cfe4; }
-.hp__tile-name { font-size: 1rem; font-weight: 600; color: #fbf3e6; }
-.hp__tile-time { font-size: 0.875rem; color: #c3cfe4; }
-.hp__pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 17rem); gap: var(--s4); align-items: start; }
-.hp__lcol .fp { max-width: 100%; }
-.hp__pair .fp { max-width: 100%; }
 /* The daily check-in is narrower in this layout, so its parts are sized to fit it */
 .hp__lcol .hp__open.hp__us { padding: 64px 24px 72px; border-radius: 130px 130px 12px 12px; }
-.hp__lcol .hp__us .hp__flower { width: 56px; height: 94px; margin-left: 0; }
 .hp__lcol .hp__us .hp__garden { gap: var(--s2); }
 .hp__lcol .hp__us .hp__plant { padding: 0 4px; }
-.hp__lcol .hp__us .hp__hills { height: 72px; }
-.hp__lcol .hp__us .hp__moon { top: 40px; right: 40px; width: 32px; }
 .hp__lcol .hp__note { padding: 16px 18px; gap: var(--s1); }
 .hp__lcol .hp__note-box { min-height: 4.5rem; }
-.hp__intro { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 28rem); gap: var(--s4); align-items: start; }
-.hp__intro-side { display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
-.hp__intro-text { display: flex; flex-direction: column; gap: var(--s2); }
-.hp__grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--s2); }
-.hp__c4 { grid-column: span 4; }
-.hp__c5 { grid-column: span 5; }
-.hp__c7 { grid-column: span 7; }
-.hp__c6 { grid-column: span 6; }
-.hp__c12 { grid-column: 1 / -1; }
 .hp__action { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
 
 /* Buttons and links: the main button, an outline, a warm thank you, plain links */
 .hp__btn, .hp__btn:visited { display: inline-flex; align-items: center; justify-content: center; padding: 12px 20px; border: 1px solid transparent; border-radius: 12px; font-family: inherit; font-size: 1rem; font-weight: 600; line-height: 1.25; text-decoration: none; cursor: pointer; transition: background-color 0.15s; }
 .hp__btn--primary, .hp__btn--primary:visited { background: var(--navy); color: #fff; }
 .hp__btn--primary:hover { background: #162b4f; color: #fff; }
-.hp__card--navy .hp__btn--primary { background: #fbf3e6; color: var(--navy); }
-.hp__card--navy .hp__btn--primary:hover { background: #fff; color: var(--navy); }
-.hp__btn--attention, .hp__btn--attention:visited { background: var(--warm); color: #fff; }
-.hp__btn--attention:hover { background: #99441f; color: #fff; }
 .hp__btn--outline, .hp__btn--outline:visited { background: transparent; border-color: var(--navy); color: var(--navy); }
 .hp__btn--outline:hover { background: var(--navy-soft); color: var(--navy); }
 /* The emotional action: rounder, softer, with a heart. Other buttons are square-edged and plain. */
@@ -985,7 +868,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__link:hover { opacity: 0.8; }
 .hp__link:disabled { opacity: 0.5; cursor: default; }
 .hp__link--sm, .hp__link--sm:visited { flex: none; font-size: 0.875rem; }
-.hp__link--quiet, .hp__link--quiet:visited { font-size: 0.875rem; font-weight: 500; color: var(--fg-muted, var(--muted)); }
 
 /* The note */
 .hp__note-box { width: 100%; min-height: 5.5rem; padding: var(--s2); background: #fff; border: 1px solid rgb(31 58 104 / 24%); border-radius: 12px; font-family: var(--serif); font-size: 1.25rem; line-height: 1.5; color: var(--ink); resize: vertical; }
@@ -1005,58 +887,20 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__plant.is-attention { box-shadow: inset 3px 0 0 var(--warm); }
 .hp__plant-name { margin: 0; font-family: var(--serif); font-size: 1.25rem; font-weight: 500; line-height: 1.35; color: var(--fg); }
 .hp__plant-text { display: flex; flex-direction: column; gap: 4px; }
-.hp__flower { flex: none; width: 66px; height: 110px; margin: 4px 0 4px var(--s1); overflow: visible; }
 
 /* Tonight, hour by hour */
-.hp__shift { display: flex; flex-direction: column; gap: var(--s1); padding-top: var(--s1); }
-.hp__track { position: relative; height: 40px; background: rgb(251 243 230 / 14%); border-radius: 10px; }
-.hp__seg { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; padding: 0 var(--s1); overflow: hidden; border-radius: 10px; font-size: 0.875rem; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
-.hp__seg--me { background: #fbf3e6; color: var(--navy); }
-.hp__seg--partner { background: #f6d8c6; color: #5a2a14; }
-.hp__seg--open { background: transparent; border: 2px dashed rgb(251 243 230 / 45%); color: #c3cfe4; }
-.hp__tick { position: absolute; top: 8px; bottom: 8px; width: 3px; margin-left: -1.5px; background: #16233b; border-radius: 2px; box-shadow: 0 0 0 1.5px #fbf3e6; }
 .hp__now { position: absolute; top: -8px; bottom: -8px; width: 3px; margin-left: -1.5px; background: #ff8a63; border-radius: 2px; }
 .hp__now i { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); padding-bottom: 2px; font-size: 0.75rem; font-style: normal; font-weight: 700; color: #ffb095; white-space: nowrap; }
-.hp__hours { display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 500; color: #c3cfe4; }
 
 /* The nights this week */
-.hp__dots { display: flex; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.hp__night { display: flex; flex-direction: column; align-items: center; gap: var(--s1); }
-.hp__dot { box-sizing: border-box; width: 28px; aspect-ratio: 1; border-radius: 50%; }
-.hp__dot--you { background: var(--navy); }
-.hp__dot--them { border: 2.5px solid var(--navy); background: #fff; }
-.hp__dot--shared { border: 2.5px solid var(--navy); background: linear-gradient(90deg, var(--navy) 50%, #fff 50%); }
-.hp__dot--open { border: 2px dashed rgb(31 58 104 / 40%); }
-.hp__night.is-today .hp__dot { outline: 2px solid var(--ink); outline-offset: 3px; }
-.hp__night-day { font-size: 0.75rem; font-weight: 600; color: var(--fg-muted); }
-.hp__night.is-today .hp__night-day { color: var(--ink); }
-.hp__key { display: flex; align-items: center; gap: var(--s1); margin: 0; font-size: 0.875rem; color: var(--fg-muted); }
-.hp__swatch { box-sizing: border-box; display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
-.hp__key .hp__swatch:not(:first-child) { margin-left: var(--s2); }
-.hp__swatch--you { background: var(--navy); }
-.hp__swatch--them { border: 2px solid var(--navy); background: #fff; }
 
 /* The week, in flowers */
-.hp__badge { flex: none; margin: 0; font-size: 0.875rem; font-weight: 600; color: var(--navy); }
-.hp__weekgrid { display: grid; grid-template-columns: 4.5rem repeat(7, minmax(0, 1fr)); align-items: end; gap: var(--s1) 4px; }
-.hp__wk-day { text-align: center; font-size: 0.75rem; font-weight: 600; color: var(--fg-muted); }
-.hp__wk-day.is-today { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
-.hp__wk-name { align-self: center; font-size: 0.875rem; font-weight: 600; color: var(--fg); }
-.hp__wk-cell { display: grid; place-items: end center; height: 40px; }
-.hp__mini { width: 22px; height: 36px; overflow: visible; }
-.hp__nodata { display: block; width: 8px; height: 8px; margin-bottom: 8px; border-radius: 50%; background: rgb(31 58 104 / 22%); }
 
 /* Numbers */
-.hp__figs { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s4); margin: 0; padding: 0; list-style: none; }
-.hp__figure { display: flex; flex-direction: column; gap: 4px; }
-.hp__fig { font-size: 2rem; font-weight: 500; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--navy); }
-.hp__fig--sm { font-size: 1.5rem; font-weight: 500; }
-.hp__figs--row { padding-top: var(--s2); border-top: 1px solid var(--line); }
 
 /* The gratitude jar */
 
 /* One thing today */
-.hp__card--focus .hp__card-head { align-items: flex-start; }
 
 /* Baby, today */
 .hp__tally { display: flex; gap: var(--s3); margin: 0; padding: 0; list-style: none; }
@@ -1068,45 +912,23 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__qbtn:hover { background: var(--navy-soft); border-color: var(--navy); color: var(--navy); }
 
 /* Lines: waiting and lately */
-.hp__lines { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.hp__line { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s2) 0; border-top: 1px solid var(--line); }
-.hp__line:first-child { border-top: 0; padding-top: 0; }
-.hp__line--time { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr) auto; align-items: baseline; }
 
 /* Fields */
-.hp__post { display: flex; align-items: center; gap: var(--s2); }
-.hp__field { flex: 1; min-width: 0; width: 100%; height: 48px; padding: 0 var(--s2); background: #fff; border: 1px solid rgb(31 58 104 / 28%); border-radius: 12px; font-family: inherit; font-size: 1rem; color: var(--ink); }
-.hp__field::placeholder { color: #7b8499; }
-.hp__field:focus { outline: none; border-color: var(--navy); box-shadow: 0 0 0 3px var(--navy-soft); }
-.hp__field--date { max-width: 220px; }
-.hp__task { display: flex; flex-direction: column; gap: var(--s2); }
-.hp__field-label { display: flex; flex-direction: column; gap: var(--s1); font-size: 0.875rem; color: var(--muted); }
 .hp__who { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); margin: 0; padding: 0; border: 0; font-size: 1rem; color: var(--ink); }
 .hp__who legend { float: none; width: auto; margin: 0 0 var(--s1); padding: 0; font-size: 0.875rem; color: var(--muted); }
 .hp__who label { display: inline-flex; align-items: center; gap: var(--s1); }
 
-.hp__baby { font-size: 0.875rem; line-height: 1.5; color: #9fb0cc; }
-.hp__baby strong { color: #fbf3e6; font-weight: 600; }
-
 @media (max-width: 899px) {
   .hp { gap: var(--s5); }
-  .hp__intro { grid-template-columns: minmax(0, 1fr); }
   .hp__layout { grid-template-columns: minmax(0, 1fr); }
-  .hp__pair { grid-template-columns: minmax(0, 1fr); }
-  .hp__grid { grid-template-columns: minmax(0, 1fr); }
-  .hp__c4, .hp__c5, .hp__c6, .hp__c7, .hp__c12 { grid-column: 1 / -1; }
   .hp__trio { grid-template-columns: minmax(0, 1fr); }
   .hp__garden { gap: var(--s2); }
   .hp__card { padding: var(--s3); }
 }
 @media (max-width: 575px) {
   .hp__open.hp__us { padding: 70px 24px 80px; border-radius: 120px 120px 14px 14px; }
-  .hp__moon { right: 40px; width: 32px; }
   .hp__house { width: 76px; }
   .hp__house-row { gap: 18px; }
-  .hp__line--time { grid-template-columns: minmax(0, 1fr) auto; }
-  .hp__line--time .hp__small:first-child { grid-column: 1 / -1; }
-  .hp__weekgrid { grid-template-columns: 3.5rem repeat(7, minmax(0, 1fr)); }
 }
 
 /* Sections that sit on the page itself: no box, just cream text on the deep blue and a soft rule above */
@@ -1114,12 +936,9 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__open .hp__btn--primary { background: #fbf3e6; color: var(--navy); }
 .hp__open .hp__btn--primary:hover { background: #fff; color: var(--navy); }
 .hp__open .hp__btn:focus-visible, .hp__open .hp__link:focus-visible { outline-color: #fbf3e6; }
-.hp__open .hp__field { background: rgb(251 243 230 / 8%); border-color: rgb(251 243 230 / 24%); color: #fbf3e6; }
-.hp__open .hp__field::placeholder { color: #9fb0cc; }
-.hp__open .hp__field:focus { border-color: #fbf3e6; box-shadow: 0 0 0 3px rgb(251 243 230 / 16%); }
 .hp__open .hp__check { background: transparent; border-color: #fbf3e6; }
 .hp__open .hp__check:hover { background: #fbf3e6; color: var(--navy); }
-.hp__open .hp__tally b, .hp__open .hp__fig { color: #fbf3e6; }
+.hp__open .hp__tally b{ color: #fbf3e6; }
 .hp__open .hp__qbtn, .hp__open .hp__qbtn:visited { color: #cfdcf2; border-color: rgb(251 243 230 / 22%); }
 .hp__open .hp__qbtn:hover { background: rgb(251 243 230 / 10%); border-color: rgb(251 243 230 / 45%); color: #fff; }
 .hp__open .hp__problem { color: #f2b49b; }
@@ -1133,36 +952,13 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__open .hp__bubble { color: #16233b; }
 .hp__open .hp__bubble .hp__label { color: #55627a; }
 .hp__open .hp__bubble-title { color: #16233b; }
-.hp__open--focus .hp__focus { font-size: 1.75rem; }
 /* How you are both doing: an arched nursery window onto a garden at night */
 .hp__open.hp__us { position: relative; isolation: isolate; overflow: hidden; padding: 76px 44px 84px; border: 2px solid rgb(251 243 230 / 30%); border-radius: 170px 170px 14px 14px; background: linear-gradient(180deg, #0e1d39 0%, #162b52 55%, #1f3c6e 100%); box-shadow: 0 9px 0 -2px rgb(251 243 230 / 22%); }
-.hp__stars { position: absolute; inset: 0; z-index: -1; background-image: radial-gradient(1.6px 1.6px at 14% 14%, #fff 50%, transparent 52%), radial-gradient(1.2px 1.2px at 30% 8%, #fff 50%, transparent 52%), radial-gradient(1.6px 1.6px at 46% 18%, #fff 50%, transparent 52%), radial-gradient(1.2px 1.2px at 62% 7%, #fff 50%, transparent 52%), radial-gradient(1.6px 1.6px at 78% 20%, #fff 50%, transparent 52%), radial-gradient(1.2px 1.2px at 22% 28%, #fff 50%, transparent 52%), radial-gradient(1.2px 1.2px at 88% 34%, #fff 50%, transparent 52%), radial-gradient(1.2px 1.2px at 8% 40%, #fff 50%, transparent 52%); opacity: 0.75; -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 45%, transparent 80%); mask-image: linear-gradient(180deg, #000 0%, #000 45%, transparent 80%); }
-.hp__moon { position: absolute; z-index: -1; top: 44px; right: 64px; width: 40px; height: auto; filter: drop-shadow(0 0 12px rgb(251 231 196 / 55%)); }
-.hp__hills { position: absolute; z-index: -1; left: 0; right: 0; bottom: 0; width: 100%; height: 90px; }
 .hp__list { max-width: 460px; margin-top: var(--s1); }
 .hp__tonight { max-width: 460px; }
 .hp__trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s4); }
 
 /* The week strip */
-.hp__strip { gap: var(--s3); padding: var(--s4) 0; border-block: 1px solid rgb(251 243 230 / 18%); }
-.hp__strip-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s2); }
-.hp__strip-head > div { display: flex; flex-direction: column; gap: 4px; }
-.hp__strip-title { margin: 0; font-family: var(--serif); font-size: 1.5rem; font-weight: 500; line-height: 1.35; color: #fbf3e6; }
-.hp__strip-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2) var(--s3); }
-.hp__strip .hp__badge { color: #fbf3e6; }
-.hp__strip-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s4); }
-.hp__strip .hp__dot--you { background: #fbf3e6; }
-.hp__strip .hp__dot--them { border-color: #fbf3e6; background: transparent; }
-.hp__strip .hp__dot--shared { border-color: #fbf3e6; background: linear-gradient(90deg, #fbf3e6 50%, transparent 50%); }
-.hp__strip .hp__dot--open { border-color: rgb(251 243 230 / 40%); }
-.hp__strip .hp__swatch--you { background: #fbf3e6; }
-.hp__strip .hp__swatch--them { border-color: #fbf3e6; background: transparent; }
-.hp__strip .hp__nodata { background: rgb(251 243 230 / 24%); }
-.hp__strip .hp__night-day, .hp__strip .hp__wk-day { color: #9fb0cc; }
-.hp__strip .hp__wk-day.is-today { color: #fbf3e6; }
-.hp__strip .hp__dot { width: 24px; }
-.hp__wk-cell--night { height: 32px; place-items: center; }
-.hp__figs--inline { gap: var(--s2) var(--s4); }
 
 /* Compact: the same elements, sized so the whole page needs far less scrolling */
 .hp { gap: var(--s4); }
@@ -1172,17 +968,13 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__head { gap: 4px; }
 .hp__title { font-size: clamp(1.75rem, 3vw, 2.25rem); }
 .hp__lead { font-size: 1.0625rem; }
-.hp__car.hp__car--framed { height: clamp(220px, 30vh, 300px); }
 /* The daily check-in: flowers beside their words, a shorter note, a smaller garden */
 .hp__lcol .hp__open.hp__us { padding: 38px 20px 50px; border-radius: 90px 90px 12px 12px; }
 .hp__lcol .hp__us .hp__card-title { font-size: 1.0625rem; }
 .hp__lcol .hp__us .hp__garden { gap: var(--s2); align-items: center; }
 .hp__lcol .hp__us .hp__plant { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "flower name" "flower text"; align-items: center; column-gap: 10px; row-gap: 0; padding: 0; }
-.hp__lcol .hp__us .hp__flower { grid-area: flower; width: 40px; height: 68px; margin: 0; }
 .hp__lcol .hp__us .hp__plant-name { grid-area: name; align-self: end; font-size: 1.0625rem; }
 .hp__lcol .hp__us .hp__plant-text { grid-area: text; align-self: start; }
-.hp__lcol .hp__us .hp__hills { height: 44px; }
-.hp__lcol .hp__us .hp__moon { top: 22px; right: 30px; width: 24px; }
 .hp__noteform { margin-top: var(--s2); padding-top: var(--s2); }
 .hp__noteform .hp__card-title { font-size: 1rem; }
 .hp__noteform .hp__note-box { height: 4rem; min-height: 0; padding: 10px 12px; font-size: 1.0625rem; }
@@ -1191,30 +983,15 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 /* Tonight: tiles on one line each, a slimmer bar, and no extra sentence */
 .hp__rcol .hp__tonight { gap: var(--s1); padding: 14px 18px; }
 .hp__rcol .hp__tonight .hp__card-title { font-size: 1.0625rem; }
-.hp__rcol .hp__tonight .hp__tile { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 12px; }
-.hp__rcol .hp__tonight .hp__tile-initial { width: 24px; height: 24px; margin-bottom: 0; }
-.hp__rcol .hp__tonight .hp__shift { padding-top: 14px; }
-.hp__rcol .hp__tonight .hp__track { height: 26px; }
 .hp__rcol .hp__tonight > .hp__small { display: none; }
 /* The photo, the day's idea and the checklist */
-.hp__lcol .fp { max-width: 240px; }
 .hp__open { padding-top: var(--s2); gap: var(--s1); }
-.hp__open--focus .hp__focus { font-size: 1.375rem; }
 .hp__house { width: 72px; }
 .hp__bubble { padding: 10px 14px; }
 .hp__bubble-title { font-size: 1rem; }
 /* The week strip */
-.hp__strip { gap: var(--s2); padding: var(--s2) 0; }
-.hp__strip-title { font-size: 1.25rem; }
-.hp__strip .hp__wk-cell { height: 30px; }
-.hp__strip .hp__mini { width: 18px; height: 30px; }
-.hp__strip .hp__nodata { margin-bottom: 4px; }
-.hp__strip .hp__dot { width: 18px; }
-.hp__strip .hp__wk-cell--night { height: 24px; }
-.hp__strip .hp__figs--inline { display: none; }
 /* Share the load, lately, baby */
 .hp__trio { gap: var(--s3); }
-.hp__line { padding: 8px 0; }
 
 /* Two clear sections: the night window for how you are doing, and a cream sheet of paper for the note */
 .hp__lcol .hp__open.hp__us { gap: var(--s2); padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; overflow: visible; isolation: auto; }
@@ -1230,38 +1007,24 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 
 /* A little shorter on the left; the carousel stretches so both columns end level */
 .hp__layout[aria-label="Today"] { align-items: stretch; }
-.hp__layout[aria-label="Today"] .hp__rcol .hp__car.hp__car--framed { flex: 1 1 auto; height: auto; min-height: 240px; }
 .hp__window { padding: 28px 18px 40px; }
 .hp__lcol .hp__us .hp__noteform { padding: 14px 18px 12px; gap: 6px; }
 .hp__lcol .hp__us .hp__noteform .hp__card-title { font-size: 1.125rem; }
 .hp__lcol .hp__us .hp__noteform .hp__note-box { height: 3.5rem; }
-.hp__lcol .hp__us .hp__hills { height: 36px; }
 
 /* Light page: the pale blue paper shows through, so open sections use dark ink. The night window and the shift card stay dark. */
 .hp__title { color: #16233b; }
-.hp__lead, .hp__status, .hp__baby { color: #55627a; }
-.hp__baby strong { color: #16233b; }
+.hp__lead{ color: #55627a; }
 .hp__open { --ink: #16233b; --muted: #55627a; --fg: #16233b; --fg-muted: #55627a; --link: #1f3a68; --line: rgb(22 35 59 / 16%); --navy-soft: rgb(31 58 104 / 10%); border-top-color: rgb(22 35 59 / 16%); color: #16233b; }
 .hp__open .hp__btn--primary { background: var(--navy); color: #fff; }
 .hp__open .hp__btn:focus-visible, .hp__open .hp__link:focus-visible { outline-color: var(--navy); }
-.hp__open .hp__field { background: #fff; border-color: #c9d3e3; color: #16233b; }
-.hp__open .hp__field::placeholder { color: #6b7790; }
-.hp__open .hp__field:focus { border-color: var(--navy); box-shadow: 0 0 0 3px rgb(31 58 104 / 15%); }
 .hp__open .hp__check { background: transparent; border-color: var(--navy); }
 .hp__open .hp__check:hover { background: var(--navy); color: #fff; }
-.hp__open .hp__tally b, .hp__open .hp__fig { color: #16233b; }
+.hp__open .hp__tally b{ color: #16233b; }
 .hp__open .hp__qbtn, .hp__open .hp__qbtn:visited { color: var(--navy); border-color: rgb(31 58 104 / 30%); }
 .hp__open .hp__qbtn:hover { background: rgb(31 58 104 / 8%); border-color: var(--navy); color: var(--navy); }
 .hp__open .hp__btn--outline, .hp__open .hp__btn--outline:visited { border-color: var(--navy); color: var(--navy); }
 .hp__open .hp__btn--outline:hover { background: rgb(31 58 104 / 8%); color: var(--navy); }
-.hp__strip { border-block-color: rgb(22 35 59 / 16%); }
-.hp__strip-title, .hp__strip .hp__badge, .hp__strip .hp__wk-day.is-today { color: #16233b; }
-.hp__strip .hp__dot--you, .hp__strip .hp__swatch--you { background: var(--navy); }
-.hp__strip .hp__dot--them, .hp__strip .hp__swatch--them { border-color: var(--navy); background: transparent; }
-.hp__strip .hp__dot--shared { border-color: var(--navy); background: linear-gradient(90deg, var(--navy) 50%, transparent 50%); }
-.hp__strip .hp__dot--open { border-color: rgb(22 35 59 / 35%); }
-.hp__strip .hp__nodata { background: rgb(22 35 59 / 16%); }
-.hp__strip .hp__night-day, .hp__strip .hp__wk-day { color: #55627a; }
 .hp__window { --ink: #fbf3e6; --muted: #9fb0cc; --fg: #fbf3e6; --fg-muted: #9fb0cc; --link: #cfdcf2; }
 .hp__window .hp__btn--primary { background: #fbf3e6; color: var(--navy); }
 .hp__window .hp__btn:focus-visible, .hp__window .hp__link:focus-visible { outline-color: #fbf3e6; }
@@ -1293,35 +1056,19 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 
 .hp__incharge { margin: 0; font-size: 1rem; color: #c3cfe4; }
 .hp__incharge strong { color: #fbf3e6; }
-.hp__tile.is-current { border-color: #ff8a63; }
-.hp__tile--both .hp__tile-initial { background: #dce6f2; color: #1f3a68; }
 .hp__rule { margin: 0; font-size: 0.875rem; color: #c3cfe4; }
-.hp__seg--both { background: #dce6f2; color: var(--navy); }
-.hp__rcol .hp__tonight .hp__seg { font-size: 0.8125rem; padding: 0 4px; }
 
 /* Today: a plain timeline on a warm card, one row per part of the day */
 .hp__rcol .hp__card.hp__tonight { background: #fceef2; border-color: #f0cfda; gap: var(--s2); }
 .hp__tonight .hp__incharge { color: #55627a; }
 .hp__tonight .hp__incharge strong { color: #16233b; }
 .hp__tonight .hp__rule { color: #6b7790; }
-.hp__tl { margin: 0; padding: 0; list-style: none; }
-.hp__tl-row { position: relative; display: grid; grid-template-columns: 9.5rem 18px minmax(0, 1fr) auto; align-items: center; column-gap: 12px; padding: 9px 0; }
-.hp__tl-row + .hp__tl-row { border-top: 1px dashed #e2c8b0; }
-.hp__tl-when { display: flex; flex-direction: column; font-size: 0.9375rem; font-weight: 600; color: #16233b; }
-.hp__tl-when small { font-size: 0.8125rem; font-weight: 400; color: #6b7790; }
-.hp__tl-dot { width: 12px; height: 12px; border: 2px solid #b5532f; border-radius: 50%; background: #fdf1e6; }
-.hp__tl-row.is-current .hp__tl-dot { background: #b5532f; box-shadow: 0 0 0 4px rgb(181 83 47 / 18%); }
-.hp__tl-who { font-family: var(--serif); font-size: 1.125rem; color: #16233b; }
-.hp__tl-row--open .hp__tl-who { font-family: inherit; font-size: 1rem; color: #6b7790; }
-.hp__tl-now { padding: 2px 10px; background: #b5532f; border-radius: 999px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; }
-@media (max-width: 575px) { .hp__tl-row { grid-template-columns: 7.5rem 14px minmax(0, 1fr) auto; column-gap: 8px; } }
 
 /* Both columns end level: the note stretches to the bottom of the Today card, and the carousel takes what is left on the right */
 .hp__layout[aria-label="Today"] .hp__lcol { align-self: stretch; }
 .hp__layout[aria-label="Today"] .hp__lcol .hp__open.hp__us { flex: 1 1 auto; }
 .hp__layout[aria-label="Today"] .hp__lcol .hp__us .hp__noteform { flex: 1 1 auto; }
 .hp__layout[aria-label="Today"] .hp__lcol .hp__us .hp__noteform .hp__note-box { flex: 1 1 auto; height: auto; min-height: 3.5rem; resize: none; }
-.hp__layout[aria-label="Today"] .hp__rcol .hp__car.hp__car--framed { min-height: 180px; }
 
 /* Top right: the checklist and the bell sit beside the greeting; the checklist opens as a panel under them */
 .hp__head { flex-direction: row; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--s3); }
@@ -1341,40 +1088,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 @media (max-width: 575px) { .hp__head-tools { width: 100%; justify-content: space-between; } .hp__head-tools .hp__list { flex: 1 1 auto; } }
 
 /* Today: two plain lanes on a 6 AM to 6 AM ruler, so every time can be read */
-.hp__lanes { position: relative; display: grid; grid-template-columns: 4.25rem minmax(0, 1fr); grid-template-rows: 44px 44px 22px; row-gap: 6px; align-items: center; }
-.hp__lane-name { font-size: 0.9375rem; font-weight: 600; color: #16233b; }
-.hp__lane { position: relative; height: 100%; background: repeating-linear-gradient(90deg, #ecc5d2 0 1px, transparent 1px 12.5%), rgb(255 255 255 / 45%); border-radius: 6px; }
-.hp__block { position: absolute; top: 4px; bottom: 4px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1.5px solid; border-radius: 4px; font-size: 0.875rem; font-weight: 600; white-space: nowrap; color: #16233b; }
-.hp__block--me { background: #dce6f2; border-color: #5c7a9e; }
-.hp__block--partner { background: #f6d8c6; border-color: #e3a584; }
-.hp__axis { grid-column: 2; position: relative; height: 100%; }
-.hp__axis span { position: absolute; top: 4px; transform: translateX(-50%); font-size: 0.75rem; font-weight: 500; white-space: nowrap; color: #55627a; }
-.hp__axis span.is-first { transform: none; }
-.hp__axis span.is-last { transform: translateX(-100%); }
-.hp__lanes-now { grid-column: 2; grid-row: 1 / 3; position: relative; height: 100%; pointer-events: none; }
-.hp__nowline { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: #b5532f; }
-.hp__nowline b { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-size: 0.75rem; font-weight: 700; white-space: nowrap; color: #b5532f; }
-.hp__lanes { margin-top: 20px; }
-.hp__open-hours { margin: 0; padding: 0; list-style: none; font-size: 0.875rem; color: #55627a; }
-@media (max-width: 575px) { .hp__block { font-size: 0.75rem; } .hp__lanes { grid-template-columns: 3.25rem minmax(0, 1fr); } }
-
-.hp__block { font-size: 0; }
-.hp__hand { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.hp__hand-row { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; column-gap: 10px; padding: 8px 0; font-size: 1rem; color: #16233b; }
-.hp__hand-row + .hp__hand-row { border-top: 1px dashed #ecc5d2; }
-.hp__hand-key { width: 14px; height: 14px; border: 1.5px solid; border-radius: 3px; }
-.hp__hand-key--me { background: #dce6f2; border-color: #5c7a9e; }
-.hp__hand-key--partner { background: #f6d8c6; border-color: #e3a584; }
-.hp__hand-key--both { background: linear-gradient(90deg, #dce6f2 50%, #f6d8c6 50%); border-color: #8c8c8c; }
-.hp__hand-key--open { border-style: dashed; border-color: #8fa0bd; background: transparent; }
-.hp__hand-name { font-weight: 600; }
-.hp__hand-time { font-size: 0.9375rem; color: #55627a; }
-.hp__hand-row.is-current .hp__hand-name::after { content: "Now"; margin-left: 8px; padding: 1px 8px; background: #b5532f; border-radius: 999px; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #fff; vertical-align: 2px; }
-
-.hp__block { font-size: inherit; }
-.hp__block .carry { flex: none; }
-.hp__hand-row { grid-template-columns: 30px minmax(0, 1fr) auto; }
-.hp__hand-key { justify-self: center; }
 
 /* The three everyday boxes: equal height, a header with a rule under it, and a body that fills the rest */
 .hp__trio { align-items: stretch; }
@@ -1382,11 +1095,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__trio-card .hp__card-head { align-items: flex-start; padding-bottom: 12px; border-bottom: 1px solid #e5eaf2; }
 .hp__trio-card .hp__card-title { font-size: 1.25rem; }
 .hp__trio-card .hp__action { margin-top: auto; }
-.hp__trio-card .hp__post { margin-top: auto; }
-.hp__trio-card .hp__lines { flex: 1; }
-.hp__trio-card .hp__line { padding: 10px 0; }
-.hp__trio-card .hp__line:first-child { padding-top: 0; }
-.hp__trio-card .hp__line--time { grid-template-columns: 4.75rem minmax(0, 1fr) auto; }
 .hp__trio-card .hp__tally { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .hp__trio-card .hp__tally li { align-items: center; gap: 4px; padding: 12px 6px; background: #f3f6fb; border: 1px solid #e5eaf2; border-radius: 8px; text-align: center; }
 .hp__trio-card .hp__quicklog { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: auto; }
@@ -1394,30 +1102,15 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 @media (max-width: 899px) { .hp__trio { grid-template-columns: minmax(0, 1fr); } }
 
 /* Every item gets its own grid cell, so the "now" overlay cannot push the lanes out of place */
-.hp__lanes > :nth-child(1) { grid-area: 1 / 1; }
-.hp__lanes > :nth-child(2) { grid-area: 1 / 2; }
-.hp__lanes > :nth-child(3) { grid-area: 2 / 1; }
-.hp__lanes > :nth-child(4) { grid-area: 2 / 2; }
-.hp__lanes > :nth-child(5) { grid-area: 3 / 2; }
-.hp__lanes > :nth-child(6) { grid-area: 1 / 2 / 3 / 3; }
 
 /* Coming up: the next plan on a warm panel, and the ones after it on a timeline */
 .hp__coming { display: flex; flex-direction: column; gap: var(--s2); }
 .hp__coming-head { align-items: flex-start; }
 .hp__coming-head .hp__card-title { font-size: 1.25rem; }
 .hp__coming-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: var(--s3); align-items: stretch; }
-.hp__next { display: flex; flex-direction: column; gap: 4px; padding: 20px 24px; background: #fdf1e6; border: 1px solid #ecd3bd; border-radius: 12px; }
-.hp__next-when { margin: 6px 0 0; font-family: var(--serif); font-size: 2rem; line-height: 1.1; letter-spacing: -0.01em; color: #16233b; }
-.hp__next-day { margin: 0; font-size: 1rem; font-weight: 500; color: #b5532f; }
-.hp__next-title { margin: 14px 0 0; font-family: var(--serif); font-size: 1.25rem; font-weight: 500; line-height: 1.3; color: #16233b; }
-.hp__next-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: auto 0 0; padding-top: 14px; }
 .hp__after { position: relative; display: flex; flex-direction: column; margin: 0; padding: 6px 22px 6px 20px; list-style: none; background: #fff; border: 1px solid #c9d3e3; border-radius: 12px; }
 .hp__after-row { position: relative; display: grid; grid-template-columns: 6.5rem 16px minmax(0, 1fr); align-items: center; column-gap: 14px; flex: 1; padding: 12px 0; }
 .hp__after-row + .hp__after-row { border-top: 1px dashed #dbe3ef; }
-.hp__after-when { display: flex; flex-direction: column; text-align: right; }
-.hp__after-when b { font-family: var(--serif); font-size: 1rem; font-weight: 500; color: #16233b; }
-.hp__after-when small { font-size: 0.8125rem; color: #55627a; }
-.hp__after-dot { position: relative; z-index: 1; width: 12px; height: 12px; justify-self: center; background: #fff; border: 2px solid #1f3a68; border-radius: 50%; }
 .hp__after-row::before { content: ""; position: absolute; top: 0; bottom: 0; left: calc(6.5rem + 14px + 8px - 0.5px); width: 1px; background: #c9d3e3; }
 .hp__after-row + .hp__after-row::before { top: -1px; }
 .hp__after-row:first-child::before { top: 50%; }
@@ -1441,91 +1134,20 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__lcol .hp__us .hp__noteform { padding-top: 22px; }
 
 /* Today as a hand-written rota: each part of the day is a slot with who is on, a wavy line under the current one */
-.hp__slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); margin: 0 0 0 -17.5px; padding: 0; list-style: none; clip-path: inset(0 0 0 17.5px); }
-.hp__slot { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; padding: 2px 16px 8px; border-left: 1.5px dashed #e3b3c4; }
-.hp__slot-pic { display: grid; place-items: center; width: 38px; height: 38px; margin-bottom: 6px; }
-.hp__slot-pic i { display: grid; place-items: center; width: 34px; height: 34px; border: 1.5px dashed #b48a98; border-radius: 50%; font-size: 0.9375rem; font-style: normal; color: #7b6670; }
-.hp__slot-period { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #7b6670; }
-.hp__slot-name { max-width: 100%; overflow: hidden; font-family: var(--serif); font-size: 1.5rem; font-weight: 500; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; color: #16233b; }
-.hp__slot--open .hp__slot-name { font-family: inherit; font-size: 1rem; font-weight: 500; color: #7b6670; }
-.hp__slot.is-current .hp__slot-time { font-size: 0.875rem; color: #55627a; }
-.hp__slot-now { margin-top: 4px; font-size: 0.8125rem; font-weight: 700; color: #b5532f; }
-@media (max-width: 575px) {
-  .hp__slots { grid-template-columns: minmax(0, 1fr); }
-  .hp__slot { display: grid; grid-template-columns: 44px minmax(0, 1fr); column-gap: 12px; align-items: center; padding: 10px 0; border-left: 0; border-top: 1.5px dashed #e3b3c4; }
-  .hp__slot:first-child { border-top: 0; }
-  .hp__slot-pic { grid-row: 1 / 5; margin: 0; }
-  }
-
-.hp__slot-edit { margin-top: 6px; padding: 0; background: none; border: 0; font-family: inherit; font-size: 0.875rem; font-weight: 600; color: #1f3a68; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.hp__slot-edit:hover { opacity: 0.8; }
-.hp__slot-edit:focus-visible { outline: 2px solid #1f3a68; outline-offset: 3px; border-radius: 3px; }
-.hp__cover { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; background: #fff; border: 1px solid #f0cfda; border-radius: 12px; }
-.hp__cover-title { margin: 0; font-size: 0.9375rem; font-weight: 600; color: #16233b; }
-.hp__chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.hp__chip { padding: 8px 14px; background: #fff; border: 1px solid #c9d3e3; border-radius: 8px; font-family: inherit; font-size: 0.9375rem; font-weight: 500; color: #16233b; cursor: pointer; }
-.hp__chip:hover { border-color: #1f3a68; }
-.hp__chip:focus-visible { outline: 2px solid #1f3a68; outline-offset: 2px; }
-.hp__chip.is-on { background: #1f3a68; border-color: #1f3a68; color: #fff; }
-.hp__chip--small { padding: 5px 11px; font-size: 0.875rem; }
-
-.hp__shifts { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.hp__shift-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.9375rem; color: #55627a; }
-.hp__sel { padding: 7px 10px; background: #fff; border: 1px solid #c9d3e3; border-radius: 8px; font-family: inherit; font-size: 0.9375rem; color: #16233b; }
-.hp__sel:focus-visible { outline: 2px solid #1f3a68; outline-offset: 2px; }
-.hp__sel--who { min-width: 7.5rem; }
-.hp__cover-foot { display: flex; align-items: center; gap: 16px; }
-
-/* The painting strip: 24 hours, drag across them to say who is in charge */
-.hp__paint { position: relative; padding-bottom: 22px; }
-.hp__strip2 { position: relative; display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); height: 46px; overflow: hidden; border: 1px solid #c9d3e3; border-radius: 8px; touch-action: none; cursor: crosshair; user-select: none; }
-.hp__hour { padding: 0; background: #f6f8fc; border: 0; border-right: 1px solid rgb(22 35 59 / 8%); cursor: inherit; }
-.hp__hour:nth-child(3n + 1) { border-left: 1px solid rgb(22 35 59 / 16%); }
-.hp__hour:focus-visible { outline: 2px solid #1f3a68; outline-offset: -2px; }
-.hp__hour--me { background: #dce6f2; box-shadow: inset 0 -4px 0 #5c7a9e; }
-.hp__hour--partner { background: #f6d8c6; box-shadow: inset 0 -4px 0 #e3a584; }
-.hp__hour--both { background: linear-gradient(180deg, #dce6f2 50%, #f6d8c6 50%); }
-.hp__hour--other { background: #d7e8dd; box-shadow: inset 0 -4px 0 #7aa38c; }
-.hp__hour--open { background: repeating-linear-gradient(135deg, #f6f8fc 0 5px, #eaeff7 5px 10px); }
-.hp__paint-now { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #b5532f; pointer-events: none; }
-.hp__paint-hours { position: absolute; left: 0; right: 0; bottom: 0; height: 18px; }
-.hp__paint-hours span { position: absolute; transform: translateX(-50%); font-size: 0.75rem; color: #55627a; white-space: nowrap; }
-.hp__paint-hours span:first-child { transform: none; }
-.hp__paint-hours span:last-child { transform: translateX(-100%); }
-.hp__chip--other.is-on { background: #3f6b53; border-color: #3f6b53; }
-.hp__cover-foot { justify-content: space-between; }
-
-.hp__tonight-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; }
-.hp__chip--plan { border-color: #1f3a68; background: #fff; font-weight: 600; color: #1f3a68; }
-.hp__chip--plan:hover { background: #1f3a68; color: #fff; }
-
-.hp__cover-actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 16px; }
-
 .hp > .hp__car { --pad: max(clamp(16px, 4vw, 64px), calc((100vw - 1320px) / 2)); }
 
 /* Row one holds the check-in, the note and the photo on the left, and Today and Coming up on the right, so both sides end together */
 .hp__layout[aria-label="Today"] .hp__rcol .hp__coming { flex: 1 1 auto; }
 .hp__layout[aria-label="Today"] .hp__rcol .hp__coming-grid { flex: 1 1 auto; }
-.hp__layout[aria-label="Today"] .hp__lcol .fp { max-width: 100%; }
 
 /* The reminder: one slim line near the top. "After that" is just the timeline now. */
-.hp__remind { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 16px; background: #fdf1e6; border: 1px solid #ecd3bd; border-radius: 12px; }
-.hp__remind-bell { display: grid; flex: none; place-items: center; width: 34px; height: 34px; background: #fff; border: 1px solid #ecd3bd; border-radius: 50%; color: #b5532f; }
-.hp__remind-text { display: flex; flex: 1 1 16rem; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; min-width: 0; margin: 0; }
-.hp__remind-text strong { font-size: 1rem; font-weight: 600; color: #b5532f; }
-.hp__remind-title { font-family: var(--serif); font-size: 1.0625rem; font-weight: 500; color: #16233b; }
-.hp__remind-sample { padding: 1px 8px; border: 1px dashed #b48a98; border-radius: 6px; font-size: 0.75rem; color: #7b6670; }
-.hp__remind-link { margin-left: auto; }
 .hp__coming-grid { grid-template-columns: minmax(0, 1fr); }
-@media (max-width: 575px) { .hp__remind-link { margin-left: 0; } }
 
 /* ===== Crafted: every part is its own object, with a hand-made feel ===== */
 .hp__lead { font-family: var(--serif); font-size: 1.25rem; line-height: 1.5; font-weight: 400; color: #3b4a66; }
 .hp__title { position: relative; display: inline-block; }
 
 /* the reminder is a tear-off ticket */
-.hp__remind { position: relative; border-radius: 10px; border-style: dashed; border-width: 1.5px; border-color: #d9a98b; background: #fdf1e6; }
-.hp__remind-bell { border-style: dashed; }
 
 /* the note is a letter on ruled paper, with a stamp */
 .hp__lcol .hp__us .hp__noteform { position: relative; padding: 20px 22px 16px; border-radius: 4px 14px 12px 10px; background: #fff7f9 repeating-linear-gradient(180deg, transparent 0 31px, #f2d3dd 31px 32px); box-shadow: none; }
@@ -1539,10 +1161,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 /* Today is a day planner: punched holes down the side, handwritten names */
 .hp__rcol .hp__card.hp__tonight { position: relative; padding-left: 52px; border-radius: 4px 18px 16px 4px; }
 .hp__tonight::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 36px; background: radial-gradient(circle at 18px 50%, #ebf2fa 0 6px, #d9a7ba 6px 7.5px, transparent 8px) 0 0 / 36px 52px repeat-y; border-right: 1.5px dashed #ecc5d2; }
-.hp__slot-name { font-family: var(--serif); font-size: 1.5rem; font-weight: 500; line-height: 1.2; color: #16233b; }
-.hp__slot--open .hp__slot-name { font-family: inherit; font-size: 1rem; font-weight: 500; }
-.hp__slot-period { font-family: inherit; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #8b6a78; }
-.hp__slot-now { font-family: inherit; font-size: 0.8125rem; font-weight: 700; }
 
 /* coming up: tear-off calendar leaves */
 .hp__after { padding: 6px 20px; border-radius: 6px 16px 14px 10px; }
@@ -1556,22 +1174,13 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 
 /* the three boxes, each its own thing */
 .hp__trio > .hp__trio-card { border-radius: 14px 20px 12px 18px / 18px 12px 20px 14px; }
-.hp__trio-card--tasks { position: relative; background: #eef4e4; border-color: #bfd0a8; }
-.hp__trio-card--tasks .hp__card-head { border-bottom: 1.5px dashed #bfd0a8; }
-.hp__pin { position: absolute; top: -9px; left: 50%; width: 20px; height: 20px; margin-left: -10px; background: radial-gradient(circle at 35% 30%, #fff, #b5532f 62%); border-radius: 50%; box-shadow: 0 3px 4px rgb(0 0 0 / 30%); }
-.hp__trio-card--log { background: #fff repeating-linear-gradient(180deg, transparent 0 35px, #dbe6f3 35px 36px); background-position: 0 56px; padding-left: 44px; }
-.hp__trio-card--log::before { content: ""; position: absolute; top: 0; bottom: 0; left: 30px; width: 1.5px; background: #e7a79a; }
-.hp__trio-card--log .hp__card-head { background: #fff; }
-.hp__trio-card--log .hp__line { background: transparent; }
-.hp__trio-card--log .hp__small { font-family: inherit; font-size: 0.875rem; color: #6b7790; }
 .hp__trio-card--baby { background: #eaf3fc; border-color: #b9d2ec; }
 .hp__trio-card--baby .hp__tally li { background: #fff; border-color: #cfe0f3; }
 .hp__trio-card--baby .hp__qbtn { background: #fff; }
 
 /* Today and the photo side by side; the next plans in one row underneath */
 .hp__rtop { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: var(--s3); align-items: start; }
-.hp__rtop .fp { max-width: 250px; }
-@media (max-width: 1199px) { .hp__rtop { grid-template-columns: minmax(0, 1fr); } .hp__rtop .fp { max-width: 260px; } }
+@media (max-width: 1199px) { .hp__rtop { grid-template-columns: minmax(0, 1fr); } }
 .hp__after { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); align-content: center; gap: 0; padding: 12px 18px; }
 .hp__after-row { flex: none; grid-template-columns: 56px minmax(0, 1fr); column-gap: 12px; padding: 4px 0; }
 .hp__after-row + .hp__after-row { padding-left: 18px; border-top: 0; border-left: 1.5px dashed #dbe3ef; }
@@ -1579,17 +1188,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__leaf b { font-size: 1.25rem; }
 
 /* The reminder ticket in deep blue */
-.hp__remind { background: #1f3a68; border-color: rgb(251 243 230 / 40%); }
-.hp__remind-bell { background: rgb(251 243 230 / 10%); border-color: rgb(251 243 230 / 45%); color: #f6d8c6; }
-.hp__remind-text .hp__label { color: #b3c4dc; }
-.hp__remind-text strong { color: #ffb095; }
-.hp__remind-title { color: #fbf3e6; }
-.hp__remind .hp__who2 { color: #c3cfe4; }
-.hp__remind .hp__kind--appointment { background: #dbeafe; color: #1e40af; }
-.hp__remind .hp__kind--task { border-color: rgb(251 243 230 / 55%); color: #fbf3e6; }
-.hp__remind-sample { border-color: rgb(251 243 230 / 45%); color: #c3cfe4; }
-.hp__remind .hp__link, .hp__remind .hp__link:visited { color: #fbf3e6; }
-.hp__remind .hp__link:focus-visible { outline-color: #f6d8c6; }
 
 /* The page behind Home is a soft sky blue, so the words written straight on it are dark */
 .hp__title { color: #16233b; }
@@ -1597,16 +1195,12 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__coming { --fg: #16233b; --fg-muted: #24344f; --link: #16233b; }
 .hp__coming-head .hp__label { color: #24344f; }
 .hp__coming .hp__link, .hp__coming .hp__link:visited { color: #16233b; }
-.hp__baby { color: #1b2a44; }
-.hp__baby strong { color: #16233b; }
 
 /* A little less zoomed in on a laptop at 100%: everything but the full-bleed carousel is drawn at 90% */
 .hp > :not(.hp__car) { zoom: 0.9; }
 
 /* Lately beside Today; the baby gets the bottom row to itself */
 .hp__rtop { grid-template-columns: minmax(0, 1fr) 300px; }
-.hp__rtop .hp__trio-card--log { padding: 18px 18px 18px 40px; }
-.hp__rtop .hp__line--time { grid-template-columns: minmax(0, 1fr); gap: 0; }
 .hp__trio { grid-template-columns: minmax(0, 1fr); }
 .hp__trio-card--baby { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; column-gap: var(--s4); row-gap: var(--s2); }
 .hp__trio-card--baby > .bs { grid-row: 1 / span 2; }
@@ -1618,11 +1212,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__coming-head .hp__label { color: #55627a; }
 
 /* Lately: the same pale blue paper as Coming up */
-.hp__trio-card--log { background: #ebf2fa url("/bg-paper.jpg") 0 0 / 1472px 2616px; border-color: #c9d3e3; }
-.hp__trio-card--log::before { display: none; }
-.hp__rtop .hp__trio-card--log { padding: 18px 20px; }
-.hp__trio-card--log .hp__card-head { background: transparent; border-bottom: 1px solid #c9d3e3; }
-.hp__trio-card--log .hp__line { border-color: #d3dcea; }
 
 /* The baby box in deep blue */
 .hp__trio > .hp__trio-card.hp__trio-card--baby { background: #1f3a68; border-color: #1f3a68; }
@@ -1645,47 +1234,15 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 /* The carousel: one full-bleed photograph, the quote laid over a navy scrim, a thin progress line along the bottom */
 .hp__car { --pad: max(clamp(16px, 4vw, 64px), calc((100vw - 1080px) / 2)); position: relative; width: 100vw; height: clamp(240px, 26vh, 300px); margin: -32px 0 0 calc(50% - 50vw); overflow: hidden; background: #16233b; }
 /* The container sets the height. The stage, photos and text sit inside it and never change it. */
-.hp__car-stage { position: absolute; inset: 0; }
-.hp__car-slide { position: absolute; inset: 0; display: flex; align-items: center; padding: 0 var(--pad); opacity: 0; visibility: hidden; transition: opacity 1.6s ease, visibility 0s linear 1.6s; isolation: isolate; }
-.hp__car-slide.is-active { opacity: 1; visibility: visible; transition: opacity 1.6s ease, visibility 0s; }
 /* The photograph fills the right half of the strip, zoomed in so the people are big, with only the top
    and bottom trimmed. Its left edge melts into the navy so there is no hard rectangle behind the words. */
-.hp__car-photo { position: absolute; z-index: -2; top: 0; right: 0; width: 58%; height: 100%; object-fit: cover; -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 26%); mask-image: linear-gradient(90deg, transparent 0%, #000 26%); }
-.hp__car-slide :deep(.art) { z-index: -2; }
-.hp__car-copy { display: flex; flex-direction: column; gap: var(--s1, 8px); max-width: min(34rem, 46%); padding-bottom: 20px; color: #fbf3e6; transform: translateY(8px); transition: transform 1.6s ease; }
-.hp__car-slide.is-active .hp__car-copy { transform: none; }
-.hp__car-label { margin: 0; font-family: Inter, system-ui, sans-serif; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.14em; line-height: 1.4; text-transform: uppercase; color: #d9c7ab; }
-.hp__car-text { margin: 0; font-family: "Fraunces", Georgia, serif; font-size: clamp(1.25rem, 1.9vw, 1.875rem); font-style: italic; font-weight: 300; line-height: 1.3; letter-spacing: -0.01em; color: #fbf3e6; text-wrap: balance; }
-.hp__car-credit, .hp__car-credit:visited { position: absolute; right: var(--s2, 16px); bottom: 28px; font-size: 0.75rem; line-height: 1.5; color: rgb(251 243 230 / 70%); text-decoration: none; }
-.hp__car-credit:hover, .hp__car-credit:focus-visible { color: #fff; text-decoration: underline; }
-
-.hp__car-nav { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: flex-end; gap: var(--s2, 16px); padding: 0 var(--pad) 14px; pointer-events: none; }
-.hp__car-nav > * { pointer-events: auto; }
-.hp__car-ticks { display: flex; flex: 1; gap: 6px; }
-.hp__tick-btn { flex: 1; padding: 10px 0; background: none; border: 0; cursor: pointer; }
-.hp__tick-btn:focus-visible { outline: 2px solid #fbf3e6; outline-offset: 2px; }
-.hp__tick-line { position: relative; display: block; height: 2px; overflow: hidden; background: rgb(251 243 230 / 24%); border-radius: 2px; transition: background-color 0.2s; }
-.hp__tick-btn:hover .hp__tick-line { background: rgb(251 243 230 / 45%); }
-.hp__tick-fill { position: absolute; inset: 0; background: #fbf3e6; transform-origin: left; transform: scaleX(0); animation: hp-tick linear forwards; }
-.hp__tick-fill.is-held { animation-play-state: paused; }
 @keyframes hp-tick { to { transform: scaleX(1); } }
-.hp__car-pause { display: grid; place-items: center; width: 28px; height: 28px; margin-bottom: 4px; padding: 0; background: none; border: 0; border-radius: 50%; color: #fbf3e6; opacity: 0.5; cursor: pointer; transition: opacity 0.2s; }
-.hp__car-pause:hover, .hp__car-pause:focus-visible { opacity: 1; }
-.hp__car-pause:focus-visible { outline: 2px solid #fbf3e6; outline-offset: 2px; }
 
 @media (max-width: 1099px) {
   .hp__car { margin-top: -24px; }
 }
 @media (max-width: 700px) {
     .hp__car { height: clamp(340px, 46vh, 400px); }
-  .hp__car-slide { align-items: flex-end; padding-bottom: 36px; }
-  .hp__car-photo { top: 0; right: 0; left: 0; width: 100%; max-width: 100%; height: 62%; -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 100%); mask-image: linear-gradient(180deg, #000 55%, transparent 100%); }
-  .hp__car-copy { max-width: 100%; }
-  .hp__car-text { font-size: 1.25rem; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .hp__car-slide, .hp__car-slide.is-active, .hp__car-copy { transition: none; }
-  .hp__tick-fill { animation: none; transform: scaleX(1); }
 }
 
 /* ---- Home restructure: the baby first, one plain sentence in the pink card, a compact Coming up ---- */

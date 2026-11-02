@@ -14,7 +14,6 @@ export const EVENT_TYPES = Object.freeze([
   { value: "family", label: "Family" },
   { value: "work", label: "Work" },
 ]);
-export const EVENT_OWNERS = Object.freeze(["me", "partner", "both"]);
 export const NOTES_MAX = 280;
 
 // Short weekday names starting from weekStartsOn (0 is Sunday, 1 is Monday).
@@ -133,12 +132,7 @@ export function validateEvent(draft) {
 // For a shared night, who takes the first half and second the other half.
 export function nightOwner(rotaStore, iso) {
   const night = weekNights(rotaStore, iso)[0];
-  return { who: night.who, shared: night.shared, second: night.second };
-}
-
-// "October, 2026"
-export function monthTitle(year, month) {
-  return `${MONTHS[month]}, ${year}`;
+  return { who: night.who, label: night.label ?? "", shared: night.shared, second: night.second };
 }
 
 // The first day of the week that holds iso.
@@ -150,15 +144,6 @@ export function weekStartOf(iso, weekStartsOn = 1) {
 // Seven ISO days starting at startIso.
 export function weekDays(startIso) {
   return Array.from({ length: 7 }, (_, i) => addDays(startIso, i));
-}
-
-// "October, 2026", "September to October, 2026" or "December, 2026 to January, 2027".
-export function weekTitle(days) {
-  const a = parseIso(days[0]);
-  const b = parseIso(days[days.length - 1]);
-  if (a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()) return monthTitle(a.getFullYear(), a.getMonth());
-  if (a.getFullYear() === b.getFullYear()) return `${MONTHS[a.getMonth()]} to ${monthTitle(b.getFullYear(), b.getMonth())}`;
-  return `${monthTitle(a.getFullYear(), a.getMonth())} to ${monthTitle(b.getFullYear(), b.getMonth())}`;
 }
 
 // "14:30" becomes 870. Anything else becomes 0.

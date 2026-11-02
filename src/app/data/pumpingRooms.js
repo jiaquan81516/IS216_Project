@@ -32,9 +32,5 @@ export const SEED_COORDS = Object.freeze({
   "seed-raffles-city": { lat: 1.29389, lng: 103.85312 },
 });
 
-// Kept under the old name so nothing that imported it has to change.
-export const SAMPLE_ROOMS = SEED_ROOMS;
-
 // Feature chips used to filter the list, and the longer set offered in the add form.
 export const FILTER_FEATURES = Object.freeze(["Chair", "Power outlet", "Lockable", "Sink"]);
-export const FORM_FEATURES = Object.freeze(["Chair", "Power outlet", "Lockable", "Sink", "Stroller access"]);

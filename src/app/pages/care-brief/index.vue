@@ -9,6 +9,10 @@ import { addEntry } from "@/api/entries";
 import { checkInviteCode, getCareBrief, getCaregiverHouseholds, getMember, getRecentCareEntries, getUpcomingCareAppointments, getUserProfile, joinHousehold, setActiveCaregiverHousehold, setCaregiverHouseholdLabel, subscribeCareBrief } from "@/api/profile";
 import { leaveHousehold } from "@/api/account";
 import { ROUTES } from "@/app/routes";
+import { subscribeNights, subscribeRotaSettings } from "@/api/rota";
+import { getHouseholdMembers } from "@/api/profile";
+import { dutyForCarer } from "@/app/utils/dutyView";
+import { addDays, toIso } from "@/app/utils/rotaHelpers";
 import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 
 defineOptions({ name: "CareBriefPage" });
@@ -48,6 +52,33 @@ const babyName = computed(() => {
 });
 const caregiverName = computed(() => profile.value?.displayName ? ` for ${profile.value.displayName}` : "");
 const permissions = computed(() => member.value?.permissions ?? {});
+
+// Who is looking after the baby today and tonight. Read only, and only with the duty permission.
+const dutyRota = ref(null);
+const dutyNights = ref({});
+const dutyMembers = ref([]);
+let stopDuty = [];
+function stopDutyWatch() {
+  for (const stop of stopDuty) stop();
+  stopDuty = [];
+  dutyRota.value = null;
+  dutyNights.value = {};
+}
+async function watchDuty(hid) {
+  stopDutyWatch();
+  if (!hid || member.value?.permissions?.dutyView !== true) return;
+  const today = toIso(new Date());
+  try {
+    dutyMembers.value = await getHouseholdMembers(hid);
+  } catch {
+    dutyMembers.value = [];
+  }
+  stopDuty = [
+    subscribeRotaSettings(hid, (data) => { dutyRota.value = data; }, () => {}),
+    subscribeNights(hid, addDays(today, -1), addDays(today, 1), (list) => { dutyNights.value = Object.fromEntries(list.map((n) => [n.date, n])); }, () => {}),
+  ];
+}
+const duty = computed(() => dutyForCarer({ settings: dutyRota.value, nights: dutyNights.value, members: dutyMembers.value, meUid: currentUser.value?.uid ?? "" }));
 function asDate(value) {
   if (value?.toDate) return value.toDate();
   const date = value instanceof Date ? value : new Date(value);
@@ -127,6 +158,7 @@ async function load() {
     profile.value = { ...loadedProfile, householdId: activeHouseholdId };
     householdId.value = activeHouseholdId;
     await loadSelectedCareBrief();
+    watchDuty(activeHouseholdId);
     if (member.value?.permissions?.careLogRead) entries.value = await getRecentCareEntries(activeHouseholdId);
     else entries.value = [];
     if (member.value?.permissions?.appointments) appointments.value = await getUpcomingCareAppointments(activeHouseholdId);
@@ -143,6 +175,7 @@ async function load() {
 
 onMounted(load);
 onUnmounted(() => {
+  stopDutyWatch();
   briefLoadRun += 1;
   stopCareBriefSubscription?.();
 });
@@ -331,6 +364,21 @@ async function saveCareEntry(payload) {
         </div>
         <p v-if="!permissions.feedingInstructions && !permissions.careLogRead && !permissions.napRoutine" class="brief__muted">Your parents have not enabled access to routine details for your account. Ask them to update your caregiver permissions.</p>
       </section>
+      <section v-if="permissions.dutyView" class="brief__card" aria-labelledby="brief-duty">
+        <h2 id="brief-duty">Duty</h2>
+        <div class="brief__item">
+          <h3>Tonight</h3>
+          <p v-if="duty.night">{{ duty.night.isMe ? "You are" : `${duty.night.name} is` }} looking after {{ babyName }} tonight. Handover at {{ duty.night.handover }}.</p>
+          <p v-else class="brief__muted">Nobody is set for tonight yet.</p>
+        </div>
+        <div class="brief__item">
+          <h3>Today</h3>
+          <ul v-if="duty.today.length" class="brief__duty">
+            <li v-for="(s, i) in duty.today" :key="i"><strong>{{ s.name }}</strong> {{ s.start }} to {{ s.end }}</li>
+          </ul>
+          <p v-else class="brief__muted">No day shifts are set for today.</p>
+        </div>
+      </section>
       <section v-if="permissions.allergyInfo || permissions.medicationInfo" class="brief__card" aria-labelledby="brief-health">
         <h2 id="brief-health">Health instructions</h2>
         <div v-if="permissions.allergyInfo" class="brief__item"><h3>Allergies</h3><p>{{ household?.careBrief?.allergies || "None listed. Check with a parent if unsure." }}</p></div>
@@ -381,6 +429,8 @@ async function saveCareEntry(payload) {
 .brief__card h2 { margin: 0; font-size: 1.15rem; }
 .brief__item { display: flex; flex-direction: column; gap: 5px; }
 .brief__item h3 { margin: 0; font-size: .9rem; }
+.brief__duty { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; color: var(--nt-muted); }
+.brief__duty strong { color: var(--nt-ink, inherit); }
 .brief__item p, .brief__text, .brief__contacts p { margin: 0; color: var(--nt-muted); line-height: 1.5; white-space: pre-wrap; }
 .brief__pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .brief__contacts { display: flex; flex-direction: column; gap: 8px; }

@@ -112,11 +112,6 @@ body {
   border-color: var(--nt-plum);
   box-shadow: 0 0 0 3px rgb(59 47 63 / 12%);
 }
-.form-label {
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-  font-size: 0.9375rem;
-}
 .form-check-input:checked {
   background-color: var(--nt-plum);
   border-color: var(--nt-plum);
@@ -139,10 +134,6 @@ body {
   font-size: 2.5rem;
   line-height: 1.2;
 }
-.nt-title--xl {
-  font-size: 3rem;
-  line-height: 1.17;
-}
 .nt-heading {
   font-size: 1.375rem;
   line-height: 1.3;
@@ -150,18 +141,6 @@ body {
 }
 .nt-heading--sm {
   font-size: 1.25rem;
-}
-.nt-lead {
-  font-size: 1.125rem;
-  line-height: 1.55;
-  color: var(--nt-muted);
-}
-.nt-muted {
-  color: var(--nt-muted);
-}
-.nt-small {
-  font-size: 0.875rem;
-  line-height: 1.45;
 }
 .nt-link {
   color: var(--nt-ink);
@@ -183,100 +162,10 @@ body {
 }
 
 /* Layout. */
-.nt-container {
-  width: 100%;
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: 0 24px;
-}
-.nt-main {
-  padding-top: 40px;
-  padding-bottom: 96px;
-}
-.nt-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-}
-.nt-cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
-  gap: 32px;
-  align-items: start;
-}
-.nt-cols--onboarding {
-  grid-template-columns: 640px minmax(0, 384px);
-  gap: 96px;
-}
-.nt-cols > .nt-col,
-.nt-col {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  min-width: 0;
-}
-@media (max-width: 991px) {
-  .nt-cols,
-  .nt-cols--onboarding {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 24px;
-  }
-  .nt-title--xl {
-    font-size: 2.25rem;
-  }
-}
 
 /* Cards and the private "Yours alone" box. */
-.nt-card {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 24px;
-  background: var(--nt-white);
-  border: 1px solid var(--nt-line);
-  border-radius: 12px;
-}
-.nt-card--danger {
-  background: var(--nt-red);
-  border-color: var(--nt-red-line);
-}
-.nt-card--tint {
-  background: var(--nt-powder);
-  border-color: var(--nt-powder);
-}
-.nt-card--dashed {
-  background: var(--nt-gray);
-  border: 1px dashed var(--nt-muted);
-}
-.nt-yours-alone {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 22px 24px 24px;
-  background: var(--nt-butter);
-  border: 1.5px dashed var(--nt-butter-d);
-  border-radius: 8px;
-}
-.nt-yours-alone__label {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--nt-butter-d);
-}
-.nt-rule {
-  height: 1px;
-  background: var(--nt-line);
-  border: 0;
-  margin: 0;
-  opacity: 1;
-}
 
 /* Rota colours: Daniel is apricot, Mei is powder blue. */
-.nt-who--D {
-  background: var(--nt-apricot);
-}
-.nt-who--M {
-  background: var(--nt-powder);
-}
 
 :focus-visible {
   outline: 2px solid var(--nt-plum);

@@ -17,14 +17,15 @@ export const CAREGIVER_PERMISSIONS = Object.freeze([
   { key: "medicationInfo", label: "View medication instructions" },
   { key: "appointments", label: "View appointments" },
   { key: "napRoutine", label: "View nap routine" },
+  { key: "dutyView", label: "View who is on duty, day and night" },
 ]);
 
 export const DEFAULT_CAREGIVER_PERMISSIONS = Object.freeze({
-  grandparent: Object.freeze({ careBrief: true, careLogRead: true, careLogAdd: true, careLogEdit: true, careLogMedication: false, feedingInstructions: true, allergyInfo: true, medicationInfo: true, appointments: true, napRoutine: true }),
-  "domestic-helper": Object.freeze({ careBrief: true, careLogRead: true, careLogAdd: true, careLogEdit: false, careLogMedication: false, feedingInstructions: true, allergyInfo: true, medicationInfo: true, appointments: false, napRoutine: true }),
-  babysitter: Object.freeze({ careBrief: true, careLogRead: true, careLogAdd: true, careLogEdit: false, careLogMedication: false, feedingInstructions: true, allergyInfo: true, medicationInfo: false, appointments: false, napRoutine: true }),
-  "childcare-provider": Object.freeze({ careBrief: true, careLogRead: true, careLogAdd: true, careLogEdit: false, careLogMedication: false, feedingInstructions: true, allergyInfo: true, medicationInfo: false, appointments: false, napRoutine: true }),
-  "trusted-caregiver": Object.freeze({ careBrief: true, careLogRead: true, careLogAdd: true, careLogEdit: false, careLogMedication: false, feedingInstructions: true, allergyInfo: false, medicationInfo: false, appointments: false, napRoutine: false }),
+  grandparent: Object.freeze({ careBrief: true, careLogRead: true, careLogAdd: true, careLogEdit: true, careLogMedication: false, feedingInstructions: true, allergyInfo: true, medicationInfo: true, appointments: true, napRoutine: true, dutyView: true }),
+  "domestic-helper": Object.freeze({ careBrief: true, careLogRead: true, careLogAdd: true, careLogEdit: false, careLogMedication: false, feedingInstructions: true, allergyInfo: true, medicationInfo: true, appointments: false, napRoutine: true, dutyView: true }),
+  babysitter: Object.freeze({ careBrief: true, careLogRead: true, careLogAdd: true, careLogEdit: false, careLogMedication: false, feedingInstructions: true, allergyInfo: true, medicationInfo: false, appointments: false, napRoutine: true, dutyView: true }),
+  "childcare-provider": Object.freeze({ careBrief: true, careLogRead: true, careLogAdd: true, careLogEdit: false, careLogMedication: false, feedingInstructions: true, allergyInfo: true, medicationInfo: false, appointments: false, napRoutine: true, dutyView: true }),
+  "trusted-caregiver": Object.freeze({ careBrief: true, careLogRead: true, careLogAdd: true, careLogEdit: false, careLogMedication: false, feedingInstructions: true, allergyInfo: false, medicationInfo: false, appointments: false, napRoutine: false, dutyView: false }),
 });
 
 export const EMPTY_CAREGIVER_PERMISSIONS = Object.freeze(

@@ -29,14 +29,13 @@ import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { ENTRIES_PAGE_SIZE, useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { usePrefs } from "@/app/composables/usePrefs";
 import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
-const { selectedBabyId } = useSelectedBaby();
 
 defineOptions({ name: "CareLogPage" });
 
 const PAGE_SIZE = ENTRIES_PAGE_SIZE;
 
 const home = inject(HOME_KEY, null) ?? useHome();
-const { loading, error, reload, me, partner, baby, householdId } = home;
+const { loading, error, reload, me, partner, householdId } = home;
 
 const route = useRoute();
 const router = useRouter();
@@ -129,16 +128,6 @@ function iconOf(entry) {
 // Last feed strip and today stats
 const lastFeed = computed(() => lastOfType(allEntries.value, "feed"));
 const lastFeedTitle = computed(() => lastFeedHeading(lastFeed.value, now.value));
-const lastFeedLine = computed(() => {
-  const feed = lastFeed.value;
-  if (!feed) return "";
-  const d = feed.details ?? {};
-  let what = "Feed";
-  if (d.method === "breast") what = d.minutes ? `${d.minutes} minutes breastfeeding` : "Breastfeeding";
-  else if (d.method === "bottle") what = d.ml ? `${d.ml} ml bottle` : "Bottle";
-  else if (d.method === "expressed") what = d.ml ? `${d.ml} ml expressed milk` : "Expressed milk";
-  return `${what}, logged by ${byLabel(feed)}`;
-});
 const stats = computed(() => {
   const s = todayStats(allEntries.value, now.value);
   return [
@@ -448,7 +437,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 
 <style scoped>
 .cl { --navy: #243560; --navy-2: #2d3f70; --ink: #1f2a52; --cream: #fdf9f0; --sand: #e9d9b8; display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 1020px; margin: 0 auto; color: var(--ink); }
-.cl__status, .cl__muted { margin: 0; font-size: 0.875rem; color: #6b7392; }
+.cl__muted { margin: 0; font-size: 0.875rem; color: #6b7392; }
 .cl__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; border-radius: 8px; }
 
 .cl__hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 32px 40px; background: var(--navy-2); border-radius: 28px; border-bottom: 5px solid #182246; color: #fff; overflow: hidden; }

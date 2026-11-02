@@ -23,16 +23,6 @@ export function displayName(name) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-// Turns a babySummary into a sentence such as "Aria is 6 weeks old". Empty when no line exists.
-export function babySentence(baby) {
-  const line = baby?.line ?? "";
-  if (!line) return "";
-  const subject = baby.name || "Baby";
-  if (line === "Born today") return `${subject} was born today`;
-  if (line === "Past due date") return `${subject} is past the due date`;
-  return `${subject} is ${line.charAt(0).toLowerCase()}${line.slice(1)}`;
-}
-
 export function useHome() {
   const { currentUser } = useAuth();
   const loading = ref(true);
@@ -108,6 +98,7 @@ export function useHome() {
     reload,
     me,
     partner,
+    members,
     profile,
     settings,
     household: householdData,
