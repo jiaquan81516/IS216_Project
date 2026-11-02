@@ -3,7 +3,8 @@ import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
 import { computed, inject, nextTick, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import AppButton from "@/components/ui/AppButton.vue";
+import PageHero from "@/app/components/PageHero.vue";
+import Icon from "@/app/components/Icon.vue";
 import { auth } from "@/api/firebase";
 import { cleanDisplayName, DISPLAY_NAME_MAX, PROFILE_ROLES, saveProfile } from "@/api/account";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
@@ -110,136 +111,110 @@ async function save() {
 
 <template>
   <div class="pf">
-    <header class="pf__head">
-      <h1 class="nt-title pf__title">Profile</h1>
-      <p class="pf__sub">The name and role your partner sees.</p>
-    </header>
+    <PageHero eyebrow="Your account" title="Profile" lead="The name and role your partner sees." />
 
     <LoadingScreen v-if="loading" variant="inline" label="Loading" />
 
     <div v-else-if="error" role="alert" class="pf__alert">
       <p class="pf__text">{{ error }}</p>
-      <AppButton variant="outline" size="sm" @click="reload">Try again</AppButton>
+      <button type="button" class="pf__btn pf__btn--ghost" @click="reload">Try again</button>
     </div>
 
-    <form v-else class="pf__form" novalidate :aria-busy="busy" @submit.prevent="save">
-      <section class="pf__row" aria-labelledby="pf-name-h">
-        <div class="pf__side">
-          <h2 id="pf-name-h" class="pf__h">Your name</h2>
-          <p class="pf__muted">Shown on shared logs and tasks.</p>
-        </div>
-        <div class="pf__card">
-          <div class="pf__field">
-            <label class="pf__label" for="pf-name">Display name</label>
-            <input
-              id="pf-name"
-              v-model="name"
-              class="app-control pf__input"
-              :class="{ 'app-control--invalid': nameError }"
-              type="text"
-              required
-              :maxlength="DISPLAY_NAME_MAX"
-              autocomplete="name"
-              :aria-invalid="nameError ? 'true' : 'false'"
-              :aria-describedby="nameError ? 'pf-name-err pf-name-hint' : 'pf-name-hint'"
-              @input="saved = ''"
-            />
-            <p id="pf-name-hint" class="pf__muted">Up to {{ DISPLAY_NAME_MAX }} characters.</p>
-            <p v-if="nameError" id="pf-name-err" class="app-error-text" role="alert">{{ nameError }}</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="pf__row" aria-labelledby="pf-role-h">
-        <div class="pf__side">
-          <h2 id="pf-role-h" class="pf__h">Your role</h2>
-          <p class="pf__muted">How you help with the baby.</p>
-        </div>
-        <div class="pf__card">
-          <div class="pf__chips" role="group" aria-labelledby="pf-role-h">
-            <button
-              v-for="option in PROFILE_ROLES"
-              :key="option.value"
-              type="button"
-              class="app-chip"
-              :aria-pressed="role === option.value ? 'true' : 'false'"
-              @click="pickRole(option.value)"
-            >
-              {{ option.label }}
-            </button>
-          </div>
-          <p class="pf__muted">Tap again to clear it.</p>
-        </div>
-      </section>
-
-      <section class="pf__row" aria-labelledby="pf-email-h">
-        <div class="pf__side">
-          <h2 id="pf-email-h" class="pf__h">Email</h2>
-          <p class="pf__muted">Used to sign in.</p>
-        </div>
-        <div class="pf__card">
-          <p class="pf__text">{{ email || "No email on this account." }}</p>
-          <p class="pf__muted">
-            This comes from the sign-in method and cannot be changed here. {{ provider }}.
-          </p>
-        </div>
-      </section>
-
-      <div class="pf__row pf__row--end">
-        <div class="pf__actions">
-          <AppButton size="sm" :disabled="busy" @click="save">Save changes</AppButton>
-          <p class="pf__status" role="status">{{ saved }}</p>
-        </div>
-        <p v-if="saveError" class="app-error-text" role="alert">{{ saveError }}</p>
-        <p class="pf__muted">
-          Signed in as {{ displayName(me.firstName) }}.
-        </p>
+    <form v-else class="pf__card" novalidate :aria-busy="busy" @submit.prevent="save">
+      <div class="pf__top">
+        <h2 class="pf__h">About you</h2>
+        <p class="pf__muted pf__acct"><Icon name="check" :size="14" /> {{ email || "No email on this account" }}<span v-if="email"> · {{ provider.replace("Signed in with ", "") }}</span></p>
       </div>
+
+      <div class="pf__field">
+        <label class="pf__label" for="pf-name">Display name</label>
+        <input
+          id="pf-name"
+          v-model="name"
+          class="pf__input"
+          :class="{ 'pf__input--bad': nameError }"
+          type="text"
+          required
+          :maxlength="DISPLAY_NAME_MAX"
+          autocomplete="name"
+          :aria-invalid="nameError ? 'true' : 'false'"
+          :aria-describedby="nameError ? 'pf-name-err pf-name-hint' : 'pf-name-hint'"
+          @input="saved = ''"
+        />
+        <p id="pf-name-hint" class="pf__muted">Shown on shared logs and tasks. Up to {{ DISPLAY_NAME_MAX }} characters.</p>
+        <p v-if="nameError" id="pf-name-err" class="pf__err" role="alert">{{ nameError }}</p>
+      </div>
+
+      <div class="pf__field">
+        <span id="pf-role-h" class="pf__label">Your role</span>
+        <div class="pf__chips" role="group" aria-labelledby="pf-role-h">
+          <button
+            v-for="option in PROFILE_ROLES"
+            :key="option.value"
+            type="button"
+            class="pf__chip"
+            :aria-pressed="role === option.value ? 'true' : 'false'"
+            @click="pickRole(option.value)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+        <p class="pf__muted">How you help with the baby. Tap again to clear it.</p>
+      </div>
+
+      <div class="pf__actions">
+        <button type="submit" class="pf__btn" :disabled="busy">{{ busy ? "Saving..." : "Save changes" }}</button>
+        <p class="pf__status" role="status">{{ saved }}</p>
+      </div>
+      <p v-if="saveError" class="pf__err" role="alert">{{ saveError }}</p>
+      <p class="pf__muted">Signed in as {{ displayName(me.firstName) }}. Your email comes from the sign-in method and cannot be changed here.</p>
     </form>
 
-    <section v-if="!loading && !error && householdId" id="pf-babies" ref="babiesEl" class="pf__row" aria-labelledby="pf-babies-h">
-      <div class="pf__side">
-        <h2 id="pf-babies-h" class="pf__h">Babies</h2>
-        <p class="pf__muted">Twins or a new arrival? Add each baby here.</p>
+    <section v-if="!loading && !error && householdId" id="pf-babies" ref="babiesEl" class="pf__card" aria-labelledby="pf-babies-h">
+      <div class="pf__top">
+        <div>
+          <h2 id="pf-babies-h" class="pf__h">Babies</h2>
+          <p class="pf__muted">Twins or a new arrival? Add each baby here.</p>
+        </div>
+        <button v-if="!showAddBaby" type="button" class="pf__btn pf__btn--ghost" @click="openAddBaby"><Icon name="plus" :size="16" /> Add a baby</button>
       </div>
       <div class="pf__stack">
         <BabyCard v-for="(b, i) in babies" :key="b.id" :baby="b" :number="i + 1" />
-        <p v-if="babyAdded" class="pf__status" role="status">{{ babyAdded }} was added.</p>
-        <AddBabyForm v-if="showAddBaby" :household-id="householdId" :number="babies.length + 1" :solid="false" id-prefix="pf-add-baby" @added="onBabyAdded" @cancel="showAddBaby = false" />
-        <div v-else class="pf__actions">
-          <AppButton variant="outline" size="sm" @click="openAddBaby">Add a baby</AppButton>
-        </div>
+        <p v-if="babyAdded" class="pf__status pf__ok" role="status"><Icon name="check" :size="14" /> {{ babyAdded }} was added.</p>
+        <AddBabyForm v-if="showAddBaby" :household-id="householdId" :number="babies.length + 1" id-prefix="pf-add-baby" @added="onBabyAdded" @cancel="showAddBaby = false" />
       </div>
     </section>
   </div>
 </template>
 
 <style scoped>
-.pf { display: flex; flex-direction: column; gap: 24px; max-width: 960px; font-size: 1rem; }
-.pf__head { display: flex; flex-direction: column; gap: 8px; }
-.pf__title { font-size: 2.5rem; line-height: 1.2; }
-.pf__sub { margin: 0; color: var(--nt-muted); }
-.pf__form { display: flex; flex-direction: column; gap: 24px; }
-.pf__row { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px 40px; align-items: start; }
-.pf__row--end { align-items: center; }
-.pf__row--end > * { grid-column: 2; }
-.pf__side { display: flex; flex-direction: column; gap: 4px; }
-.pf__h { margin: 0; font-size: 1.125rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
-.pf__card { display: flex; flex-direction: column; gap: 12px; padding: 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
-.pf__field { display: flex; flex-direction: column; gap: 6px; }
-.pf__label { font-size: 0.875rem; font-weight: 600; color: var(--nt-ink); }
-.pf__input { max-width: 360px; }
-.pf__muted { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
-.pf__text { margin: 0; font-size: 0.9375rem; line-height: 1.5; color: var(--nt-ink); }
+.pf { display: flex; flex-direction: column; gap: 20px; max-width: 860px; margin: 0 auto; font-size: 1rem; color: var(--ink, #1f2a52); }
+.pf__card { display: flex; flex-direction: column; gap: 18px; padding: 22px 24px 26px; background: var(--cream, #fdf9f0); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 24px; }
+.pf__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.pf__h { margin: 0; font-family: var(--nt-serif); font-size: 1.5rem; font-weight: 700; line-height: 1.25; }
+.pf__field { display: flex; flex-direction: column; gap: 8px; }
+.pf__label { font-size: 0.9375rem; font-weight: 600; }
+.pf__input { width: 100%; max-width: 420px; padding: 12px 16px; background: #fff; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 14px; font: inherit; color: var(--ink, #1f2a52); }
+.pf__input:focus { outline: 3px solid var(--navy, #243560); outline-offset: 1px; border-color: var(--navy, #243560); }
+.pf__input--bad { border-color: #c4642f; }
+.pf__muted { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--mut, #5b6692); }
+.pf__acct { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; background: #fffdf8; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 999px; }
+.pf__text { margin: 0; }
+.pf__err { margin: 0; font-size: 0.875rem; font-weight: 600; color: #a4541f; }
 .pf__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pf__chip { padding: 9px 18px; background: #fff; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 999px; color: var(--navy, #243560); font: inherit; font-size: 0.9375rem; font-weight: 600; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.pf__chip:hover { border-color: var(--navy, #243560); }
+.pf__chip[aria-pressed="true"] { background: var(--navy, #243560); border-color: var(--navy, #243560); color: #fff; }
+.pf__chip:focus-visible, .pf__btn:focus-visible { outline: 3px solid var(--navy, #243560); outline-offset: 2px; }
 .pf__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
-.pf__status { margin: 0; font-size: 0.875rem; line-height: 20px; color: var(--nt-muted); }
+.pf__btn { display: inline-flex; align-items: center; gap: 6px; padding: 11px 22px; background: var(--navy, #243560); border: 0; border-bottom: 3px solid #182246; border-radius: 14px; color: #fff; font: inherit; font-size: 0.9375rem; font-weight: 600; cursor: pointer; }
+.pf__btn:hover:not(:disabled) { background: #1b2a4f; }
+.pf__btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.pf__btn--ghost { background: #fff; border: 1.5px solid var(--sand, #e9d9b8); border-bottom-width: 3px; color: var(--navy, #243560); }
+.pf__btn--ghost:hover:not(:disabled) { background: #fffdf8; border-color: var(--navy, #243560); }
+.pf__status { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 0.875rem; color: var(--mut, #5b6692); }
+.pf__ok { color: var(--sagei, #2f5d43); font-weight: 600; }
 .pf__stack { display: flex; flex-direction: column; gap: 12px; }
-.pf__alert { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
-@media (max-width: 991px) {
-  .pf__title { font-size: 2rem; }
-  .pf__row { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .pf__row--end > * { grid-column: 1; }
-}
-@media (max-width: 575px) { .pf__card { padding: 20px 16px; } }
+.pf__alert { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 18px 20px; background: #fdeee6; border: 1.5px solid #f4a98c; border-radius: 18px; color: #7a2e12; }
+@media (max-width: 575px) { .pf__card { padding: 18px 16px 22px; } }
 </style>

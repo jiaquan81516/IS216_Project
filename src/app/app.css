@@ -247,8 +247,7 @@
 }
 
 /* Settings, Display: "Reduce motion" sets data-app-motion on the document element
-   (src/app/composables/usePrefs.js). The app has no entrance animations, so this only has
-   the few colour transitions to turn off. */
+   (src/app/composables/usePrefs.js). It turns off the colour transitions and the card entrance below. */
 :root[data-app-motion="reduce"] *,
 :root[data-app-motion="reduce"] *::before,
 :root[data-app-motion="reduce"] *::after {
@@ -256,4 +255,34 @@
   animation-duration: 0s !important;
   animation-iteration-count: 1 !important;
   scroll-behavior: auto !important;
+}
+
+/* Cards swoosh in when a page or a tab renders: a short rise and fade, one after another.
+   Only the start is held (backwards), so nothing keeps a transform afterwards. */
+@keyframes nt-swoosh {
+  from { opacity: 0; transform: translateY(22px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+.appshell__main :is([class*="__card"], .ph, .sp__tool, .sp__res-item, .sp__row, .sp__acc-item, .bc) {
+  animation: nt-swoosh 560ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.appshell__main :is([class*="__card"], .ph, .sp__tool, .sp__res-item, .sp__row, .sp__acc-item, .bc):nth-child(2) { animation-delay: 70ms; }
+.appshell__main :is([class*="__card"], .ph, .sp__tool, .sp__res-item, .sp__row, .sp__acc-item, .bc):nth-child(3) { animation-delay: 140ms; }
+.appshell__main :is([class*="__card"], .ph, .sp__tool, .sp__res-item, .sp__row, .sp__acc-item, .bc):nth-child(4) { animation-delay: 210ms; }
+.appshell__main :is([class*="__card"], .ph, .sp__tool, .sp__res-item, .sp__row, .sp__acc-item, .bc):nth-child(5) { animation-delay: 280ms; }
+.appshell__main :is([class*="__card"], .ph, .sp__tool, .sp__res-item, .sp__row, .sp__acc-item, .bc):nth-child(n + 6) { animation-delay: 340ms; }
+/* Phones: a shorter, smaller rise and a tighter stagger, so it feels quick and light on a small screen. */
+@media (max-width: 767px) {
+  @keyframes nt-swoosh-sm {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: none; }
+  }
+  .appshell__main :is([class*="__card"], .ph, .sp__tool, .sp__res-item, .sp__row, .sp__acc-item, .bc) { animation: nt-swoosh-sm 420ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+  .appshell__main :is([class*="__card"], .ph, .sp__tool, .sp__res-item, .sp__row, .sp__acc-item, .bc):nth-child(2) { animation-delay: 50ms; }
+  .appshell__main :is([class*="__card"], .ph, .sp__tool, .sp__res-item, .sp__row, .sp__acc-item, .bc):nth-child(3) { animation-delay: 100ms; }
+  .appshell__main :is([class*="__card"], .ph, .sp__tool, .sp__res-item, .sp__row, .sp__acc-item, .bc):nth-child(4) { animation-delay: 150ms; }
+  .appshell__main :is([class*="__card"], .ph, .sp__tool, .sp__res-item, .sp__row, .sp__acc-item, .bc):nth-child(n + 5) { animation-delay: 200ms; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .appshell__main :is([class*="__card"], .ph, .sp__tool, .sp__res-item, .sp__row, .sp__acc-item, .bc) { animation: none; }
 }

@@ -55,8 +55,18 @@ async function submit() {
 </template>
 
 <style scoped>
-.abf { padding: 20px 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
-.abf__title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.4; color: var(--nt-ink); }
-@media (max-width: 575px) { .abf { padding: 16px; } }
+.abf { padding: 18px; background: #fffdf8; border: 1.5px dashed #f2a477; border-radius: 20px; }
+.abf__title { margin: 0; font-family: var(--nt-serif); font-size: 1.1875rem; font-weight: 700; line-height: 1.3; color: var(--ink, #1f2a52); }
 .abf__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.abf :deep(.app-field__label) { font-size: 0.9375rem; font-weight: 600; color: var(--ink, #1f2a52); }
+.abf :deep(.app-input) { width: 100%; padding: 12px 16px; background: #fff; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 14px; font: inherit; color: var(--ink, #1f2a52); box-shadow: none; }
+.abf :deep(.app-input:focus) { outline: 3px solid var(--navy, #243560); outline-offset: 1px; border-color: var(--navy, #243560); }
+.abf :deep(.bf__status) { display: inline-flex; width: auto; align-self: flex-start; gap: 0; padding: 4px; background: #fff; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 999px; }
+.abf :deep(.bf__seg) { padding: 9px 18px; background: transparent; border: 0; border-radius: 999px; color: var(--navy, #243560); font-weight: 600; box-shadow: none; }
+.abf :deep(.bf__seg--on), .abf :deep(.bf__seg--on:hover) { background: var(--navy, #243560); color: #fff; box-shadow: none; }
+.abf :deep(.bf__seg:focus-visible) { outline: 3px solid var(--navy, #243560); outline-offset: 2px; }
+.abf .app-btn { padding: 11px 22px; border-radius: 14px; font-weight: 600; }
+.abf .app-btn--primary { background: var(--navy, #243560); border: 0; border-bottom: 3px solid #182246; color: #fff; }
+.abf .app-btn--outline { background: #fff; border: 1.5px solid var(--sand, #e9d9b8); border-bottom-width: 3px; color: var(--navy, #243560); }
+@media (max-width: 575px) { .abf { padding: 14px; } }
 </style>
