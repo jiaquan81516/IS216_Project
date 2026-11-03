@@ -272,12 +272,12 @@ onMounted(refresh);
         <label class="cg__field"><span>Baby</span><select class="app-control" :value="briefBabyId" :disabled="busy || briefLoading" @change="selectBriefBaby($event.target.value)"><option v-for="(baby, index) in babies" :key="baby.id" :value="baby.id">{{ baby.babyName || `Baby ${index + 1}` }}</option></select></label>
         <p v-if="briefLoading" class="cg__muted" aria-live="polite">Loading this baby’s care brief…</p>
         <label v-for="item in [
-  { key: 'feeding', label: 'Usual feeding method' },
+  { key: 'feeding', label: 'Feeding instructions' },
           { key: 'napRoutine', label: 'Nap routine' },
           { key: 'allergies', label: 'Allergies' },
           { key: 'medications', label: 'Medication instructions' },
           { key: 'parentContacts', label: 'Parent contact details for this baby' },
-        ]" :key="item.key" class="cg__field"><span>{{ item.label }}</span><textarea v-model="brief[item.key]" class="app-control" rows="2" maxlength="500" :disabled="busy || briefLoading" :placeholder="({ feeding: 'e.g. bottle feed, breastfeeding', napRoutine: 'e.g. nap at 3pm', allergies: 'e.g. peanut allergy, or none', medications: 'e.g. medicine name and dosage', parentContacts: 'e.g. phone numbers to call' })[item.key]" /></label>
+        ]" :key="item.key" class="cg__field"><span>{{ item.label }}</span><textarea v-model="brief[item.key]" class="app-control" rows="2" maxlength="500" :disabled="busy || briefLoading" :placeholder="({ feeding: 'e.g. bottle feed, use expressed milk from the freezer', napRoutine: 'e.g. nap at 3pm', allergies: 'e.g. peanut allergy, or none', medications: 'e.g. medicine name and dosage', parentContacts: 'e.g. phone numbers to call' })[item.key]" /></label>
         <AppButton type="button" variant="outline" :disabled="busy || briefLoading" @click="saveBrief">{{ busy ? "Saving…" : "Save care brief" }}</AppButton>
         <p v-if="briefStatus" class="cg__muted" role="status" aria-live="polite">{{ briefStatus }}</p>
         <p v-if="briefError" class="app-error-text" role="alert">{{ briefError }}</p>
