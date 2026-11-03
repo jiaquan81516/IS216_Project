@@ -129,58 +129,58 @@ const guide = (id) => ({ path: ROUTES.SUPPORT, query: { guide: id } });
 // Two ideas per concern. `to` is optional: some ideas are something to do, not somewhere to go.
 export const IDEAS = Object.freeze({
   exhausted: [
-    { title: "Hand over the next stretch", body: "Pick a block tonight where your partner owns everything, so you can switch off properly, not just lie down.", action: "Open sleep rota", to: ROUTES.ROTA },
-    { title: "Drop one thing from tomorrow", body: "Postpone one task that can wait. Feeding, medication and rest come first.", action: "Read the guide", to: guide("sleep") },
+    { title: "Take one block of sleep tonight", body: "Agree who has the baby from 10 PM to 2 AM, then put your phone in another room. Four hours in a row beats eight in pieces.", action: "Open sleep rota", to: ROUTES.ROTA },
+    { title: "Cut tomorrow's list to three things", body: "Feeds, medication, one proper meal. Everything else can move to the weekend.", action: "Read the guide", to: guide("sleep") },
   ],
   overwhelmed: [
-    { title: "Shrink it to the next hour", body: "Keep only feeding, medication and anything urgent. Everything else can wait until you have slept.", action: "Read the guide", to: guide("more-than-tired") },
-    { title: "Ask for one specific thing", body: "A clear ask is easier to say yes to: \"Can you take the next feed so I can shower and eat?\"", action: "Write to your partner", to: ROUTES.HOME },
+    { title: "Sort the list into now, today, later", body: "Write every worry in one of three piles. Only the \"now\" pile needs you before you sleep.", action: "Read the guide", to: guide("more-than-tired") },
+    { title: "Ask for one specific job", body: "\"Can you do the 6 AM feed?\" gets a yes more often than \"I need help\".", action: "Message your partner", to: ROUTES.HOME },
   ],
   anxious: [
-    { title: "Urgent, or a worry?", body: "If something feels medically wrong, call your doctor. If not, write the worry down as one question to ask later.", action: "Read the guide", to: guide("more-than-tired") },
-    { title: "Slow your body first", body: "Feet on the floor, name five things you can see, then five slow breaths with a longer breath out.", action: "Read: Scary thoughts", to: guide("scary-thoughts") },
+    { title: "Is it a call-the-doctor thing?", body: "If something feels medically wrong, call your doctor or nurse now. If it is a worry, write it as one question to ask at the next visit.", action: "Read the guide", to: guide("more-than-tired") },
+    { title: "Ground yourself for one minute", body: "Feet flat on the floor. Name five things you can see, then breathe out for longer than you breathe in, five times.", action: "Read: Scary thoughts", to: guide("scary-thoughts") },
   ],
   isolated: [
-    { title: "Reach one person today", body: "A friend, a relative or a parent group. A two line message counts.", action: "See support options", to: ROUTES.SUPPORT },
-    { title: "Say it at home too", body: "Try: \"I need some company, not only help with tasks.\"", action: "Write to your partner", to: ROUTES.HOME },
+    { title: "Message one person who has been there", body: "One line is enough: \"Rough day, can I call you later?\"", action: "See support options", to: ROUTES.SUPPORT },
+    { title: "Tell your partner it is company you want", body: "Try: \"I do not need a job done. Can you sit with me for ten minutes?\"", action: "Message your partner", to: ROUTES.HOME },
   ],
   disconnected: [
-    { title: "Three questions, three minutes", body: "What was hard today, what helped, and what do you need tomorrow? Ask, then swap.", action: "Read the guide", to: guide("us") },
-    { title: "Add a kind word to your handover", body: "Name one thing you noticed your partner doing well. Keep it separate from the to do list.", action: "Open handover", to: ROUTES.HANDOVER },
+    { title: "Swap three answers", body: "Ask each other what was hardest today, what helped, and what you need tomorrow. Two minutes each, and no fixing.", action: "Read the guide", to: guide("us") },
+    { title: "Name one thing they did well", body: "Pick something you noticed today that is not on the to-do list, and say it out loud.", action: "Message your partner", to: ROUTES.HOME },
   ],
   "body-image": [
-    { title: "Comfort before correction", body: "Clothes that fit today, a proper meal, a warm shower. Recovery is not a deadline.", action: "Read the guide", to: guide("body") },
-    { title: "Bring it to your check-up", body: "If something does not feel like it is healing, note when it started and ask at your next appointment.", action: "Open calendar", to: ROUTES.CALENDAR },
+    { title: "Wear what fits today", body: "Clothes that fit now, a hot shower and a proper meal. Healing has no deadline.", action: "Read the guide", to: guide("body") },
+    { title: "Bring it up at your check-up", body: "If something does not feel like it is healing, note when it started and ask at your next appointment.", action: "Open calendar", to: ROUTES.CALENDAR },
   ],
   "provider-pressure": [
-    { title: "Name the one worry", body: "Not everything at once. The specific thing you are afraid will happen, so it can be talked about.", action: "Read the guide", to: guide("dads") },
-    { title: "Share one load for a week", body: "Pick one task you carry quietly and agree who owns it for the next seven days.", action: "Review shared tasks", to: ROUTES.RETURN_TO_WORK },
+    { title: "Say the worry out loud", body: "Name the one thing you are afraid will happen, such as money in the first year, and tell your partner. A named worry can be planned for.", action: "Read the guide", to: guide("dads") },
+    { title: "Hand one job over for a week", body: "Pick a job you carry without saying so, and agree who owns it for the next seven days.", action: "Review shared tasks", to: ROUTES.RETURN_TO_WORK },
   ],
   "return-to-work": [
-    { title: "Plan the first week back", body: "Drop off, pick up, and who stays home if the baby is unwell. Decide it together once.", action: "Open return to work", to: ROUTES.RETURN_TO_WORK },
-    { title: "Make room for the feelings", body: "Guilt and relief can both be true. Tell your partner which one is louder today." },
+    { title: "Plan the first week back", body: "Who does drop-off, who does pick-up, and who stays home if the baby is unwell. Decide it once, together.", action: "Open return to work", to: ROUTES.RETURN_TO_WORK },
+    { title: "Say which feeling is louder", body: "Guilt and relief can both be true. Tell your partner which one is louder today." },
   ],
   pumping: [
-    { title: "Find a room near work", body: "Check rooms near your office before day one, with power and somewhere to store milk.", action: "Find a pumping room", to: ROUTES.ROOMS },
-    { title: "Pack the backup kit", body: "Spare parts, bags, labels and a cooler bag, ready the night before.", action: "Read the guide", to: guide("back-to-work") },
+    { title: "Find a room near work", body: "Check rooms near your office before day one: a plug, a lock, and somewhere to store milk.", action: "Find a pumping room", to: ROUTES.ROOMS },
+    { title: "Pack the backup kit the night before", body: "Spare parts, bags, labels and a cooler bag, by the door.", action: "Read the guide", to: guide("back-to-work") },
   ],
   "parenting-confidence": [
-    { title: "Look back at what worked", body: "The care log holds every feed and settle that went fine. There are more than it feels like.", action: "Open care log", to: ROUTES.CARE_LOG },
-    { title: "Ask early, not late", body: "When something feels off, your nurse or doctor would rather hear from you early.", action: "See support options", to: ROUTES.SUPPORT },
+    { title: "Scroll back through the care log", body: "Every feed and settle that went fine is in there. There are more than it feels like today.", action: "Open care log", to: ROUTES.CARE_LOG },
+    { title: "Ask the nurse early", body: "If something feels off, your nurse or doctor would rather hear about it early than late.", action: "See support options", to: ROUTES.SUPPORT },
   ],
 });
 
 export const HARD_DAY_IDEA = Object.freeze({
   title: "Be gentle with today",
-  body: "You do not need to fix how you feel. Choose one small thing: water, food, or twenty minutes off duty.",
+  body: "You do not have to fix how you feel tonight. Get one glass of water, one proper snack, and ask for twenty minutes off duty.",
   action: "Ask for a break",
   to: ROUTES.HOME,
 });
 
 export const STEADY_DAY_IDEA = Object.freeze({
-  title: "Note what helped",
-  body: "Something went right today. Telling your partner makes it easier to repeat.",
-  action: "Write to your partner",
+  title: "Tell your partner what worked",
+  body: "Something went right today. Saying what it was makes it easier to repeat.",
+  action: "Message your partner",
   to: ROUTES.HOME,
 });
 
@@ -208,6 +208,18 @@ const joinAnd = (items) => (items.length <= 1 ? items.join("") : `${items.slice(
 const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const lower = (labels) => labels.map((l) => l.charAt(0).toLowerCase() + l.slice(1));
 
+// One concrete way to repeat each thing that gave something back, keyed by the lift's value.
+const GIVE_AGAIN = {
+  sleep: "Pick tomorrow's sleep block now and put it on the rota, so it does not depend on how the day goes.",
+  food: "Decide tomorrow's lunch tonight: something you can eat with one hand, ready by midday.",
+  outside: "Plan ten minutes outside after the first feed tomorrow. Put the pram by the door tonight.",
+  laugh: "Save the show or voice note that made you laugh for tomorrow's late feed.",
+  hug: "Ask for a proper hug when your partner finishes tomorrow, before anything else is discussed.",
+  baby: "Set aside one feed tomorrow with the phone away, just the two of you.",
+  alone: "Book twenty minutes alone tomorrow at a fixed time, and tell your partner when.",
+  friend: "Message the same person tomorrow, even one line.",
+};
+
 export function readingFor(answers, { partner = "your partner", earlier = [] } = {}) {
   const { mood, energy, stress, closeness, body = [], concerns = [], lifts = [] } = answers;
   const areas = lower(body.map((b) => labelFor(BODY_AREAS, b)).filter(Boolean));
@@ -225,100 +237,101 @@ export function readingFor(answers, { partner = "your partner", earlier = [] } =
   else if (gave.length) story.push(`${capital(joinAnd(gave))} gave a little back.`);
 
   // What it might mean. Each one says what in the answers led to it ("from"), what it may mean
-  // ("body") and one small thing to try ("tip"). At most four, the most pressing first.
+  // ("body") and one small thing to try ("tip"). At most three are shown, the most pressing first.
+  const who = partner === "your partner" ? partner : capital(partner);
   const insights = [];
   const moodWord = labelFor(MOODS, mood).toLowerCase();
   const tankWord = energy ? labelFor(ENERGY, energy).toLowerCase() : "";
   const stressWord = labelFor(STRESS, stress).toLowerCase();
   if (mood <= 2 && energy && energy <= 2) {
     insights.push({
-      title: "This looks like depletion",
-      from: `Mood ${moodWord} and tank ${tankWord}`,
-      body: "Low mood and an empty tank often travel together in the early months. Broken sleep, feeds around the clock and little time to eat properly drain both at once, so it is not a sign that you are failing or not coping.",
-      tip: "Start with the basics before anything else: a proper meal, water, and one stretch of sleep that nobody interrupts. Ask for that stretch out loud.",
+      title: "Low mood and an empty tank", art: "sleep",
+      from: `Mood ${moodWord}, tank ${tankWord}`,
+      body: "After weeks of broken sleep, feeling low and feeling empty usually arrive together. It says more about the hours you have slept than about how you are doing as a parent.",
+      tip: `Eat something now, drink a glass of water, and ask ${who} for one stretch of sleep tonight that nobody interrupts.`,
     });
   } else if (mood <= 2) {
     insights.push({
-      title: "Low, and not only tired",
+      title: "Low, and not only tired", art: "breathe",
       from: `Mood ${moodWord}${energy ? ` while your tank is ${tankWord}` : ""}`,
-      body: "Your mood is lower than tiredness alone explains. That can happen after birth, and it is common. One low day is normal. A run of them is worth paying attention to, and it is not something to push through alone.",
-      tip: "Tell one person today how you actually feel, even in a single sentence. If it carries on, the Support page has a short check to help you decide what next.",
+      body: "Tiredness does not explain all of this. Low mood is common after birth and one day is not a worry, but if most days this week look like this, tell someone.",
+      tip: "Tell one person today how you actually are, in one sentence. The Support page has a short check if it carries on.",
     });
   } else if (energy && energy <= 2 && mood >= 3) {
     insights.push({
-      title: "Running on fumes",
+      title: "Coping, but nearly empty", art: "water",
       from: `Tank ${tankWord}, mood ${moodWord}`,
-      body: "You are holding up emotionally, but your energy is nearly gone. That is the point where small things start to feel big. Being cheerful on top of an empty tank is expensive, and it tends to catch up in a day or two.",
-      tip: "Protect one rest block tonight, before the evening gets busy. Rest now costs less than recovering later.",
+      body: "You are managing, which means nobody can see how little is left. That is usually when something small, like a spilled bottle, tips you over.",
+      tip: "Book one rest block tonight, before the evening fills up.",
     });
   }
   if (stress >= 4 && areas.length) {
     insights.push({
-      title: "Stress is showing up in your body",
+      title: "Your body is carrying it too", art: "breathe",
       from: `Carrying ${stressWord}, tension in your ${joinAnd(areas)}`,
-      body: `Your body is keeping score. Tight ${joinAnd(areas)} is often where stress lands first, and it usually builds quietly through the day. Feeding, carrying and lifting a baby adds strain to the same places.`,
-      tip: "The two minute release in your plan below takes the edge off. A warm shower or a short walk outside works too.",
+      body: `Stress tends to settle in the ${joinAnd(areas)} first, and feeding and carrying a baby loads the same spots.`,
+      tip: "Do the two-minute release below, or take a warm shower.",
     });
   } else if (stress >= 4) {
     insights.push({
-      title: "A heavy load",
+      title: "A lot on your plate", art: "note",
       from: `Carrying ${stressWord}`,
-      body: "When it feels like too much, the problem is rarely that you carry it badly. It is that everything sits on one pair of shoulders. The aim is to put one piece down, not to carry all of it better.",
-      tip: "Pick the one stone that is not yours to hold alone, and hand it to your partner or someone you trust until tomorrow.",
+      body: "The list is long, and most of it is probably waiting on you. The aim is to take one job off it, not to get better at carrying all of them.",
+      tip: `Pick one job that does not have to be yours and ask ${who} to take it until tomorrow evening.`,
     });
   } else if (stress <= 2 && mood >= 3) {
     insights.push({
-      title: "A light load today",
+      title: "A lighter day", art: "walk",
       from: `Carrying ${stressWord}`,
-      body: "You are not weighed down right now. That is useful to notice, because the days that go well are the ones with something to learn from.",
-      tip: "Ask yourself what made the load lighter today: a task someone took, a nap, a calm feed. Say it to your partner so it can happen again.",
+      body: "Not much is pressing on you today, which is worth noticing.",
+      tip: `Think back: did someone take a job, did you nap, was a feed easy? Tell ${who} so it can happen again.`,
     });
   }
   if (took.length && !gave.length) {
     insights.push({
-      title: `${capital(joinAnd(took.slice(0, 2)))} took the most`,
+      title: `Most of today went on ${joinAnd(took.slice(0, 2))}`, art: "tea",
       from: `You picked ${joinAnd(took)}`,
-      body: "Naming what drains you is the first step to changing it. It also helps to remember that nothing has given back yet today, which is why the day feels one-sided.",
-      tip: "Plan one small thing that puts something back, on purpose, before you go to bed. Ten minutes is enough.",
+      body: "Nothing has given anything back yet, which is why today feels one-sided.",
+      tip: "Before bed, do one small thing that is only for you. Ten minutes is enough.",
     });
   }
   if (closeness && closeness <= 2) {
     insights.push({
-      title: "Some distance between you",
-      from: `You feel ${CLOSE_PHRASE[closeness]} ${partner}`,
-      body: "Feeling apart is very common when you are both stretched. You are both running on little sleep and handing the baby back and forth, so the time you have for each other shrinks. It usually does not mean something is wrong. It means there has been no room.",
-      tip: `Aim for a small moment, not a big conversation. Ten minutes with ${partner} that is not about the baby or logistics.`,
+      title: `You and ${who} feel apart`, art: "apart",
+      from: `You feel ${CLOSE_PHRASE[closeness]} ${who}`,
+      body: "When you are both short on sleep, the time you had for each other goes first. It usually means there has been no room, not that something is wrong.",
+      tip: `Ten minutes together tonight that is not about the baby: tea on the sofa, a short walk, one episode.`,
     });
   } else if (closeness >= 4 && (mood <= 2 || stress >= 4)) {
     insights.push({
-      title: `${capital(partner)} is on your side`,
-      from: `You feel ${CLOSE_PHRASE[closeness]} ${partner}, even on a hard day`,
-      body: "Feeling close while things are tough is a real strength. Leaning on that is allowed, and it is often the quickest way to feel lighter.",
-      tip: `Tell ${partner} one thing they could take off your plate today. People usually want to help and do not know where to start.`,
+      title: `${capital(who)} is close right now`, art: "hug",
+      from: `You feel ${CLOSE_PHRASE[closeness]} ${who}, even on a hard day`,
+      body: "Feeling close on a hard day makes it easier to ask for help.",
+      tip: `Ask ${who} for one specific thing today, such as the next feed or tonight's dinner.`,
     });
   }
   if (gave.length) {
     insights.push({
-      title: "You know what helps",
+      title: "What helped today", art: "sun",
       from: `${capital(joinAnd(gave))} gave something back`,
-      body: "What helped once usually helps again. Most parents only find out what works for them by noticing days like this one.",
-      tip: `Put ${gave[0]} into tomorrow at a set time, rather than waiting for it to happen.`,
+      body: "Things that helped once usually help again, and you only find out which by noticing.",
+      tip: GIVE_AGAIN[lifts[0]] ?? "Pick a set time tomorrow for it, so it does not depend on how the day goes.",
     });
   }
   if (mood >= 4 && stress <= 3 && insights.length < 3) {
     insights.push({
-      title: "A steadier day",
+      title: "A steadier day", art: "walk",
       from: `Mood ${moodWord}, carrying ${stressWord}`,
-      body: "Good days do not need to be explained, but they are worth noticing. They show you what a workable day looks like, and you can lean on that memory on the harder ones.",
-      tip: "Write down one thing that made today work. Your future self will be glad you did.",
+      body: "Mood is good and the load is manageable. Note what made today work so you can repeat it on a harder day.",
+      tip: "Write one line in your phone notes about what made today work.",
     });
   }
   if (!insights.length) {
     insights.push({
-      title: "A middle kind of day",
+      title: "An in-between day", art: "breathe",
       from: `Mood ${moodWord}${energy ? `, tank ${tankWord}` : ""}, carrying ${stressWord}`,
-      body: "Nothing here stands out as a warning, and that is a fine place to be in the early months. Most days are like this. Patterns only show up over a week or two.",
-      tip: "Keep checking in around the same time each day. After a few days, the week chart below will start to show you what is normal for you.",
+      body: "Nothing here stands out as a worry. Most days in these months look like this.",
+      tip: "Check in at about the same time each day. After a few days the week chart shows what is normal for you.",
     });
   }
   insights.splice(4);
@@ -328,20 +341,20 @@ export function readingFor(answers, { partner = "your partner", earlier = [] } =
   const ideas = ideasFor(answers);
   plan.push({ id: "idea", title: ideas[0].title, body: ideas[0].body, action: ideas[0].action, to: ideas[0].to });
   if (areas.length) {
-    plan.push({ id: "release", title: "A two minute release", body: "Sit down. Drop your shoulders, unclench your jaw and breathe out slowly five times. Then roll your shoulders back three times." });
-  } else if (gave.length) {
-    plan.push({ id: "again", title: "Do it again on purpose", body: `Put ${gave[0]} into tomorrow at a set time, rather than hoping it happens.` });
+    plan.push({ id: "release", title: "A two-minute release", body: "Sit down, drop your shoulders and unclench your jaw. Breathe out slowly five times, then roll your shoulders back three times." });
+  } else if (gave.length && GIVE_AGAIN[lifts[0]]) {
+    plan.push({ id: "again", title: "Repeat what helped", body: GIVE_AGAIN[lifts[0]] });
   }
   if (closeness && closeness <= 2) {
-    plan.push({ id: "together", title: "Ten minutes together", body: `Tonight, ten minutes with ${partner} that is not about the baby or logistics. Tea, a short walk, or just sitting together.` });
+    plan.push({ id: "together", title: "Ten minutes together", body: `Tonight, ten minutes with ${who} that is not about the baby. Tea, a short walk, or one episode.` });
   } else if (stress >= 4) {
-    plan.push({ id: "handover", title: "Hand one stone over", body: `Name one task and ask ${partner} to own it until tomorrow evening.`, action: "Write to your partner", to: ROUTES.HOME });
+    plan.push({ id: "handover", title: "Hand one job over", body: `Choose one job from your list, say which one, and ask ${who} to take it until tomorrow evening.`, action: "Message your partner", to: ROUTES.HOME });
   }
   if (plan.length < 3 && ideas[1]) plan.push({ id: "idea-2", title: ideas[1].title, body: ideas[1].body, action: ideas[1].action, to: ideas[1].to });
   if (plan.length < 3 && !plan.some((p) => p.to === ROUTES.ROTA)) {
-    plan.push({ id: "rest", title: "Protect one block of sleep", body: "Agree tonight who covers which hours, so each of you gets one stretch that is properly off duty.", action: "Open sleep rota", to: ROUTES.ROTA });
+    plan.push({ id: "rest", title: "Protect one block of sleep", body: `Agree with ${who} who has the baby for which hours tonight, so each of you gets one stretch that is properly off duty.`, action: "Open sleep rota", to: ROUTES.ROTA });
   }
-  if (plan.length < 3) plan.push({ id: "tomorrow", title: "Check in again tomorrow", body: "One minute, around the same time. A pattern is easier to read than a single day." });
+  if (plan.length < 3) plan.push({ id: "tomorrow", title: "Check in again tomorrow", body: "One minute, at about the same time. A pattern is easier to read than a single day." });
 
   // Compared with your week
   let compare;

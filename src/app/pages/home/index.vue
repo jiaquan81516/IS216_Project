@@ -17,6 +17,7 @@ import { isStruggling, moodStageFor } from "@/app/utils/moodStage";
 import { formatMinutes, formatTime as clockTime, lastOfType, toDate } from "@/app/utils/entryHelpers";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { NUDGES_KEY } from "@/app/composables/useNudges";
+import { ASKS, REPLIES, answersAsk, askKind } from "@/app/utils/askHelpers";
 import { useCheckinsStore } from "@/app/stores/checkins";
 import { encouragementFor } from "@/app/data/encouragement";
 import { MOODS } from "@/app/data/wellness";
@@ -321,6 +322,10 @@ const cheerLine = computed(() => (smallThings.value === 1 ? "No rush. You've got
 const incomingSwaps = computed(() => (rotaStore.value?.pending ?? []).filter((x) => x.from !== myUid.value && (!x.to || x.to === myUid.value)));
 function swapLine(swap) {
   const who = partnerFirst.value || "Your partner";
+  if (swap.date && !swap.withDate) {
+    const tonight = rotaView.value && swap.date === tonightDate(now.value, rotaView.value.handoverTime);
+    return `${who} asks you to take ${tonight ? "tonight's shift" : `the night of ${swap.date}`} so they can rest.`;
+  }
   if (!swap.date && swap.withDate) {
     const tonight = rotaView.value && swap.withDate === tonightDate(now.value, rotaView.value.handoverTime);
     return `${who} offers to take ${tonight ? "tonight's shift" : `the night of ${swap.withDate}`}.`;
@@ -337,6 +342,47 @@ async function answerSwap(swap, accept) {
   // Cover is arranged, so the flower settles back to a bud (never straight to a bloom).
   if (accept && !swap.date) checkins.resetStage(now.value);
 }
+// The one thing that needs an answer today, shown across the top: a request to take over a night (with
+// accept and decline), or a partner's check-in that asked for cover tonight and has not been answered yet.
+// Everything your partner has asked of you that is still waiting, each as its own banner across the top: a request to take
+// over a night (with accept and decline), and any of "take over tonight", "check in on me" and "give me space" they sent in
+// the last day. One answered does not hide the others.
+const coverBanners = computed(() => {
+  const list = [];
+  const swaps = incomingSwaps.value.filter((x) => x.date && !x.withDate);
+  for (const swap of swaps) {
+    list.push({ key: `swap-${swap.id}`, kind: "swap", swap, title: swapLine(swap), sub: "Say yes and the sleep rota puts you on for that night." });
+  }
+  if (!partner.value) return list;
+  const chat = shared.chat?.messages ?? [];
+  const at = (m) => (toDate(m.createdAt) ?? new Date()).getTime();
+  const recent = chat.filter((m) => m.from === partner.value.uid && now.value.getTime() - at(m) < 24 * 3600 * 1000 && askKind(m.text));
+  const mine = chat.filter((m) => m.from === myUid.value);
+  const who = partnerFirst.value;
+  const words = {
+    coverTonight: { title: `${who} asked you to take over tonight`, sub: "Open their check-in to see what they need, and reply." },
+    checkOnMe: { title: `${who} asked you to check in on them`, sub: "A kind message goes a long way. Open the chat to reply." },
+    giveSpace: { title: `${who} needs some quiet`, sub: "No questions and no chat for now. One short reply lets them know you got it, then leave them be." },
+  };
+  let coverShown = swaps.length > 0;
+  for (const a of ASKS) {
+    if (a.need === "coverTonight" && swaps.length) continue;
+    const ask = [...recent].reverse().find((m) => askKind(m.text) === a.need);
+    if (!ask || mine.some((m) => at(m) > at(ask) && answersAsk(a.need, m.text))) continue;
+    list.push({ key: a.need, kind: a.need, ...words[a.need] });
+    if (a.need === "coverTonight") coverShown = true;
+  }
+  // A "cover tonight" check-in with no message behind it (an older one): the check-in itself is the ask.
+  const latest = latestOf(checkins.partnerItems);
+  if (!coverShown && latest && theirs.value.fresh && theirs.value.need === "coverTonight") {
+    const askedAt = new Date(latest.savedAt).getTime();
+    const answered =
+      (posts.posts ?? []).some((post) => post.authorUid === myUid.value && (toDate(post.createdAt)?.getTime() ?? Date.now()) > askedAt) ||
+      mine.some((m) => at(m) > askedAt && answersAsk("coverTonight", m.text));
+    if (!answered) list.push({ key: "coverTonight", kind: "coverTonight", ...words.coverTonight });
+  }
+  return list;
+});
 const lede = computed(() => strip.value?.text ?? quote.value);
 
 // ---- Who has the nights ----
@@ -510,6 +556,31 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
     </div>
 
     <template v-if="!loading && !error">
+      <div v-if="coverBanners.length" class="hp__covers">
+        <section v-for="b in coverBanners" :key="b.key" class="hp__cover" :aria-label="b.title">
+          <div class="hp__cover-text">
+            <p class="hp__cover-label">Needs your answer</p>
+            <h2 class="hp__cover-title">{{ b.title }}</h2>
+            <p class="hp__cover-sub">{{ b.sub }}</p>
+          </div>
+          <div v-if="b.kind === 'swap'" class="hp__cover-actions">
+            <button type="button" class="hp__btn hp__btn--primary" @click="answerSwap(b.swap, true)">Accept, take tonight</button>
+            <button type="button" class="hp__btn hp__btn--outline" @click="answerSwap(b.swap, false)">Not tonight</button>
+          </div>
+          <div v-else-if="b.kind === 'checkOnMe'" class="hp__cover-actions">
+            <button type="button" class="hp__btn hp__btn--primary" @click="openChat">Message {{ partnerFirst }}</button>
+          </div>
+          <div v-else-if="b.kind === 'giveSpace'" class="hp__cover-actions">
+            <button type="button" class="hp__btn hp__btn--primary" @click="nudgeState?.send(REPLIES.giveSpace)">Tell them you got it</button>
+          </div>
+          <div v-else class="hp__cover-actions">
+            <AppLink class="hp__btn hp__btn--primary" :to="ROUTES.WELLNESS">See what they need</AppLink>
+            <button type="button" class="hp__btn hp__btn--outline" @click="openChat">Open the chat</button>
+          </div>
+        </section>
+        <p v-if="actionError" class="hp__problem" role="alert">{{ actionError }}</p>
+      </div>
+
       <header class="hp__head">
         <div class="hp__head-text">
           <h1 class="hp__title">Good {{ greeting }}, {{ partnerFirst ? `${myName} and ${partnerFirst}` : myName }}.</h1>
@@ -787,6 +858,14 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__live { position: absolute; }
 .hp__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s2) var(--s3); background: #fbe3da; border-radius: 16px; font-size: 0.875rem; color: #6e2a14; }
 .hp__error p { margin: 0; }
+.hp__covers { display: flex; flex-direction: column; gap: var(--s2); }
+.hp__cover { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--s2) var(--s3); padding: var(--s3) var(--s4); background: #fff1e2; border: 1px solid #f0cfa8; border-left: 6px solid #c4642f; border-radius: 16px; color: #1f2a52; }
+.hp__cover-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.hp__cover-label { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #c4642f; }
+.hp__cover-title { margin: 0; font-family: var(--serif); font-size: 1.25rem; font-weight: 500; line-height: 1.3; color: #1f2a52; text-wrap: balance; }
+.hp__cover-sub { margin: 0; font-size: 0.875rem; color: #3b4468; }
+.hp__cover-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+@media (max-width: 760px) { .hp__cover { grid-template-columns: 1fr; padding: var(--s3); } }
 .hp__problem { margin: 0; font-size: 0.875rem; color: var(--warm); }
 
 /* Type. Inside a card the colours come from the card, so every colour field stays readable. */
