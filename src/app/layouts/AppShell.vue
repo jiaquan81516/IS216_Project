@@ -323,11 +323,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  /* A soft, grainy sky blue behind every page. */
-  background-color: #8fb0d6;
-  background-image: url("/bg-sky.jpg");
-  background-size: 675px 1200px;
-  background-attachment: fixed;
+  /* A soft dotted periwinkle behind every page. */
+  background-color: #9fb0d0;
+  background-image: radial-gradient(rgb(255 255 255 / 35%) 1.5px, transparent 1.5px);
+  background-size: 22px 22px;
 }
 .appshell__skip {
   position: absolute;
@@ -693,13 +692,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   .top__user {
     order: 3;
   }
-}
-
-/* Care log and Checklist sit on a soft dotted periwinkle page. */
-.appshell__main--carelog {
-  background-color: #9fb0d0;
-  background-image: radial-gradient(rgb(255 255 255 / 35%) 1.5px, transparent 1.5px);
-  background-size: 22px 22px;
 }
 </style>
 

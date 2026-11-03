@@ -1,5 +1,4 @@
 <script setup>
-import BabySwitch from "@/app/components/BabySwitch.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
 import { computed, inject, nextTick, onMounted, ref } from "vue";
@@ -457,7 +456,6 @@ async function finishSetup() {
     <PageHero :eyebrow="`Taking turns with ${partnerName}`" title="Duty" :lead="`Who is looking after ${babyLabel}, day and night.`">
       <StatusPill v-if="carerNow" icon="moon" tone="ok">Now: {{ carerNow.text }} {{ carerNow.verb }} looking after {{ babyLabel }}</StatusPill>
     </PageHero>
-    <BabySwitch />
 
     <div aria-live="polite">
       <LoadingScreen v-if="loading" variant="inline" label="Loading the rota" />
