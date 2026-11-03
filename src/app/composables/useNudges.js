@@ -104,7 +104,7 @@ export function useNudges({ home, entries, shared }) {
     home.partner.value
       ? weeklyTogether({
           entries: entries.entries.value,
-          tasks: shared.rtw.tasks,
+          tasks: shared.tasks.tasks,
           chat: chat.messages,
           view: rotaView.value,
           uid: myUid.value,

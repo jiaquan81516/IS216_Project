@@ -32,7 +32,7 @@ defineOptions({ name: "HouseholdPage" });
 const { currentUser, authProfile, loadProfile, commitAccount } = useAuth();
 const draft = useOnboarding();
 
-const JOURNEY_LABELS = { preparing: "Preparing for baby", newborn: "Caring for a newborn", "return-to-work": "Preparing to return to work" };
+const JOURNEY_LABELS = { preparing: "Preparing for baby", newborn: "Caring for a newborn" };
 const ROLE_LABELS = { parent: "Parent", caregiver: "Caregiver" };
 // "form" collects the household choice; "review" shows everything before it is saved.
 const phase = ref("form");

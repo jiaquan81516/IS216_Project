@@ -304,7 +304,7 @@ export const GUIDES = Object.freeze([
       "Most of the stress comes from what is not decided yet: drop off, sick days, who leaves early.",
     ],
     helps: [
-      { text: "Decide the plan for a sick baby before the first day, not on the morning.", link: { label: "Open return to work", to: ROUTES.RETURN_TO_WORK } },
+      { text: "Decide the plan for a sick baby before the first day, not on the morning.", link: { label: "Open the checklist", to: ROUTES.CHECKLIST } },
       { text: "Do a practice run of the morning a week before." },
       { text: "If you are pumping, find a room near work and pack spare parts the night before.", link: { label: "Find a pumping room", to: ROUTES.ROOMS } },
       { text: "Make the first week lighter on purpose: no big deadlines, simple dinners." },

@@ -154,10 +154,10 @@ export const IDEAS = Object.freeze({
   ],
   "provider-pressure": [
     { title: "Name the one worry", body: "Not everything at once. The specific thing you are afraid will happen, so it can be talked about.", action: "Read the guide", to: guide("dads") },
-    { title: "Share one load for a week", body: "Pick one task you carry quietly and agree who owns it for the next seven days.", action: "Review shared tasks", to: ROUTES.RETURN_TO_WORK },
+    { title: "Share one load for a week", body: "Pick one task you carry quietly and agree who owns it for the next seven days.", action: "Review shared tasks", to: ROUTES.CHECKLIST },
   ],
   "return-to-work": [
-    { title: "Plan the first week back", body: "Drop off, pick up, and who stays home if the baby is unwell. Decide it together once.", action: "Open return to work", to: ROUTES.RETURN_TO_WORK },
+    { title: "Plan the first week back", body: "Drop off, pick up, and who stays home if the baby is unwell. Decide it together once.", action: "Open the checklist", to: ROUTES.CHECKLIST },
     { title: "Make room for the feelings", body: "Guilt and relief can both be true. Tell your partner which one is louder today." },
   ],
   pumping: [
