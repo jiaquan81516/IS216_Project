@@ -632,7 +632,14 @@ service cloud.firestore {
           && request.resource.data.text.size() > 0
           && request.resource.data.text.size() <= 400
           && request.resource.data.at == request.time;
-        allow update, delete: if false;
+        allow update: if roomAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedBy', 'editedAt'])
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 400
+          && request.resource.data.editedBy == request.auth.uid
+          && request.resource.data.editedAt == request.time;
+        allow delete: if false;
       }
 
       match /reports/{reportId} {
@@ -646,6 +653,12 @@ service cloud.firestore {
           && request.resource.data.value.size() <= 400;
         allow update, delete: if false;
       }
+    }
+
+    // Admin collection-group view, including feedback on bundled directory rooms.
+    // The feedback collection name is reserved for pumping-room feedback.
+    match /{path=**}/feedback/{feedbackId} {
+      allow read: if roomAdmin();
     }
   }
 }
