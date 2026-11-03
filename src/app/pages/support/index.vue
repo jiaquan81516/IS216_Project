@@ -12,6 +12,7 @@ import SupportItemForm from "@/app/components/admin/SupportItemForm.vue";
 import { useAdmin } from "@/composables/useAdmin";
 import { useSupportEditor } from "@/app/composables/useSupportEditor";
 import { useSupportContent } from "@/app/composables/useSupportContent";
+import KidsCare from "@/app/pages/kids-care/index.vue";
 import PumpingRooms from "@/app/pages/pumping-rooms/index.vue";
 import { TRUSTED_RESOURCES, contactHref } from "@/app/data/support";
 import { CHECK_QUESTIONS, CHECK_RESULTS, GUIDES, RIGHT_NOW, checkResult } from "@/app/data/supportGuides";
@@ -23,16 +24,25 @@ defineOptions({ name: "SupportPage" });
 const { guides, contacts } = useSupportContent();
 const { isAdmin } = useAdmin();
 const guideEditor = useSupportEditor("guides", guides);
-const contactEditor = useSupportEditor("contacts", contacts);
+const OLD_EMERGENCY_PURPOSE = "If anyone is in danger, has been hurt, or might harm themselves or the baby. Or go to the nearest A&E.";
 
-// An older saved list may still have one "Local emergency number" card. Show it as two, ambulance and
-// police, each with its own call button. An administrator still sees the saved list as it is, so edits
-// line up with what is stored.
+// An older saved list may still have one "Local emergency number" card. It is shown, and edited,
+// as two: ambulance and police, each with its own call button. Parents and administrators see the
+// same list, and an administrator's next save stores it that way.
 const shownContacts = computed(() => {
-  if (isAdmin.value) return contacts.value;
   const split = TRUSTED_RESOURCES.filter((c) => c.id === "emergency" || c.id === "police").map((c) => ({ ...c, tel: contactHref(c) }));
-  return contacts.value.flatMap((c) => (/local emergency/i.test(c.name ?? "") ? split : [c]));
+  const list = contacts.value.flatMap((c) => (/local emergency/i.test(c.name ?? "") ? split : [c]));
+  const kkh = TRUSTED_RESOURCES.find((c) => c.id === "kkh");
+  if (!list.some((c) => c.id === "kkh" || /^kk /i.test(c.name ?? ""))) {
+    const at = list.findIndex((c) => c.id === "emergency");
+    list.splice(at + 1, 0, { ...kkh, tel: contactHref(kkh) });
+  }
+  // Older saved copies carry the long wording; show the short one.
+  const tidy = list.map((c) => (c.id === "emergency" && c.purpose === OLD_EMERGENCY_PURPOSE ? { ...c, purpose: TRUSTED_RESOURCES[0].purpose } : c));
+  // "Your doctor or clinic" always comes last.
+  return [...tidy.filter((c) => c.id !== "doctor"), ...tidy.filter((c) => c.id === "doctor")];
 });
+const contactEditor = useSupportEditor("contacts", shownContacts);
 
 const route = useRoute();
 const router = useRouter();
@@ -43,17 +53,26 @@ const ALL_TABS = [
   { id: "guides", label: "For you" },
   { id: "baby", label: "Baby care" },
   { id: "rooms", label: "Pumping rooms" },
+  { id: "clinics", label: "Clinics" },
   { id: "resources", label: "Who to call" },
 ];
-// Administrators manage rooms on their own page, so the rooms tab is left out for them.
-const TABS = computed(() => (isAdmin.value ? ALL_TABS.filter((t) => t.id !== "rooms") : ALL_TABS));
+// Administrators manage rooms on their own page, and "For you" is wellbeing support for parents, so
+// both tabs are left out for them. They start on Baby care, where the guides they edit live.
+// Administrators see "Contacts"; parents keep "Who to call".
+const TABS = computed(() =>
+  isAdmin.value
+    ? ALL_TABS.filter((t) => !["rooms", "clinics", "guides"].includes(t.id)).map((t) => (t.id === "resources" ? { ...t, label: "Contacts" } : t))
+    : ALL_TABS,
+);
 function tabFromRoute() {
   if (route.path === ROUTES.ROOMS && !isAdmin.value) return "rooms";
-  return ["baby", "resources"].includes(route.query.tab) ? route.query.tab : "guides";
+  if (route.path === ROUTES.KIDS_CARE && !isAdmin.value) return "clinics";
+  if (["baby", "resources"].includes(route.query.tab)) return route.query.tab;
+  return isAdmin.value ? "baby" : "guides";
 }
 const tab = ref(tabFromRoute());
 const targetFor = (id) =>
-  id === "rooms" ? ROUTES.ROOMS : id === "guides" ? ROUTES.SUPPORT : { path: ROUTES.SUPPORT, query: { tab: id } };
+  id === "rooms" ? ROUTES.ROOMS : id === "clinics" ? ROUTES.KIDS_CARE : id === "guides" ? ROUTES.SUPPORT : { path: ROUTES.SUPPORT, query: { tab: id } };
 // (On the administrator's workspace the same page sits inside /admin and keeps that address.)
 const ownsAddress = () => route.path.startsWith(ROUTES.SUPPORT);
 watch(tab, (id) => {
@@ -67,6 +86,20 @@ watch(
     if (next !== tab.value) tab.value = next;
   },
 );
+
+// The administrator check finishes after the page opens, so move off a tab they don't have.
+watch(isAdmin, (admin) => {
+  if (admin && tab.value === "guides") tab.value = "baby";
+});
+
+// A card that is leaving is pinned where it stands, so it fades in place while the others glide
+// into the gap instead of the whole list jumping.
+function pinLeaving(el) {
+  el.style.width = `${el.offsetWidth}px`;
+  el.style.height = `${el.offsetHeight}px`;
+  el.style.top = `${el.offsetTop}px`;
+  el.style.left = `${el.offsetLeft}px`;
+}
 
 // Right now: one tool open at a time.
 const openTool = ref(null);
@@ -189,16 +222,15 @@ function toggleBaby(slug) {
   openBaby.value = next;
 }
 
-// Links to the child care pages; the pages themselves live under /support/kids-care.
-const CHILD_LINKS = [
-  { id: "kids-emergency", name: "Kids emergency care", purpose: "Children's emergency departments and when to go.", to: "/support/kids-care", label: "See emergency care" },
-  { id: "kids-clinics", name: "Clinics for a sick child", purpose: "Nearby CHAS clinics for illness that is not an emergency.", to: "/support/kids-care?view=clinics", label: "Find a clinic" },
-];
 </script>
 
 <template>
   <div class="sp">
-    <PageHero eyebrow="Here for you both" title="Support" lead="For the hard moments, and for knowing when it is more than tired.">
+    <PageHero
+      :eyebrow="isAdmin ? 'Administrator' : 'Here for you both'"
+      title="Support"
+      :lead="isAdmin ? 'Edit the baby care guides and trusted contacts that parents see.' : 'For the hard moments, and for knowing when it is more than tired.'"
+    >
     </PageHero>
 
     <SegToggle v-model="tab" :options="TABS.map((t) => ({ value: t.id, label: t.label }))" label="Support sections" class="sp__tabs" />
@@ -399,11 +431,11 @@ const CHILD_LINKS = [
         <AppButton v-if="!guideEditor.editing.value" variant="outline" size="sm" :disabled="guideEditor.atLimit()" @click="guideEditor.start(-1)">Add guide</AppButton>
         <p v-if="!guideEditor.editing.value && guideEditor.error.value" class="app-error-text" role="alert">{{ guideEditor.error.value }}</p>
       </div>
-      <ul class="sp__acc">
-        <SupportItemForm v-if="isAdmin && guideEditor.editing.value?.index === -1" kind="guides" :editor="guideEditor" />
+      <TransitionGroup tag="ul" name="sp-item" class="sp__acc" @before-leave="pinLeaving">
+        <SupportItemForm v-if="isAdmin && guideEditor.editing.value?.index === -1" key="guide-new" kind="guides" :editor="guideEditor" />
         <template v-for="(g, i) in guides" :key="g.slug">
-        <SupportItemForm v-if="isAdmin && guideEditor.editing.value?.index === i" kind="guides" :editor="guideEditor" />
-        <li v-else class="sp__acc-item">
+        <SupportItemForm v-if="isAdmin && guideEditor.editing.value?.index === i" :key="`form-${g.slug}`" kind="guides" :editor="guideEditor" />
+        <li v-else :key="g.slug" class="sp__acc-item">
           <h2 class="sp__acc-h">
             <button
               :id="`guide-btn-${g.slug}`"
@@ -437,7 +469,7 @@ const CHILD_LINKS = [
           <SupportItemActions v-if="isAdmin" class="sp__item-actions" :editor="guideEditor" :index="i" :name="g.title" />
         </li>
         </template>
-      </ul>
+      </TransitionGroup>
       <p class="sp__muted">General guidance only, not medical advice.</p>
     </div>
 
@@ -446,21 +478,25 @@ const CHILD_LINKS = [
     </div>
 
     <!-- Who to call -->
+    <div v-else-if="tab === 'clinics'" key="clinics" id="support-panel-clinics" class="sp__card">
+      <KidsCare />
+    </div>
+
     <div v-else key="resources" id="support-panel-resources" class="sp__card">
       <p class="sp__muted">Check numbers and hours before you rely on them.</p>
       <div class="sp__group-row">
-        <h2 class="sp__group">For you</h2>
+        <h2 class="sp__group">{{ isAdmin ? "Manage contacts" : "For you" }}</h2>
         <AppButton v-if="isAdmin && !contactEditor.editing.value" variant="outline" size="sm" :disabled="contactEditor.atLimit()" @click="contactEditor.start(-1)">Add contact</AppButton>
       </div>
       <p v-if="isAdmin && !contactEditor.editing.value && contactEditor.error.value" class="app-error-text" role="alert">{{ contactEditor.error.value }}</p>
-      <ul class="sp__res">
-        <SupportItemForm v-if="isAdmin && contactEditor.editing.value?.index === -1" kind="contacts" :editor="contactEditor" />
+      <TransitionGroup tag="ul" name="sp-item" class="sp__res" @before-leave="pinLeaving">
+        <SupportItemForm v-if="isAdmin && contactEditor.editing.value?.index === -1" key="contact-new" kind="contacts" :editor="contactEditor" />
         <template v-for="(r, i) in shownContacts" :key="r.id">
-        <SupportItemForm v-if="isAdmin && contactEditor.editing.value?.index === i" kind="contacts" :editor="contactEditor" />
-        <li v-else class="sp__res-item">
+        <SupportItemForm v-if="isAdmin && contactEditor.editing.value?.index === i" :key="`form-${r.id}`" kind="contacts" :editor="contactEditor" />
+        <li v-else :key="r.id" class="sp__res-item">
           <h3 class="sp__res-name">{{ r.name }}</h3>
           <p class="sp__text">{{ r.purpose }}</p>
-          <template v-if="r.id === 'doctor' && !r.tel">
+          <template v-if="r.id === 'doctor' && !r.tel && !isAdmin">
             <form v-if="doctorEditing" class="sp__docform" @submit.prevent="saveDoctor">
               <label class="sp__doclabel" for="doctor-number">Clinic or doctor's number</label>
               <input id="doctor-number" v-model="doctorDraft" class="sp__docinput" type="tel" inputmode="numeric" autocomplete="tel" maxlength="9" placeholder="e.g. 6123 4567" @input="doctorDraft = formatDoctor(doctorDraft)" />
@@ -479,19 +515,11 @@ const CHILD_LINKS = [
             </template>
             <button v-else type="button" class="sp__docbtn sp__docbtn--main" @click="startDoctor"><Icon name="plus" :size="14" /> Add number</button>
           </template>
-          <a v-else-if="r.tel" class="app-link" :href="r.tel">Call {{ r.telLabel }}</a>
+          <a v-else-if="r.tel" class="app-link" :href="r.tel" :aria-label="`Call ${r.name} on ${r.telLabel}`"><Icon name="phone" :size="16" />{{ r.telLabel }}</a>
           <SupportItemActions v-if="isAdmin" class="sp__item-actions" :editor="contactEditor" :index="i" :name="r.name" />
         </li>
         </template>
-      </ul>
-      <h2 class="sp__group">For your child</h2>
-      <ul class="sp__res">
-        <li v-for="c in CHILD_LINKS" :key="c.id" class="sp__res-item">
-          <h3 class="sp__res-name">{{ c.name }}</h3>
-          <p class="sp__text">{{ c.purpose }}</p>
-          <router-link class="app-link" :to="c.to">{{ c.label }}<span class="visually-hidden">: {{ c.name }}</span></router-link>
-        </li>
-      </ul>
+      </TransitionGroup>
       <p class="sp__muted">General guidance only, not medical advice.</p>
     </div>
     </Transition>
@@ -625,7 +653,7 @@ const CHILD_LINKS = [
 .sp__next-title { font-family: var(--nt-serif); font-size: 1rem; font-weight: 700; line-height: 1.25; }
 
 /* Baby care accordion */
-.sp__acc { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; margin: 0; padding: 0; list-style: none; }
+.sp__acc { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; margin: 0; padding: 0; list-style: none; }
 .sp__acc-item { background: var(--cream, #fdf9f0); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 22px; }
 .sp__acc-h { margin: 0; font-size: 1rem; }
 .sp__acc-btn { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 18px 22px; background: none; border: 0; border-radius: 22px; font-family: inherit; text-align: left; color: var(--ink, #1f2a52); cursor: pointer; }
@@ -639,7 +667,7 @@ const CHILD_LINKS = [
 
 /* Who to call */
 .sp__group { margin: 6px 0 -4px; font-family: var(--nt-serif); font-size: 1.25rem; font-weight: 700; color: var(--ink, #1f2a52); }
-.sp__res { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+.sp__res { position: relative; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
 .sp__res-item { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px 18px; background: #fffdf8; border: 1.5px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 20px; }
 .sp__res-item > .app-link, .sp__res-item > .sp__docrow, .sp__res-item > .sp__docbtn, .sp__res-item > .sp__docform { margin-top: auto; }
 .sp__res-item .sp__text { margin-bottom: 8px; }
@@ -652,19 +680,35 @@ const CHILD_LINKS = [
 .sp__docbtn:hover:not(:disabled) { border-color: var(--navy, #243560); }
 .sp__docbtn:focus-visible { outline: 3px solid var(--navy, #243560); outline-offset: 2px; }
 .sp__docbtn:disabled { opacity: 0.5; cursor: not-allowed; }
-.sp__docbtn--main { background: var(--navy, #243560); border-color: var(--navy, #243560); color: #fff; }
+/* The main button on a card ("Add number", "Save") matches the Call buttons next to it. */
+.sp__docbtn--main { padding: 9px 18px; background: var(--navy, #243560); border: 0; border-bottom: 3px solid #182246; border-radius: 12px; font-size: 0.9063rem; color: #fff; }
+.sp__docbtn--main:hover:not(:disabled) { background: #1b2a4f; border-color: #182246; color: #fff; }
 .sp__docbtn--danger { color: #a4541f; }
 .sp__res-name { margin: 0; font-family: var(--nt-serif); font-size: 1.1875rem; font-weight: 700; }
-.sp__res-item .app-link { padding: 9px 18px; background: var(--navy, #243560); border-bottom: 3px solid #182246; border-radius: 12px; font-size: 0.9063rem; font-weight: 600; color: #fff; text-decoration: none; }
+.sp__res-item .app-link { display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; background: var(--navy, #243560); border-bottom: 3px solid #182246; border-radius: 12px; font-size: 0.9063rem; font-weight: 600; color: #fff; text-decoration: none; }
 .sp__res-item .app-link:hover { background: #1b2a4f; color: #fff; }
 .sp__res-item .app-link:focus-visible { outline: 3px solid var(--navy, #243560); outline-offset: 2px; }
 
 @media (max-width: 991px) {
   .sp__acc { grid-template-columns: minmax(0, 1fr); }
 }
+@media (max-width: 767.98px) {
+  .sp__tabs {
+    align-self: stretch;
+    min-width: 0;
+    grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  }
+  .sp__tabs :deep(.sg__btn) {
+    min-width: 0;
+    min-height: 48px;
+    padding: 8px 6px;
+    font-size: 0.875rem;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
 @media (max-width: 640px) {
-  .sp__tabs { align-self: stretch; overflow-x: auto; }
-  .sp__tabs :deep(.sg__btn) { padding: 10px 12px; font-size: 0.875rem; }
   .sp__question { flex-direction: column; align-items: stretch; }
   .sp__yn { width: 100%; }
   .sp__ans { flex: 1; }
@@ -675,10 +719,29 @@ const CHILD_LINKS = [
   .sp__list, .sp__res { grid-template-columns: minmax(0, 1fr); }
 }
 .sp__admin-bar { display: flex; align-items: center; gap: 12px; }
+/* Add, edit and delete glide: a new card or form eases in, a removed one fades out where it was,
+   and the cards around it slide into place. */
+.sp-item-enter-active { transition: opacity 0.34s ease, transform 0.38s cubic-bezier(0.22, 1, 0.36, 1); }
+.sp-item-leave-active { position: absolute; z-index: 0; transition: opacity 0.2s ease, transform 0.22s ease; }
+.sp-item-enter-from { opacity: 0; transform: translateY(12px) scale(0.985); }
+.sp-item-leave-to { opacity: 0; transform: scale(0.97); }
+.sp-item-move { transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1); }
+@media (prefers-reduced-motion: reduce) { .sp-item-enter-active, .sp-item-leave-active, .sp-item-move { transition: none; } }
 .sp__group-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
 .sp__group-row .sp__group { margin: 0; }
+/* The admin's Add buttons: the app's solid navy button, with a darker base and a clear hover. */
+.sp__admin-bar :deep(.btn), .sp__group-row :deep(.btn) { padding: 10px 22px; background: #243560; border: 0; border-bottom: 3px solid #182246; border-radius: 14px; color: #fff; font-size: 0.9375rem; font-weight: 600; transition: background-color 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.sp__admin-bar :deep(.btn:hover:not(:disabled)), .sp__group-row :deep(.btn:hover:not(:disabled)) { background: #2c4175; color: #fff; transform: translateY(-1px); }
+.sp__admin-bar :deep(.btn:active:not(:disabled)), .sp__group-row :deep(.btn:active:not(:disabled)) { transform: none; border-bottom-width: 1px; }
+.sp__admin-bar :deep(.btn:focus-visible), .sp__group-row :deep(.btn:focus-visible) { outline: 3px solid #f2a477; outline-offset: 2px; }
+.sp__admin-bar :deep(.btn:disabled), .sp__group-row :deep(.btn:disabled) { opacity: 0.55; }
 .sp__acc-item .sp__item-actions { padding: 0 22px 16px; }
-.sp__res-item .sp__item-actions { padding-top: 4px; }
+/* Every card's Edit and Delete sit on the card's bottom edge, so they line up across a row. */
+/* The Call button and the Edit/Delete pair stack at the bottom of the card (Call first), so the
+   buttons line up across a row whatever the description length. Without a Call button, the pair
+   takes the bottom alone. */
+.sp__res-item > .sp__item-actions { margin-top: 8px; padding-top: 0; }
+.sp__res-item > :not(.app-link) + .sp__item-actions { margin-top: auto; }
 .sp-swap-enter-active, .sp-swap-leave-active { transition: opacity 160ms ease; }
 .sp-swap-enter-from, .sp-swap-leave-to { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .sp-swap-enter-active, .sp-swap-leave-active, .sp__chev, .sp__tool, .sp__row { transition: none; } }

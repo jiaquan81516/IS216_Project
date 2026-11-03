@@ -314,7 +314,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
         <div v-if="confirmOut" class="so" @click.self="closeConfirm">
           <div class="so__box" role="alertdialog" aria-modal="true" aria-labelledby="so-title" aria-describedby="so-text" @keydown="trapConfirm">
             <h2 id="so-title" class="so__title">Are you sure you want to sign out?</h2>
-            <p id="so-text" class="so__text">You will need to sign in again to see your care space.</p>
+            <p id="so-text" class="so__text">{{ adminWorkspace ? "You will need to sign in again to manage rooms and support content." : "You will need to sign in again to see your care space." }}</p>
             <div class="so__actions">
               <button ref="cancelOut" type="button" class="app-btn app-btn--outline" :disabled="signingOut" @click="closeConfirm">Stay signed in</button>
               <button type="button" class="app-btn app-btn--primary" :disabled="signingOut" @click="signOut">{{ signingOut ? "Signing out" : "Sign out" }}</button>

@@ -117,3 +117,17 @@ There are no opening hours anywhere on purpose.
 ## Tests
 
 `tests/src/app/utils/mapHelpers.spec.js`, `tests/src/api/bmsgRooms.spec.js`, `tests/src/app/data/bmsgRooms.spec.js`, `tests/src/app/components/RoomCard.spec.js`, `RoomFilterPanel.spec.js`, `tests/src/app/pages/pumping-rooms/pumping-rooms.spec.js`. The Maps loader is mocked; nothing touches the network.
+## Admin feedback management
+
+Administrators can open **Edit feedback** on a room card or **All feedback** beside
+**Add room**. The all-feedback view subscribes to the `feedback` collection group,
+including comments on bundled rooms without a parent Firestore room document.
+Reserve the `feedback` collection name for pumping-room comments.
+
+Edits update only `text`, `editedBy`, and `editedAt`; the parent's `by` and `at`
+fields remain unchanged. Parents see an administrator-edited label. Older feedback
+stored on the room itself is listed separately and edited through the room editor.
+
+Publish the updated `firestore.rules` in Firebase before using these controls.
+The rules permit only admins to edit comments or run the collection-group query;
+parent comment creation and per-room reading remain available to signed-in users.
