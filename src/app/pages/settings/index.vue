@@ -898,7 +898,7 @@ async function confirmDelete() {
             'Your profile, settings and saved devices go.',
             'Your private wellness check-ins go.',
             'Shared household data stays, so your partner keeps the care log, rota and calendar.',
-            'Your care log entries will show the words A parent instead of your name.',
+            'Care log entries you added may remain in the household and keep your name.',
           ]"
           confirm-label="Delete my account"
           :busy="deleteBusy"
@@ -907,7 +907,7 @@ async function confirmDelete() {
         />
         <p v-if="deleteDone" class="st__text" role="status">{{ deleteDone }}</p>
         <div v-if="deleteKept.length" class="st__kept">
-          <p class="st__text">The server is not set up yet, so this was done from the browser. It could not remove:</p>
+          <p class="st__text">Some shared information could not be removed:</p>
           <ul class="st__points">
             <li v-for="item in deleteKept" :key="item">{{ item }}</li>
           </ul>
