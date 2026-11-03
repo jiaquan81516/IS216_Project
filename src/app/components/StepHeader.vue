@@ -30,20 +30,19 @@ defineProps({
 </template>
 
 <style scoped>
-.step { display: flex; flex-direction: column; gap: 10px; }
-.step__count { margin: 0; font-size: 0.875rem; line-height: normal; color: var(--nt-muted); }
-.step__bar { display: flex; gap: 6px; width: 320px; max-width: 100%; height: 4px; }
-.step__seg { position: relative; flex: 1 1 0; min-width: 1px; height: 4px; overflow: hidden; border-radius: 2px; background: var(--nt-line); }
-.step__seg::after { content: ""; position: absolute; inset: 0; border-radius: 2px; background: var(--nt-plum); transform: scaleX(0); transform-origin: left; }
+.step { display: flex; align-items: center; gap: 12px; width: 100%; }
+.step__count { margin: 0; font-size: 0.8125rem; font-weight: 700; color: var(--mut, #5b6692); white-space: nowrap; }
+.step__bar { display: flex; flex: 1; gap: 6px; min-width: 120px; max-width: 360px; height: 8px; }
+.step__seg { position: relative; flex: 1 1 0; min-width: 1px; height: 8px; overflow: hidden; border-radius: 999px; background: #e2d2ae; }
+.step__seg::after { content: ""; position: absolute; inset: 0; border-radius: 999px; background: var(--navy, #243560); transform: scaleX(0); transform-origin: left; }
 .step__seg--on::after { transform: scaleX(1); }
-/* The segment for the step you are on fills in as the step slides into view. */
-.step__seg--now::after { animation: step-fill 650ms 280ms cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+.step__seg--now::after { background: #f2a477; animation: step-fill 650ms 280ms cubic-bezier(0.22, 0.61, 0.36, 1) both; }
 @keyframes step-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @media (prefers-reduced-motion: reduce) { .step__seg--now::after { animation: none; transform: scaleX(1); } }
-.step__title { display: flex; flex-direction: column; gap: 12px; width: 100%; }
-.step__h1 { margin: 0; font-family: var(--nt-serif); font-weight: 400; font-size: 36px; line-height: 44px; letter-spacing: -0.36px; color: var(--nt-ink); }
-.step__lead { margin: 0; font-size: 17px; line-height: 26px; color: var(--nt-muted); }
+.step__title { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.step__h1 { margin: 0; font-family: var(--nt-serif); font-weight: 700; font-size: 2rem; line-height: 1.15; color: var(--ink, #1f2a52); }
+.step__lead { margin: 0; font-size: 1rem; line-height: 1.55; color: var(--mut, #5b6692); }
 @media (max-width: 575px) {
-  .step__h1 { font-size: 30px; line-height: 38px; }
+  .step__h1 { font-size: 1.625rem; }
 }
 </style>

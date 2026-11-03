@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import Header from "@/app/components/Header.vue";
+import AuthShell from "@/app/components/AuthShell.vue";
 import StepHeader from "@/app/components/StepHeader.vue";
 import OptionCard from "@/app/components/OptionCard.vue";
 import Field from "@/app/components/Field.vue";
@@ -251,8 +251,7 @@ async function copyCode() {
 <template>
   <LoadingScreen v-if="finishing" variant="overlay" label="Setting things up" :messages="SETUP_MESSAGES" subtext="This only takes a moment." />
   <LoadingScreen v-else-if="showLoader" variant="overlay" :label="mode === 'join' ? 'Joining the household' : 'Setting up your household'" subtext="This only takes a moment." />
-  <Header />
-  <main class="app-container app-body">
+  <AuthShell wide>
     <LoadingScreen v-if="!loaded" variant="inline" label="Loading your household" />
     <div v-if="loaded" class="hh">
       <div class="app-stack app-stack--24 hh__main">
@@ -444,34 +443,34 @@ async function copyCode() {
       </div>
 
     </div>
-  </main>
+  </AuthShell>
 </template>
 
 <style scoped>
 .hh { width: 100%; }
-.hh__card { width: 100%; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.hh__card { width: 100%; padding: 22px; background: #fffdf8; border: 1.5px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 24px; }
 .hh__main { min-width: 0; }
 .hh__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: 100%; }
-.hh__code { display: flex; align-items: center; justify-content: center; width: 100%; padding: 32px 48px; background: var(--nt-gray); border-radius: 12px; }
+.hh__code { display: flex; align-items: center; justify-content: center; width: 100%; padding: 32px 48px; background: #fbe3d3; border-radius: 20px; }
 .hh__card--flat { padding: 0; background: transparent; border: 0; }
 .rv { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 720px; }
 .rv__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(104px, auto); gap: 12px; margin: 0; padding: 0; list-style: none; }
-.rv__tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 16px 20px 18px; background: #fff; border: 1px solid var(--nt-line); border-radius: 16px; transition: border-color 0.15s ease; }
-.rv__tile:focus-within { border-color: var(--nt-plum); }
+.rv__tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 16px 20px 18px; background: #fffdf8; border: 1.5px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 20px; transition: border-color 0.15s ease; }
+.rv__tile:focus-within { border-color: var(--navy, #243560); }
 .rv__tile--wide { grid-column: 1 / -1; }
 .rv__top { display: flex; align-items: center; justify-content: space-between; min-height: 28px; }
 .rv__lab { font-size: 0.8125rem; font-weight: 500; color: var(--nt-muted); }
-.rv__edit { padding: 4px 10px; margin: -4px -10px -4px 0; background: transparent; border: 0; border-radius: 8px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-plum); cursor: pointer; }
-.rv__edit:hover { background: var(--nt-gray); }
+.rv__edit { padding: 4px 10px; margin: -4px -10px -4px 0; background: transparent; border: 0; border-radius: 8px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--navy, #243560); font-weight: 700; cursor: pointer; }
+.rv__edit:hover { background: #f3ecd9; }
 .rv__edit:focus-visible, .rv__segbtn:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 .rv__val { margin: 0; font-size: 1.0625rem; font-weight: 600; line-height: 1.35; color: var(--nt-ink); overflow-wrap: anywhere; }
 .rv__val--empty { font-weight: 400; color: var(--nt-muted); }
 .rv__sub { margin: 0; font-size: 0.875rem; line-height: 1.4; color: var(--nt-muted); overflow-wrap: anywhere; }
 .rv__in { width: 100%; }
 .rv__stack { display: flex; flex-direction: column; gap: 8px; }
-.rv__seg { display: flex; padding: 3px; background: var(--nt-gray); border-radius: 999px; }
+.rv__seg { display: flex; padding: 3px; background: #f3ecd9; border-radius: 999px; }
 .rv__segbtn { flex: 1 1 0; padding: 6px 10px; background: transparent; border: 0; border-radius: 999px; font: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-muted); white-space: nowrap; cursor: pointer; }
-.rv__segbtn[aria-checked="true"] { background: var(--nt-plum); color: #fff; }
+.rv__segbtn[aria-checked="true"] { background: var(--navy, #243560); color: #fff; }
 .rv__problem { margin: 0; font-size: 0.875rem; color: var(--nt-red-t, #b4372b); }
 .rv__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 @media (max-width: 575px) {
@@ -480,10 +479,10 @@ async function copyCode() {
 }
 @media (prefers-reduced-motion: reduce) { .rv__tile { transition: none; } }
 .hh__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.hh__code-text { margin: 0; font-family: var(--nt-serif); font-size: 40px; line-height: normal; letter-spacing: 0.8px; color: var(--nt-plum); }
+.hh__code-text { margin: 0; font-family: var(--nt-serif); font-size: 40px; font-weight: 700; line-height: normal; letter-spacing: 0.1em; color: var(--navy, #243560); }
 
-.hh__baby { width: 100%; padding: 20px 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
-.hh__baby-title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.4; color: var(--nt-ink); }
+.hh__baby { width: 100%; padding: 18px 20px; background: #fff; border: 1.5px dashed #f2a477; border-radius: 20px; }
+.hh__baby-title { margin: 0; font-family: var(--nt-serif); font-size: 1.1875rem; font-weight: 700; line-height: 1.3; color: var(--ink, #1f2a52); }
 @media (max-width: 575px) { .hh__baby { padding: 16px; } }
 .hh__hint { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
 .hh__babies { display: flex; flex-direction: column; gap: 12px; width: 100%; }
