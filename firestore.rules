@@ -366,7 +366,7 @@ service cloud.firestore {
         allow delete: if isPrimaryParent();
       }
 
-      // Return to work tasks. Shared the same way as events.
+      // Shared checklist tasks. Shared the same way as events.
       match /tasks/{taskId} {
         allow read: if isPrimaryParent();
         allow create: if isPrimaryParent() && request.resource.data.createdBy == request.auth.uid;
@@ -468,13 +468,6 @@ service cloud.firestore {
           && request.resource.data.ackedAt == request.time;
 
         allow delete: if isPrimaryParent() && resource.data.authorUid == request.auth.uid;
-      }
-
-      // The return to work plan. One document, "plan", like the rota settings.
-      match /rtw/{docId} {
-        allow read: if isPrimaryParent();
-        allow create, update: if isPrimaryParent() && request.resource.data.updatedBy == request.auth.uid;
-        allow delete: if false;
       }
     }
 

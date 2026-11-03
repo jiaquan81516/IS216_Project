@@ -17,7 +17,6 @@ const draft = useOnboarding();
 const OPTIONS = [
   { value: JOURNEYS[0], title: "Preparing for baby", icon: "calendar", description: "I am expecting and want to feel more prepared." },
   { value: JOURNEYS[1], title: "Caring for a newborn", icon: "moon", description: "My baby has arrived and I need help coordinating care." },
-  { value: JOURNEYS[2], title: "Preparing to return to work", icon: "briefcase", description: "I am planning my transition back to work." },
 ];
 
 function choose(value) {

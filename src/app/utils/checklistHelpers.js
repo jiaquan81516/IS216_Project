@@ -1,11 +1,22 @@
 // Pure helpers for the App checklist. No Vue, Pinia, Firebase or storage imports.
 //
 // The checklist is the shared task list: { id, title, group, due, owner, done, doneAt,
-// doneBy, notes }. `owner` is a uid or "both". The same tasks also show on the Return to work plan.
-import { addDays, isIsoDate, toIso } from "./rotaHelpers";
-import { dueText } from "./rtwHelpers";
+// doneBy, notes }. `owner` is a uid or "both".
+import { addDays, daysBetween, isIsoDate, toIso } from "./rotaHelpers";
 import { ownerKey } from "./sharedHelpers";
 import { toDate } from "./entryHelpers";
+
+const plural = (n) => `${n} ${n === 1 ? "day" : "days"}`;
+
+// "Due tomorrow", "Due in 5 days", "Overdue by 2 days". Empty when there is no due date.
+export function dueText(due, today = new Date()) {
+  if (!isIsoDate(due)) return "";
+  const d = daysBetween(today instanceof Date ? toIso(today) : String(today), due);
+  if (d < 0) return `Overdue by ${plural(-d)}`;
+  if (d === 0) return "Due today";
+  if (d === 1) return "Due tomorrow";
+  return `Due in ${d} days`;
+}
 
 export const TABS = Object.freeze(["all", "mine", "partner"]);
 export const TITLE_MAX = 120;
