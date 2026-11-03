@@ -38,7 +38,7 @@ const partnerUid = computed(() => partner.value?.uid ?? "");
 const entriesShared = inject(ENTRIES_KEY, null) ?? useEntries(householdId);
 const shared = inject(SHARED_KEY, null) ?? useShared(householdId, myUid, partnerUid);
 const posts = shared.posts;
-const rtw = shared.rtw;
+const taskStore = shared.tasks;
 const nudgeState = inject(NUDGES_KEY, null);
 const checkins = useCheckinsStore();
 
@@ -408,7 +408,7 @@ const coming = computed(() => {
       rows.push({ key: `e${group.date}${event.id ?? event.title}`, iso: group.date, title: event.title, time: eventTimeLabel(event), owner: ownerLabel(event.owner, myUid.value, myName.value, partnerFirst.value), who: ownerKey(event.owner, myUid.value), kind: KIND_LABEL[event.type] ?? "Plan" });
     }
   }
-  for (const task of rtw.tasks ?? []) {
+  for (const task of taskStore.tasks ?? []) {
     if (task.done || !/^\d{4}-\d{2}-\d{2}$/.test(task.due ?? "") || task.due < todayIso) continue;
     rows.push({ key: `t${task.id ?? task.title}`, iso: task.due, title: task.title, time: "", owner: ownerLabel(task.owner, myUid.value, myName.value, partnerFirst.value), who: ownerKey(task.owner, myUid.value), kind: KIND_LABEL.task });
   }
@@ -425,7 +425,7 @@ const items = computed(() =>
   buildStream({
     posts: posts.posts,
     entries: entriesShared.entries.value,
-    tasks: rtw.tasks,
+    tasks: taskStore.tasks,
     uid: myUid.value,
     members: members.value,
     now: now.value,
@@ -452,7 +452,7 @@ async function gotIt(item) {
 }
 async function markDone(item) {
   actionError.value = "";
-  if (!(await rtw.toggleTask(item.rawId))) actionError.value = rtw.writeError;
+  if (!(await taskStore.toggleTask(item.rawId))) actionError.value = taskStore.writeError;
 }
 const copied = ref(false);
 let copiedTimer = null;

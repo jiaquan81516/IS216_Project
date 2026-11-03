@@ -45,7 +45,6 @@ const router = createRouter({
         { path: "support", name: "support", component: appPage("support"), meta: { pageKey: "support" } },
         { path: "support/rooms", name: "pumping-rooms", component: appPage("support"), meta: { pageKey: "support" } },
         { path: "support/kids-care", name: "kids-care", component: appPage("kids-care") },
-        { path: "return-to-work", name: "return-to-work", component: appPage("return-to-work") },
         { path: "calendar", name: "calendar", component: appPage("calendar") },
         { path: "settings", name: "settings", component: appPage("settings") },
         { path: "profile", name: "profile", component: appPage("profile") },

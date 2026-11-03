@@ -49,7 +49,7 @@ watch(home.householdId, (id) => id && loadBabies(id), { immediate: true });
 // One live entries listener, shared by Home and the care log. It waits for the household id.
 const entriesShared = useEntries(home.householdId);
 provide(ENTRIES_KEY, entriesShared);
-// One set of listeners for the shared pages (sleep rota, calendar, return to work). They
+// One set of listeners for the shared pages (sleep rota, calendar, tasks). They
 // wait for the household id too, and are unbound when it changes or the shell unmounts.
 const meUid = computed(() => home.me.value.uid);
 const partnerUid = computed(() => home.partner.value?.uid ?? "");

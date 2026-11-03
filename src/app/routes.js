@@ -22,14 +22,13 @@ export const ROUTES = Object.freeze({
   SUPPORT: "/support",
   ROOMS: "/support/rooms",
   KIDS_CARE: "/support/kids-care",
-  RETURN_TO_WORK: "/return-to-work",
   CALENDAR: "/calendar",
   SETTINGS: "/settings",
   PROFILE: "/profile",
   CARE_BRIEF: "/care-brief",
 });
 
-export const JOURNEYS = Object.freeze(["preparing", "newborn", "return-to-work"]);
+export const JOURNEYS = Object.freeze(["preparing", "newborn"]);
 // Onboarding asks only whether someone is a parent or a caregiver. More specific
 // caregiver roles and permissions are selected when a parent invites them.
 export const ROLES = Object.freeze(["parent", "caregiver"]);

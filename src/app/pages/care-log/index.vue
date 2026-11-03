@@ -1,5 +1,4 @@
 <script setup>
-import BabySwitch from "@/app/components/BabySwitch.vue";
 import FilterSelect from "@/app/components/FilterSelect.vue";
 import { agoText } from "@/app/utils/homeSummary";
 import { useToast } from "@/app/composables/useToast";
@@ -10,6 +9,7 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } fr
 import { useRoute, useRouter } from "vue-router";
 import AppBadge from "@/components/ui/AppBadge.vue";
 import CareLogPanel from "@/app/components/CareLogPanel.vue";
+import BabySwitch from "@/app/components/BabySwitch.vue";
 import PageHero from "@/app/components/PageHero.vue";
 import BabyScene from "@/app/components/BabyScene.vue";
 import { readBaby } from "@/app/utils/babyMood";
@@ -117,6 +117,23 @@ const feedStatus = computed(() => {
 
 // The same bassinet picture as Home, following the selected baby.
 const babyMood = computed(() => readBaby(allEntries.value, selectedBaby.value?.babyName || "Baby", now.value));
+
+// While a sleep has no end yet, the hero offers "awake now", which ends it at this moment.
+const openSleep = computed(() => (babyMood.value.state === "sleeping" ? lastOfType(allEntries.value, "sleep") : null));
+const waking = ref(false);
+async function wakeUp() {
+  if (!openSleep.value || waking.value || !householdId.value) return;
+  waking.value = true;
+  try {
+    await updateEntry(householdId.value, openSleep.value.id, { endedAt: new Date() });
+    showToast({ title: `${selectedBaby.value?.babyName || "Baby"} is awake` });
+  } catch (cause) {
+    console.error("[app care log]", cause?.code, cause);
+    showToast({ title: "Could not save. Try again." });
+  } finally {
+    waking.value = false;
+  }
+}
 
 function byLabel(entry) {
   if (isMine(entry)) return "you";
@@ -334,6 +351,9 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
       <template v-else>No feeds logged yet</template>
       <template v-if="feedStatus" #time>{{ feedStatus.clock }}</template>
     </StatusPill>
+    <button v-if="openSleep" type="button" class="cl__wake" :disabled="waking" @click="wakeUp">
+      <Icon name="sun" :size="18" />{{ selectedBaby?.babyName || "Baby" }} is awake now
+    </button>
     <template #art>
       <BabyScene class="cl__art" on-dark art-only :state="babyMood.state" :title="babyMood.title" />
     </template>
@@ -438,6 +458,10 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 .cl__eyebrow { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #f2a477; }
 .cl__eyebrow--rose { color: #a8473f; }
 .cl__pill-main strong { font-weight: 700; }
+.cl__wake { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; padding: 10px 20px; background: #f2a477; border: 0; border-bottom: 3px solid #d78251; border-radius: 999px; color: #243560; font-size: 0.9375rem; font-weight: 700; cursor: pointer; }
+.cl__wake:hover { background: #f5ad84; }
+.cl__wake:disabled { opacity: 0.6; cursor: default; }
+.cl__wake:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 .cl__art { flex: none; width: 170px; align-self: center; margin: -12px 0; }
 
 .cl__row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
