@@ -24,7 +24,7 @@ defineProps({
 </template>
 
 <style scoped>
-.arc { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 20px 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.arc { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; overflow-wrap: anywhere; padding: 20px 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
 .arc__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .arc__name { margin: 0; font-size: 1rem; font-family: inherit; font-weight: 600; line-height: 1.4; color: var(--nt-ink); }
 .arc__text { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-ink); }

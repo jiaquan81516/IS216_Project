@@ -662,9 +662,23 @@ const CHILD_LINKS = [
 @media (max-width: 991px) {
   .sp__acc { grid-template-columns: minmax(0, 1fr); }
 }
+@media (max-width: 767.98px) {
+  .sp__tabs {
+    align-self: stretch;
+    min-width: 0;
+    grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+  }
+  .sp__tabs :deep(.sg__btn) {
+    min-width: 0;
+    min-height: 48px;
+    padding: 8px 6px;
+    font-size: 0.875rem;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
 @media (max-width: 640px) {
-  .sp__tabs { align-self: stretch; overflow-x: auto; }
-  .sp__tabs :deep(.sg__btn) { padding: 10px 12px; font-size: 0.875rem; }
   .sp__question { flex-direction: column; align-items: stretch; }
   .sp__yn { width: 100%; }
   .sp__ans { flex: 1; }
