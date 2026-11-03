@@ -1,7 +1,7 @@
 <script setup>
 import { computed, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import Header from "@/app/components/Header.vue";
+import AuthShell from "@/app/components/AuthShell.vue";
 import StepHeader from "@/app/components/StepHeader.vue";
 import Field from "@/app/components/Field.vue";
 import GoogleButton from "@/app/components/GoogleButton.vue";
@@ -66,14 +66,13 @@ async function google() {
 
 <template>
   <LoadingScreen v-if="showLoader" variant="overlay" label="Signing you in" subtext="Just a moment." />
-  <Header>
-    <AppLink :to="route.query.code ? { path: ROUTES.SIGN_IN, query: { code: route.query.code } } : ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
-  </Header>
-  <main class="app-container app-body">
+  <AuthShell wide>
+    <template #nav>
+      <AppLink :to="route.query.code ? { path: ROUTES.SIGN_IN, query: { code: route.query.code } } : ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
+    </template>
     <div class="account">
       <div class="app-stack app-stack--24 account__intro">
         <StepHeader :step="3" title="Create your account" lead="Use an email you can access on your phone. Nothing is saved until the last step." />
-        <p class="app-note">Your wellness responses are private by default. You decide what to share with your partner.</p>
         <AppLink :to="route.query.code ? { path: ROUTES.ROLE, query: { code: route.query.code } } : ROUTES.ROLE" class="app-text-link">Back</AppLink>
       </div>
       <div class="app-stack app-stack--24 account__card">
@@ -122,16 +121,16 @@ async function google() {
         </p>
       </div>
     </div>
-  </main>
+  </AuthShell>
 </template>
 
 <style scoped>
-.account { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 64px; align-items: start; }
+.account { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 48px; align-items: start; }
 .account__intro { min-width: 0; }
-.account__card { width: 100%; padding: 32px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; }
-.account__signin { display: flex; gap: 6px; margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
+.account__card { width: 100%; padding: 22px; background: #fffdf8; border: 1.5px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 24px; }
+.account__signin { display: flex; gap: 6px; margin: 0; font-size: 0.9375rem; color: var(--mut, #5b6692); }
 @media (max-width: 991px) {
-  .account { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .account { grid-template-columns: minmax(0, 1fr); gap: 24px; }
 }
-@media (max-width: 575px) { .account__card { padding: 24px 16px; } }
+@media (max-width: 575px) { .account__card { padding: 18px 14px; } }
 </style>
