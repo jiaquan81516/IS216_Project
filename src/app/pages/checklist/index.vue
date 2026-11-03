@@ -1,7 +1,6 @@
 <script setup>
 import PageHero from "@/app/components/PageHero.vue";
 import StatusPill from "@/app/components/StatusPill.vue";
-import BabySwitch from "@/app/components/BabySwitch.vue";
 import Collapse from "@/app/components/Collapse.vue";
 import DateWheel from "@/app/components/DateWheel.vue";
 import FilterSelect from "@/app/components/FilterSelect.vue";
@@ -26,7 +25,7 @@ const { loading, error, reload, me, partner, householdId } = home;
 const myUid = computed(() => me.value.uid);
 const partnerUid = computed(() => partner.value?.uid ?? "");
 const shared = inject(SHARED_KEY, null) ?? useShared(householdId, myUid, partnerUid);
-const rtw = shared.rtw;
+const taskStore = shared.tasks;
 
 const now = ref(new Date());
 let clock = null;
@@ -41,9 +40,9 @@ const myName = computed(() => displayName(me.value.firstName) || "Me");
 const partnerFirst = computed(() => (partner.value ? displayName(partner.value.firstName) : ""));
 const hasPartner = computed(() => Boolean(partnerUid.value));
 
-const tasks = computed(() => rtw.tasks ?? []);
-const listLoading = computed(() => !householdId.value || Boolean(rtw.loading));
-const listErrorInfo = computed(() => (rtw.error ? describeSharedError(rtw.error.code, "checklist") : null));
+const tasks = computed(() => taskStore.tasks ?? []);
+const listLoading = computed(() => !householdId.value || Boolean(taskStore.loading));
+const listErrorInfo = computed(() => (taskStore.error ? describeSharedError(taskStore.error.code, "checklist") : null));
 
 // Tabs
 const tab = ref("all");
@@ -88,7 +87,7 @@ async function add() {
   if (!text || adding.value) return;
   adding.value = true;
   const owner = who.value === "partner" && hasPartner.value ? partnerUid.value : who.value === "both" ? "both" : myUid.value;
-  const added = await rtw.addTask({ title: text, group: "home", owner, due: showDate.value && due.value ? due.value : null });
+  const added = await taskStore.addTask({ title: text, group: "home", owner, due: showDate.value && due.value ? due.value : null });
   adding.value = false;
   if (!added) return;
   title.value = "";
@@ -103,7 +102,7 @@ async function toggle(task) {
   if (busy.value) return;
   busy.value = task.id;
   try {
-    await rtw.toggleTask(task.id);
+    await taskStore.toggleTask(task.id);
   } finally {
     busy.value = "";
   }
@@ -137,7 +136,6 @@ function doneMeta(task) {
   <PageHero :eyebrow="`Shared by ${sharedBy}`" title="Our checklist" lead="Who is doing what, in one place.">
     <StatusPill v-if="tasks.length" icon="check" :tone="allDone ? 'ok' : 'none'">{{ progressLine }}</StatusPill>
   </PageHero>
-  <BabySwitch />
 
   <SkeletonList v-if="listLoading" :rows="4" :height="56" label="Loading the checklist" />
   <div v-if="!listLoading && listErrorInfo" class="ck__error alert alert-danger" role="alert">
@@ -174,7 +172,7 @@ function doneMeta(task) {
           </div>
         </Collapse>
       </form>
-      <p v-if="rtw.writeError" class="ck__row-error" role="alert">{{ rtw.writeError }}</p>
+      <p v-if="taskStore.writeError" class="ck__row-error" role="alert">{{ taskStore.writeError }}</p>
     </section>
 
     <section class="ck__list" aria-label="Checklist">

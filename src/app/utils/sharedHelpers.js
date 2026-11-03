@@ -1,4 +1,4 @@
-// Pure helpers for the shared App pages (sleep rota, calendar, return to work).
+// Pure helpers for the shared App pages (sleep rota, calendar, tasks).
 // No Vue, Pinia, Firebase or storage imports.
 //
 // Shared data stores an owner as a user id, or the string "both". The pages still show
