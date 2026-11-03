@@ -91,15 +91,13 @@ async function save() {
 </template>
 
 <style scoped>
-.manager { width: min(480px, calc(100vw - 32px)); max-height: 85vh; padding: 24px; border: 1px solid var(--nt-line); border-radius: 12px; color: var(--nt-ink); background: var(--nt-white); }
-.manager::backdrop { background: rgb(0 0 0 / 35%); }
-.manager[open] { animation: manager-in 240ms cubic-bezier(0.22, 0.61, 0.36, 1) both; }
-.manager[open]::backdrop { animation: manager-fade 240ms ease-out both; }
-.manager--closing[open] { animation: manager-out 180ms ease-in both; }
+.manager { width: min(480px, calc(100vw - 32px)); max-height: 85vh; padding: 24px 26px 26px; border: 1px solid #e9d9b8; border-bottom-width: 4px; border-radius: 24px; color: #1f2a52; background: #fdf9f0; }
+.manager::backdrop { background: rgb(24 34 70 / 45%); }
+.manager[open] { animation: manager-fade 220ms ease-out both; }
+.manager[open]::backdrop { animation: manager-fade 220ms ease-out both; }
+.manager--closing[open] { animation: manager-fade-out 180ms ease-in both; }
 .manager--closing[open]::backdrop { animation: manager-fade-out 180ms ease-in both; }
-@keyframes manager-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(10px) scale(0.98); } }
 @keyframes manager-fade-out { from { opacity: 1; } to { opacity: 0; } }
-@keyframes manager-in { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: none; } }
 @keyframes manager-fade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .manager[open], .manager[open]::backdrop, .manager--closing[open], .manager--closing[open]::backdrop { animation: none; } }
 .manager-fields { display: grid; gap: 14px; padding: 0; border: 0; }

@@ -2,7 +2,8 @@
 import { useToast } from "@/app/composables/useToast";
 import SkeletonList from "@/app/components/SkeletonList.vue";
 import Collapse from "@/app/components/Collapse.vue";
-import { ref } from "vue";
+import { computed, ref, watch } from "vue";
+import AppPager from "@/app/components/AppPager.vue";
 import AppButton from "@/components/ui/AppButton.vue";
 import AdminRoomCard from "@/app/components/admin/AdminRoomCard.vue";
 import { useAuth } from "@/composables/useAuth";
@@ -12,7 +13,7 @@ import "@/app/app.css";
 
 // Rooms parents suggested. Accept puts one on the public list. Reject keeps it, with an
 // optional reason, and it never goes live.
-defineProps({
+const props = defineProps({
   rooms: { type: Array, required: true },
   loading: { type: Boolean, default: false },
   error: { type: String, default: "" },
@@ -20,6 +21,11 @@ defineProps({
 
 const { currentUser } = useAuth();
 const { showToast } = useToast();
+const PAGE_SIZE = 25;
+const page = ref(1);
+const shown = computed(() => props.rooms.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE));
+// A page that empties after a review falls back to the last one that has rooms.
+watch(() => props.rooms.length, (n) => { while (page.value > 1 && (page.value - 1) * PAGE_SIZE >= n) page.value -= 1; });
 const rejecting = ref("");
 const note = ref("");
 const busyId = ref("");
@@ -60,7 +66,7 @@ function startReject(room) {
     <p v-if="actionError" class="app-error-text" role="alert">{{ actionError }}</p>
 
     <TransitionGroup tag="ul" name="li" v-if="rooms.length" class="ap__list" aria-label="Rooms waiting for review">
-      <AdminRoomCard v-for="room in rooms" :key="room.id" :room="room">
+      <AdminRoomCard v-for="room in shown" :key="room.id" :room="room">
         <p v-if="formatDate(room.createdAt)" class="ap__muted">Submitted {{ formatDate(room.createdAt) }}</p>
         <Collapse>
         <div v-if="rejecting === room.id" class="ap__reject">
@@ -78,6 +84,7 @@ function startReject(room) {
         </div>
       </AdminRoomCard>
     </TransitionGroup>
+    <AppPager v-model="page" :total="rooms.length" :page-size="PAGE_SIZE" label="Pending room pages" />
   </div>
 </template>
 

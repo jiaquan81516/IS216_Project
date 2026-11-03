@@ -16,6 +16,7 @@ export const NAV = Object.freeze([
 export const ADMIN_SECTIONS = Object.freeze([
   { id: "pending", label: "Pending", icon: "clock" },
   { id: "live", label: "Live rooms", icon: "pin" },
+  { id: "clinics", label: "Live clinics", icon: "pin" },
   { id: "reviewed", label: "Reviewed", icon: "check" },
   { id: "support", label: "Support", icon: "lifebuoy" },
 ]);

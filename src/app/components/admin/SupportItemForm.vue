@@ -60,10 +60,25 @@ const removeStep = (i) => draft().steps.splice(i, 1);
 </template>
 
 <style scoped>
-.sf { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 12px; padding: 20px 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
-.sf__title { margin: 0; font-size: 1rem; font-weight: 600; }
+/* The same cream card as the rest of the page, with the app's inputs and pill buttons. */
+.sf { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 14px; padding: 22px 26px 24px; background: #fdf9f0; border: 1px solid #e9d9b8; border-bottom-width: 4px; border-radius: 24px; color: #1f2a52; }
+.sf__title { margin: 0; padding-bottom: 12px; border-bottom: 1px solid #e9d9b8; font-family: var(--nt-serif); font-size: 1.5rem; font-weight: 700; color: #1f2a52; }
+.sf :deep(label), .sf :deep(.app-field__label) { font-size: 0.9375rem; font-weight: 600; color: #1f2a52; }
+.sf :deep(input), .sf :deep(textarea), .sf :deep(.form-control) { background: #fff; border: 1.5px solid #e9d9b8; border-radius: 14px; color: #1f2a52; font-size: 1rem; box-shadow: none; transition: border-color 0.18s ease, box-shadow 0.18s ease; }
+.sf :deep(input:focus), .sf :deep(textarea:focus), .sf :deep(.form-control:focus) { outline: 0; border-color: #243560; box-shadow: 0 0 0 3px rgb(242 164 119 / 45%); }
+.sf :deep(textarea) { resize: vertical; }
+.sf :deep(.app-field__hint), .sf :deep(small) { color: #6b7392; font-size: 0.875rem; }
 .sf__steps { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin: 0; padding: 0; border: 0; }
-.sf__step { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; padding: 12px 16px; border: 1px solid var(--nt-line); border-radius: 8px; }
+.sf__step { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; padding: 14px 18px 16px; background: #fffdf8; border: 1px solid #e9d9b8; border-radius: 18px; }
 .sf__step .app-field { width: 100%; }
-.sf__actions { display: flex; justify-content: flex-end; gap: 8px; }
+.sf__actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.sf :deep(.btn) { min-height: 40px; padding: 7px 24px; border-radius: 999px; font-size: 0.9375rem; font-weight: 700; transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease; }
+.sf :deep(.btn-primary) { background: #243560; border: 0; border-bottom: 3px solid #182246; color: #fff; }
+.sf :deep(.btn-primary:hover:not(:disabled)) { background: #2c4175; transform: translateY(-1px); }
+.sf :deep(.btn-outline) { background: #fff; border: 1.5px solid #e9d9b8; border-bottom-width: 3px; color: #243560; }
+.sf :deep(.btn-outline:hover:not(:disabled)) { background: #fff; border-color: #243560; color: #243560; transform: translateY(-1px); }
+.sf :deep(.btn:active:not(:disabled)) { transform: none; }
+.sf :deep(.btn:focus-visible) { outline: 3px solid #f2a477; outline-offset: 2px; }
+@media (max-width: 575px) { .sf { padding: 18px 16px 20px; } .sf__actions { justify-content: stretch; } .sf__actions :deep(.btn) { flex: 1; } }
+@media (prefers-reduced-motion: reduce) { .sf :deep(input), .sf :deep(textarea), .sf :deep(.btn) { transition: none; } }
 </style>

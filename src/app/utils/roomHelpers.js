@@ -75,3 +75,18 @@ export function roomView(id, data = {}, now = new Date()) {
     seed: false,
   };
 }
+
+// Room names and addresses often arrive in capitals ("31 BENCOOLEN STREET"). Shout-case reads
+// badly on a card, so an all capitals line is shown in title case. Mixed case is left alone, and
+// station codes ("DT21") and a few well known short names stay as they are.
+const KEEP_UPPER = new Set(["MRT", "LRT", "HDB", "NUS", "NTU", "SMU", "SIM", "KK", "CBD", "EW", "NS", "NE", "CC", "DT", "TE", "BP", "PTE", "LTD", "ITE"]);
+export function tidyCaps(text) {
+  const value = String(text ?? "");
+  if (!value || /[a-z]/.test(value) || !/[A-Z]/.test(value)) return value;
+  return value.replace(/[A-Z][A-Z'’]*/g, (word, offset) => {
+    const next = value[offset + word.length];
+    const hasDigit = /\d/.test(next ?? "") || /\d/.test(value[offset - 1] ?? "");
+    if (KEEP_UPPER.has(word) || hasDigit) return word;
+    return word.charAt(0) + word.slice(1).toLowerCase();
+  });
+}

@@ -3,6 +3,7 @@ import Collapse from "@/app/components/Collapse.vue";
 import { computed, nextTick, ref } from "vue";
 import { formatDistance, verificationText, isVerified } from "@/app/utils/mapHelpers";
 import { oneMapPlaceUrl } from "@/app/utils/oneMapHelpers";
+import { tidyCaps } from "@/app/utils/roomHelpers";
 
 import { addRoomFeedback, listRoomFeedback } from "@/api/rooms";
 import { useAuth } from "@/composables/useAuth";
@@ -82,9 +83,9 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
     @click="emit('select', room)"
   >
     <h2 class="rc__name">
-      <button type="button" class="rc__name-btn" @click.stop="emit('select', room)">{{ room.name }}</button>
+      <button type="button" class="rc__name-btn" @click.stop="emit('select', room)">{{ tidyCaps(room.name) }}</button>
     </h2>
-    <p class="rc__text">{{ room.address }}</p>
+    <p class="rc__text">{{ tidyCaps(room.address) }}</p>
     <p v-if="room.roomType" class="rc__muted">{{ room.roomType }}</p>
     <p v-if="room.details" class="rc__muted">{{ room.details }}</p>
     <ul v-if="room.features.length" class="rc__chips" aria-label="Features">
@@ -165,33 +166,38 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
 </template>
 
 <style scoped>
-.rc { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 20px 24px; border-bottom: 1px solid var(--nt-line); cursor: pointer; }
-.rc:hover { background: var(--nt-gray); }
-.rc--on { background: var(--nt-gray); box-shadow: none; border-left: 3px solid var(--nt-plum); padding-left: 21px; }
-.rc__name { margin: 0; font-size: 1rem; line-height: 1.4; font-weight: 600; font-family: inherit; }
-.rc__name-btn { padding: 0; background: none; border: 0; color: var(--nt-ink); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
-.rc__name-btn:hover { color: var(--nt-plum); }
-.rc__name-btn:focus-visible, .rc :deep(a:focus-visible), .rc :deep(button:focus-visible) { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
-.rc__text { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-ink); }
-.rc__muted { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-muted); }
-.rc__source { color: var(--nt-muted); text-decoration: underline; }
-.rc__source:hover { color: var(--nt-plum); }
-.rc__chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; padding: 0; list-style: none; }
-.rc__verify { margin: 0; font-size: 0.875rem; line-height: 1.5; font-weight: 600; color: var(--nt-muted); }
-.rc__verify--ok { color: var(--nt-plum); }
-.rc__feedback { width: 100%; margin-top: 12px; padding-top: 16px; border-top: 1px solid var(--nt-line); cursor: default; }
-.rc__feedback-title { margin: 0 0 12px; font-size: 1rem; font-family: inherit; font-weight: 600; }
+.rc { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 20px 24px; border-bottom: 1px solid var(--nt-line); cursor: pointer; transition: border-color 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.rc:hover { background: #fffdf8; }
+.rc--on { background: #fffdf8; box-shadow: none; }
+.rc__name { margin: 0; font-family: var(--nt-serif); font-size: 1.3125rem; line-height: 1.25; font-weight: 700; }
+.rc__name-btn { padding: 0; background: none; border: 0; color: #1f2a52; font: inherit; text-align: left; cursor: pointer; }
+.rc__name-btn:hover { color: #c4642f; }
+.rc__name-btn:focus-visible, .rc :deep(a:focus-visible), .rc :deep(button:focus-visible) { outline: 3px solid #f2a477; outline-offset: 2px; border-radius: 6px; }
+.rc__text { margin: 0; font-size: 0.9375rem; line-height: 1.5; color: #1f2a52; }
+.rc__muted { margin: 0; font-size: 0.9375rem; line-height: 1.5; color: #6b7392; }
+.rc__source { color: #6b7392; text-decoration: underline; }
+.rc__source:hover { color: #c4642f; }
+.rc__chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; padding: 0; list-style: none; }
+.rc__chips :deep(.app-pill) { padding: 3px 12px; background: #f6efdc; border: 1px solid #e9d9b8; color: #243560; font-size: 0.8125rem; font-weight: 600; }
+.rc__verify { margin: 0; font-size: 0.875rem; line-height: 1.5; font-weight: 600; color: #6b7392; }
+.rc__verify--ok { color: #2f5d43; }
+.rc__feedback { width: 100%; margin-top: 12px; padding-top: 16px; border-top: 1px dashed #e9d9b8; cursor: default; }
+.rc__feedback-title { margin: 0 0 12px; font-family: var(--nt-serif); font-size: 1.125rem; font-weight: 700; color: #1f2a52; }
 .rc__feedback-form { display: flex; flex-direction: column; gap: 8px; }
 .rc__feedback-list { display: flex; flex-direction: column; gap: 8px; padding-left: 20px; margin: 0 0 16px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .rc__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 /* One tidy row of buttons, left aligned and pinned to the bottom so cards in a row line up. */
-.rc__actions--room { width: 100%; margin-top: auto; padding-top: 12px; }
+.rc__actions--room { width: 100%; margin-top: auto; padding-top: 14px; }
 .rc__action-group, .rc__action-group--end { display: contents; }
-.rc__action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 6px 12px; border: 1px solid var(--nt-line); border-radius: 999px; background: var(--nt-white); color: var(--nt-ink); font: inherit; font-size: 0.875rem; font-weight: 500; line-height: 1.4; text-decoration: none; cursor: pointer; transition: background-color 150ms, border-color 150ms, color 150ms; }
-.rc__action :deep(svg) { flex-shrink: 0; color: var(--nt-muted); }
-.rc__action:hover { border-color: var(--nt-plum); background: #f3eef4; color: var(--nt-plum); }
-.rc__action:hover :deep(svg), .rc__action--active :deep(svg) { color: var(--nt-plum); }
-.rc__action--active { border-color: var(--nt-plum); background: #f3eef4; color: var(--nt-plum); }
+.rc__action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 6px 14px; border: 1.5px solid #e9d9b8; border-bottom-width: 3px; border-radius: 999px; background: #fff; color: #243560; font: inherit; font-size: 0.875rem; font-weight: 600; line-height: 1.4; text-decoration: none; cursor: pointer; transition: background-color 150ms, border-color 150ms, color 150ms, transform 150ms; }
+.rc__action :deep(svg) { flex-shrink: 0; color: #6b7392; }
+.rc__action:hover { border-color: #243560; background: #fff; color: #243560; transform: translateY(-1px); }
+.rc__action:hover :deep(svg) { color: #243560; }
+.rc__action:active { transform: none; }
+.rc__action--active { border-color: #243560; background: #243560; color: #fff; }
+.rc__action--active :deep(svg) { color: #fff; }
+.rc__action--active:hover { background: #2c4175; color: #fff; }
+.rc__action--active:hover :deep(svg) { color: #fff; }
 .rc .rc__action:focus-visible { border-radius: 999px; outline-offset: 3px; }
-@media (prefers-reduced-motion: reduce) { .rc__action { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .rc, .rc__action { transition: none; } }
 </style>
