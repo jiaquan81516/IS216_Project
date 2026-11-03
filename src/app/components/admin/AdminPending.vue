@@ -82,8 +82,9 @@ function startReject(room) {
 </template>
 
 <style scoped>
-.ap { display: flex; flex-direction: column; gap: 16px; max-width: 720px; }
-.ap__list { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.ap { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.ap__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+@media (max-width: 991px) { .ap__list { grid-template-columns: minmax(0, 1fr); } }
 .ap__muted { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-muted); }
 .ap__reject { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-top: 12px; }
 .ap__label { font-size: 0.875rem; font-weight: 600; color: var(--nt-ink); }

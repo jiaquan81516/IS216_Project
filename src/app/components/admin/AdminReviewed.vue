@@ -32,8 +32,9 @@ const who = (room) => (room.reviewedBy && room.reviewedBy === currentUser.value?
 </template>
 
 <style scoped>
-.rv { display: flex; flex-direction: column; gap: 16px; max-width: 720px; }
-.rv__list { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.rv { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.rv__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
+@media (max-width: 991px) { .rv__list { grid-template-columns: minmax(0, 1fr); } }
 .rv__muted { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-muted); }
 .rv__text { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-ink); }
 </style>

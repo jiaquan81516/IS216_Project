@@ -8,9 +8,11 @@ import { addRoomFeedback, listRoomFeedback } from "@/api/rooms";
 import { useAuth } from "@/composables/useAuth";
 import AppButton from "@/components/ui/AppButton.vue";
 import Icon from "@/app/components/Icon.vue";
+import RoomFeedbackManager from "@/app/components/RoomFeedbackManager.vue";
 
 const { currentUser } = useAuth();
 const feedbackOpen = ref(false);
+const manageFeedbackOpen = ref(false);
 const feedbackText = ref("");
 const feedbackItems = ref([]);
 const feedbackLoading = ref(false);
@@ -109,6 +111,9 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
       <template v-if="canManage">
         <button type="button" class="rc__action" @click.stop="emit('edit', room)">Edit<span class="visually-hidden"> {{ room.name }}</span></button>
         <button type="button" class="rc__action" @click.stop="emit('delete', room)">Delete<span class="visually-hidden"> {{ room.name }}</span></button>
+        <button type="button" class="rc__action" :class="{ 'rc__action--active': manageFeedbackOpen }" :aria-expanded="manageFeedbackOpen" :aria-controls="`admin-feedback-${room.id}`" @click.stop="manageFeedbackOpen = !manageFeedbackOpen">
+          <Icon name="edit" :size="16" /> Edit feedback<span class="visually-hidden"> for {{ room.name }}</span>
+        </button>
       </template>
       </div>
       <div v-if="!canManage" class="rc__action-group rc__action-group--end">
@@ -133,6 +138,7 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
       </button>
       </div>
     </div>
+    <RoomFeedbackManager v-if="canManage && manageFeedbackOpen" :id="`admin-feedback-${room.id}`" :room-id="room.id" :rooms="[room]" @click.stop @edit-room="emit('edit', $event)" />
     <Collapse>
     <section v-if="feedbackOpen" :id="`room-feedback-${room.id}`" class="rc__feedback" :aria-labelledby="`room-feedback-title-${room.id}`" @click.stop @keydown.esc.stop="closeFeedback">
       <h3 :id="`room-feedback-title-${room.id}`" class="rc__feedback-title">Parent feedback</h3>
@@ -140,7 +146,7 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
       <p v-if="!feedbackLoading && !room.feedback && !feedbackItems.length" class="rc__muted">No feedback yet. Be the first to share.</p>
       <ul v-if="room.feedback || feedbackItems.length" class="rc__feedback-list">
         <li v-if="room.feedback" class="rc__text">{{ room.feedback }}</li>
-        <li v-for="item in feedbackItems" :key="item.id" class="rc__text">{{ item.text }}</li>
+        <li v-for="item in feedbackItems" :key="item.id" class="rc__text">{{ item.text }}<small v-if="item.editedBy" class="rc__muted"> · Edited by an administrator</small></li>
       </ul>
       <form class="rc__feedback-form" @submit.prevent="saveFeedback">
         <label :for="`room-feedback-input-${room.id}`" class="rc__text">Share your experience</label>

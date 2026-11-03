@@ -74,6 +74,7 @@ async function save() {
           <label>Name<input v-model="draft.name" required maxlength="80" /></label>
           <label>Address (including postal code)<input v-model="draft.address" required maxlength="200" placeholder="e.g. 1 Example Road, Singapore 012345" /></label>
           <label>Location details<textarea v-model="draft.details" required maxlength="200" placeholder="Level and directions to the room" /></label>
+          <label>Feedback saved with room details<textarea v-model="draft.feedback" maxlength="400" rows="3" /></label>
           <fieldset><legend>Features</legend>
             <label v-for="[key, label] in ROOM_FEATURES" :key="key" class="manager-feature"><input v-model="draft.features" type="checkbox" :value="label" /> {{ label }}</label>
           </fieldset>
