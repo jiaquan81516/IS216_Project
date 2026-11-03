@@ -87,6 +87,16 @@ async function goHome() {
 const result = ref(null); // { kind: "created" | "joined", inviteCode }
 const copied = ref(false);
 const baby = ref({ name: "", status: "born", date: "" }); // the first baby, asked while creating
+const extraBabies = ref([]); // babies 2, 3, ...
+function addFormBaby() {
+  extraBabies.value.push({ name: "", status: "born", date: "" });
+}
+function removeFormBaby(i) {
+  extraBabies.value.splice(i, 1);
+}
+const fmtDate = (d) =>
+  d ? new Date(`${d}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
+
 let copiedTimer = null;
 
 const householdId = ref("");
@@ -201,10 +211,12 @@ async function submit() {
     const user = await commitAccount();
     if (mode.value === "create") {
       const created = await createHousehold(user, {
-        babyName: baby.value.name,
-        babyStatus: baby.value.status,
-        babyDate: baby.value.date,
-      });
+        babies: [baby.value, ...extraBabies.value].map((b) => ({
+        babyName: b.name,
+        babyStatus: b.status,
+        babyDate: b.date,
+        })),
+    });
       result.value = { kind: "created", inviteCode: created.inviteCode };
       householdId.value = created.householdId;
       canManageBabies.value = true;
@@ -216,6 +228,7 @@ async function submit() {
       result.value = { kind: "joined", inviteCode: null };
     }
     await loadBabies();
+    await refreshSidebarBabies(householdId.value);
     if (authProfile.value) authProfile.value = { ...authProfile.value, onboarded: true };
   } catch (cause) {
     console.error("[app household]", cause?.code, cause);
@@ -282,11 +295,16 @@ async function copyCode() {
             </div>
             <div v-if="mode === 'create'" class="app-stack app-stack--24 w-100">
               <div class="hh__baby app-stack app-stack--24">
-                <h3 class="hh__baby-title">Baby 1</h3>
-                <BabyFields v-model="baby" id-prefix="app-baby" hint="You can change this later." :disabled="busy" />
-              </div>
-              <p class="hh__hint">Twins or more? You can add each baby on the next step.</p>
+              <h3 class="hh__baby-title">Baby 1</h3>
+              <BabyFields v-model="baby" id-prefix="app-baby" hint="You can change this later." :disabled="busy" />
             </div>
+            <div v-for="(b, i) in extraBabies" :key="i" class="hh__baby app-stack app-stack--24">
+              <h3 class="hh__baby-title">Baby {{ i + 2 }}</h3>
+              <BabyFields v-model="extraBabies[i]" :id-prefix="`app-baby-${i + 2}`" :disabled="busy" />
+              <button type="button" class="app-btn app-btn--outline" @click="removeFormBaby(i)">Remove baby</button>
+            </div>
+  <button type="button" class="app-btn app-btn--outline" @click="addFormBaby">Add another baby</button>
+</div>
             <Field
               v-if="mode === 'join'"
               id="app-invite-code"
@@ -398,6 +416,29 @@ async function copyCode() {
                   <input v-model="baby.date" type="date" class="app-control rv__in" aria-label="Baby’s date" />
                 </div>
               </li>
+
+              <template v-if="mode === 'create'">
+                <li v-for="(b, i) in extraBabies" :key="`x${i}`" class="rv__tile">
+                <div class="rv__top">
+                  <span class="rv__lab">Baby {{ i + 2 }}</span>
+                  <button v-if="editing !== `baby${i}`" type="button" class="rv__edit" @click="edit(`baby${i}`)">Edit</button>
+                  <button v-else type="button" class="rv__edit" @click="done">Done</button>
+                </div>
+              <template v-if="editing !== `baby${i}`">
+                <p class="rv__val" :class="{ 'rv__val--empty': !b.name.trim() }">{{ b.name.trim() || "Name not added yet" }}</p>
+                <p class="rv__sub">{{ b.status === "expected" ? "Expected" : "Born" }}<template v-if="b.date"> · {{ fmtDate(b.date) }}</template></p>
+              </template>
+              <div v-else class="rv__stack" @keydown.esc.stop.prevent="done">
+                <input v-model="b.name" class="app-control rv__in" maxlength="60" placeholder="Baby’s name" aria-label="Baby’s name" />
+                <select v-model="b.status" class="app-control rv__in" aria-label="Born or expected">
+        <option value="born">Born</option>
+        <option value="expected">Expected</option>
+      </select>
+      <input v-model="b.date" type="date" class="app-control rv__in" aria-label="Baby’s date" />
+    </div>
+  </li>
+</template>
+
             </ul>
 
             <div v-if="error" class="alert alert-danger app-alert" role="alert">{{ error }}</div>
