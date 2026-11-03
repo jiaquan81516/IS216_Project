@@ -11,6 +11,8 @@ import { useRoute, useRouter } from "vue-router";
 import AppBadge from "@/components/ui/AppBadge.vue";
 import CareLogPanel from "@/app/components/CareLogPanel.vue";
 import PageHero from "@/app/components/PageHero.vue";
+import BabyScene from "@/app/components/BabyScene.vue";
+import { readBaby } from "@/app/utils/babyMood";
 import StatusPill from "@/app/components/StatusPill.vue";
 import Icon from "@/app/components/Icon.vue";
 import { addEntry, deleteEntry, loadOlder, markSeen, updateEntry } from "@/api/entries";
@@ -112,6 +114,9 @@ const feedStatus = computed(() => {
   const word = tone === "due" ? "Feed is due" : tone === "soon" ? "Feed due soon" : "Recently fed";
   return { ago: agoText(at, now.value), clock: prefTime(lastFeed.value.at), tone, word };
 });
+
+// The same bassinet picture as Home, following the selected baby.
+const babyMood = computed(() => readBaby(allEntries.value, selectedBaby.value?.babyName || "Baby", now.value));
 
 function byLabel(entry) {
   if (isMine(entry)) return "you";
@@ -330,15 +335,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
       <template v-if="feedStatus" #time>{{ feedStatus.clock }}</template>
     </StatusPill>
     <template #art>
-      <svg class="cl__art" viewBox="0 0 150 180" aria-hidden="true">
-        <path d="M5 175V75a70 70 0 0 1 140 0v100z" fill="#f6e3c4" stroke="#e8cf9f" stroke-width="4"/>
-        <path d="M20 175V78a55 55 0 0 1 110 0v97z" fill="#b6c6ea"/>
-        <circle cx="75" cy="85" r="26" fill="#f8dcc0"/>
-        <path d="M49 82a26 26 0 0 1 52 0z" fill="#f4e6d0"/>
-        <circle cx="67" cy="90" r="2.5" fill="#2a2f55"/><circle cx="83" cy="90" r="2.5" fill="#2a2f55"/>
-        <path d="M69 99q6 5 12 0" fill="none" stroke="#c76a5a" stroke-width="2.5" stroke-linecap="round"/>
-        <path d="M45 175c0-28 14-42 30-42s30 14 30 42z" fill="#98aadb"/>
-      </svg>
+      <BabyScene class="cl__art" on-dark art-only :state="babyMood.state" :title="babyMood.title" />
     </template>
   </PageHero>
   <BabySwitch />
@@ -441,7 +438,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 .cl__eyebrow { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #f2a477; }
 .cl__eyebrow--rose { color: #a8473f; }
 .cl__pill-main strong { font-weight: 700; }
-.cl__art { flex: none; width: 140px; height: auto; align-self: flex-end; margin-bottom: -32px; }
+.cl__art { flex: none; width: 170px; align-self: center; margin: -12px 0; }
 
 .cl__row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .cl__row-head--wrap { flex-wrap: wrap; align-items: center; }
