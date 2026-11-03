@@ -7,6 +7,7 @@ const props = defineProps({
   detail: { type: String, default: "" },
   titleId: { type: String, default: "" },
   onDark: { type: Boolean, default: false },
+  artOnly: { type: Boolean, default: false }, // the picture without the words under it
 });
 </script>
 
@@ -95,7 +96,7 @@ const props = defineProps({
         <rect x="44" y="3" width="8" height="11" rx="3" fill="#ead6b4" stroke="#1f3a68" stroke-width="2.2" />
       </g>
     </svg>
-    <figcaption class="bs__cap">
+    <figcaption v-if="!props.artOnly" class="bs__cap">
       <p :id="props.titleId || undefined" class="bs__title">{{ props.title }}</p>
       <p v-if="props.detail" class="bs__detail">{{ props.detail }}</p>
     </figcaption>

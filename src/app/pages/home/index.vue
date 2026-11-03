@@ -1,7 +1,7 @@
 <script setup>
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, inject, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { CHAT_TEXT_MAX } from "@/api/chat";
 import AppButton from "@/components/ui/AppButton.vue";
@@ -12,9 +12,10 @@ import { ownerKey, ownerLabel } from "@/app/utils/sharedHelpers";
 import { agendaGroups, agendaHeading, eventTimeLabel } from "@/app/utils/calendarHelpers";
 import { buildStream } from "@/app/utils/stream";
 import { agoText, todaySummary, tonightDate } from "@/app/utils/homeSummary";
+import { readBaby } from "@/app/utils/babyMood";
 import { joinNames, mondayOf, toIso, weekNights } from "@/app/utils/rotaHelpers";
 import { isStruggling, moodStageFor } from "@/app/utils/moodStage";
-import { formatMinutes, formatTime as clockTime, lastOfType, toDate } from "@/app/utils/entryHelpers";
+import { toDate } from "@/app/utils/entryHelpers";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { NUDGES_KEY } from "@/app/composables/useNudges";
 import { useCheckinsStore } from "@/app/stores/checkins";
@@ -163,27 +164,6 @@ const QUICK_LOG = [
 // What the baby is doing right now, read from the care log: asleep (a sleep with no end yet), just
 // fed (within 40 minutes), getting hungry (three hours since the last feed), or simply awake.
 const babyName = computed(() => home.baby.value.name || "Baby");
-// Reads one baby's day from their entries: the mood of the picture, the three tallies for today.
-function readBaby(list, name, at) {
-  const sum = todaySummary({ entries: list, now: at });
-  const sleepText = sum.sleepMinutes ? formatMinutes(sum.sleepMinutes) : "0 m";
-  const tally = { feeds: sum.feeds, nappies: sum.nappies, sleep: sleepText };
-  const sleep = lastOfType(list, "sleep");
-  const sleepStart = sleep ? toDate(sleep.at) : null;
-  const sleepMinutes = sleepStart ? (at.getTime() - sleepStart.getTime()) / 60000 : 0;
-  if (sleep && sleepStart && !toDate(sleep.endedAt) && sleepMinutes >= 0 && sleepMinutes < 16 * 60) {
-    return { ...tally, state: "sleeping", title: `${name} is sleeping`, detail: `Since ${clockTime(sleepStart)}, ${formatMinutes(sleepMinutes)} so far` };
-  }
-  const fedAt = sum.lastFeedAt;
-  const fedMinutes = fedAt ? (at.getTime() - fedAt.getTime()) / 60000 : null;
-  if (fedMinutes !== null && fedMinutes >= 0 && fedMinutes < 40) {
-    return { ...tally, state: "fed", title: `${name} has just been fed`, detail: `Fed ${agoText(fedAt, at)}` };
-  }
-  if (fedMinutes !== null && fedMinutes >= 180) {
-    return { ...tally, state: "hungry", title: `${name} may be getting hungry`, detail: `Last fed ${agoText(fedAt, at)}` };
-  }
-  return { ...tally, state: "awake", title: `${name} is awake`, detail: fedAt ? `Last fed ${agoText(fedAt, at)}` : "No feeds logged yet" };
-}
 const babyNow = computed(() => readBaby(entriesShared.entries.value ?? [], babyName.value, now.value));
 const sleepToday = computed(() => babyNow.value.sleep);
 
@@ -387,15 +367,6 @@ const letterSending = ref(false);
 const letterSent = ref(false);
 const draftSaved = ref(false);
 const letterBox = ref(null);
-const STARTERS = ["Thank you for", "I am proud of you for", "I could use"];
-function startLetter(starter) {
-  letterSent.value = false;
-  draftSaved.value = false;
-  const current = letter.value.trim();
-  letter.value = current ? `${current} ${starter} ` : `${starter} `;
-  writeDraft(letter.value);
-  nextTick(() => letterBox.value?.focus());
-}
 function onLetterInput() {
   letterSent.value = false;
   draftSaved.value = false;
@@ -517,7 +488,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
           <h1 class="hp__title">Good {{ greeting }}, {{ partnerFirst ? `${myName} and ${partnerFirst}` : myName }}.</h1>
           <p class="hp__lead">{{ lede }}</p>
         </div>
-        <!-- Top right: your checklist, and the bell for messages and prompts -->
+        <!-- Top right: your checklist -->
         <div class="hp__head-tools">
           <!-- Your list: a house with a speech bubble. Tap the bubble to open the to-dos. -->
           <article v-if="smallThings" class="hp__open hp__list" aria-labelledby="hp-wait-title">
@@ -543,6 +514,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
                 <svg class="hp__bubble-chev" :class="{ 'is-open': listOpen }" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7l5 5 5-5" /></svg>
               </button>
             </div>
+            <Transition name="hp-pop">
             <div v-if="listOpen" id="hp-list-panel" class="hp__list-panel">
               <p class="hp__small">{{ cheerLine }}</p>
               <ul class="hp__todo-list">
@@ -568,11 +540,8 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
                 </li>
               </ul>
             </div>
+            </Transition>
           </article>
-          <button type="button" class="hp__bell" :aria-label="nudgeState?.unread ? `Notifications, ${nudgeState.unread} new` : 'Notifications'" @click="openChat">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z" /><path d="M10 20a2 2 0 0 0 4 0" /></svg>
-            <span v-if="nudgeState?.unread" class="hp__bell-badge" aria-hidden="true">{{ nudgeState.unread > 9 ? "9+" : nudgeState.unread }}</span>
-          </button>
         </div>
       </header>
 
@@ -625,8 +594,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
               <p v-if="lookingAfter.until" class="hp__incharge"><strong>{{ lookingAfter.until }}</strong></p>
               <p v-if="lookingAfter.next" class="hp__rule">{{ lookingAfter.next }}</p>
               <div class="hp__nowact">
-                <AppLink class="hp__btn hp__btn--primary" :to="`${ROUTES.ROTA}#day`">{{ lookingAfter.open ? "Choose who" : "Change who" }}</AppLink>
-                <AppLink class="hp__link hp__link--sm" :to="ROUTES.ROTA">Open Duty</AppLink>
+                <AppLink class="hp__btn hp__btn--primary" :to="`${ROUTES.ROTA}#day`">Open Duty</AppLink>
               </div>
             </article>
           </div>
@@ -680,10 +648,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
               placeholder="Say something kind, or something you need."
               @input="onLetterInput"
             ></textarea>
-            <p class="hp__starts">
-              <span>Start with:</span>
-              <button v-for="st in STARTERS" :key="st" type="button" class="hp__starter" @click="startLetter(st)">{{ st }}</button>
-            </p>
             <footer class="hp__note-foot">
               <button type="submit" class="hp__btn hp__btn--primary" :disabled="!letter.trim() || letterSending">
                 {{ letterSending ? "Sending..." : partner ? `Send to ${partnerFirst}` : "Save my draft" }}
@@ -693,7 +657,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
             <p class="hp__small" role="status" aria-live="polite">
               <template v-if="partner">
                 <template v-if="letterSent">Sent. It is waiting for {{ partnerFirst }} in the chat. </template>
-                <button type="button" class="hp__link" @click="openChat">{{ letterSent ? "Open the chat" : "Replies arrive in the chat" }}</button>
+                <button v-if="letterSent" type="button" class="hp__link" @click="openChat">Open the chat</button>
               </template>
               <template v-else>
                 {{ draftSaved ? "Draft saved on this device." : "Your partner has not joined yet." }}
@@ -1072,7 +1036,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__layout[aria-label="Today"] .hp__lcol .hp__us .hp__noteform { flex: 1 1 auto; }
 .hp__layout[aria-label="Today"] .hp__lcol .hp__us .hp__noteform .hp__note-box { flex: 1 1 auto; height: auto; min-height: 3.5rem; resize: none; }
 
-/* Top right: the checklist and the bell sit beside the greeting; the checklist opens as a panel under them */
+/* Top right: the checklist sits beside the greeting; the checklist opens as a panel under them */
 .hp__head { flex-direction: row; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--s3); }
 .hp__head-text { display: flex; flex: 1 1 22rem; flex-direction: column; gap: 4px; min-width: 0; }
 .hp__head-tools { position: relative; display: flex; flex: 0 1 auto; align-items: flex-start; gap: 12px; margin-left: auto; max-width: 100%; }
@@ -1083,10 +1047,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__head-tools .hp__bubble-count { min-width: 28px; height: 28px; font-size: 0.9375rem; }
 .hp__head-tools .hp__bubble-title { font-size: 0.9375rem; }
 .hp__head-tools .hp__list-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; width: min(440px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; padding: var(--s2); background: #fff; border: 1px solid #c9d3e3; border-radius: 12px; }
-.hp__bell { position: relative; display: grid; flex: none; place-items: center; width: 46px; height: 46px; background: #fff; border: 1.5px solid #1f3a68; border-radius: 50%; color: #1f3a68; cursor: pointer; }
-.hp__bell:hover { background: #fffdf8; }
-.hp__bell:focus-visible { outline: 2px solid #1f3a68; outline-offset: 3px; }
-.hp__bell-badge { position: absolute; top: -4px; right: -4px; display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; background: #b5532f; border: 2px solid #ebf2fa; border-radius: 999px; font-size: 0.6875rem; font-weight: 700; color: #fff; }
 @media (max-width: 575px) { .hp__head-tools { width: 100%; justify-content: space-between; } .hp__head-tools .hp__list { flex: 1 1 auto; } }
 
 /* Today: two plain lanes on a 6 AM to 6 AM ruler, so every time can be read */
@@ -1254,6 +1214,8 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__rcol .hp__tonight .hp__incharge { font-size: 1.0625rem; }
 .hp__nowact { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .hp__trio-card--baby .hp__tally b { font-size: 2rem; }
+/* With several babies, every caption reserves the same height so the tallies and buttons line up across cards. */
+.hp__bcard :deep(.bs__cap) { justify-content: flex-start; min-height: 4.9rem; }
 .hp__trio-card--baby .hp__quicklog .hp__qbtn { padding: 14px 8px; font-size: 1rem; }
 /* Secondary row: the pink strip and Coming up sit side by side, short and quiet */
 .hp__glance { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: var(--s3); align-items: stretch; }
@@ -1271,8 +1233,8 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__glance .hp__after-row + .hp__after-row { padding-left: 14px; }
 /* The note and the night window sit side by side across the page */
 .hp__layout { grid-template-columns: minmax(0, 1fr); }
-.hp__lcol .hp__open.hp__us { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: var(--s3); align-items: start; }
-.hp__lcol .hp__us .hp__noteform { align-self: start; }
+.hp__lcol .hp__open.hp__us { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: var(--s3); align-items: stretch; }
+.hp__lcol .hp__us .hp__noteform { align-self: stretch; }
 .hp__carelink { display: block; color: #cfdcf2; font-size: 0.875rem; text-align: center; }
 .hp__trio-card--baby > .hp__carelink { grid-column: 2; grid-row: 4; align-self: start; }
 .hp__coming-empty { margin: 0; color: var(--fg-muted); font-size: 0.9375rem; }
@@ -1298,4 +1260,49 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__bcard > .bs { max-width: 240px; justify-self: center; }
 .hp__bcard .hp__tally b { font-size: 1.625rem; }
 .hp__bcard .hp__quicklog .hp__qbtn { padding: 12px 6px; font-size: 0.9375rem; }
+
+/* Cards lift a little under the pointer. Uses `translate` so it never fights the entrance animation. */
+@media (hover: hover) {
+  .hp__card, .hp__coming, .hp__lcol .hp__us .hp__noteform, .hp__lcol .hp__us .hp__window { transition: translate 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease; }
+  .hp__card:hover, .hp__coming:hover { translate: 0 -4px; box-shadow: 0 14px 28px rgb(24 34 70 / 18%); border-color: #f2a477; }
+  /* The note and the daily check-in lift on their own. */
+  .hp__lcol .hp__us .hp__noteform:hover { translate: 0 -4px; box-shadow: inset 0 4px 0 var(--warm), 0 14px 26px rgb(24 34 70 / 16%); }
+  .hp__lcol .hp__us .hp__window:hover { translate: 0 -4px; box-shadow: 0 14px 26px rgb(24 34 70 / 28%); }
+  .hp__trio-card--baby:hover :deep(.bs__art) { scale: 1.04; }
+  .hp__card :deep(.bs__art) { transition: scale 0.25s ease; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hp__card, .hp__coming, .hp__lcol .hp__us .hp__noteform, .hp__lcol .hp__us .hp__window { transition: none; translate: none !important; }
+}
+:root[data-app-motion="reduce"] :is(.hp__card, .hp__coming, .hp__lcol .hp__us .hp__noteform, .hp__lcol .hp__us .hp__window):hover { translate: none; }
+
+/* The note takes the space left under it, so the left column ends level with the right one. */
+.hp__lcol:has(> .hp__us) { align-self: stretch; }
+.hp__lcol > .hp__us { flex: 1 1 auto; }
+.hp__lcol .hp__us .hp__noteform { flex: 1 1 auto; }
+.hp__lcol .hp__us .hp__noteform .hp__note-box { flex: 1 1 auto; height: auto; min-height: 3.5rem; resize: none; }
+
+/* The checklist panel springs open from the bubble, its items follow one by one, and the arrow turns. */
+.hp__bubble-chev { transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.hp-pop-enter-active { transition: opacity 0.22s ease, transform 0.34s cubic-bezier(0.34, 1.56, 0.64, 1); transform-origin: 85% 0; }
+.hp-pop-leave-active { transition: opacity 0.16s ease, transform 0.16s ease; transform-origin: 85% 0; }
+.hp-pop-enter-from, .hp-pop-leave-to { opacity: 0; transform: translateY(-10px) scale(0.94); }
+.hp-pop-enter-active .hp__todo { animation: hp-todo-in 0.32s ease both; }
+.hp-pop-enter-active .hp__todo:nth-child(2) { animation-delay: 0.06s; }
+.hp-pop-enter-active .hp__todo:nth-child(3) { animation-delay: 0.12s; }
+.hp-pop-enter-active .hp__todo:nth-child(n + 4) { animation-delay: 0.18s; }
+@keyframes hp-todo-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .hp-pop-enter-active, .hp-pop-leave-active, .hp__bubble-chev { transition: none; }
+  .hp-pop-enter-active .hp__todo { animation: none; }
+}
+:root[data-app-motion="reduce"] .hp__bubble-chev { transition: none; }
+
+/* The checklist shows four items at most; the rest scroll inside the panel. */
+.hp__list-panel .hp__todo { box-sizing: border-box; min-height: 4.25rem; }
+.hp__list-panel .hp__todo-list { max-height: calc(4 * 4.25rem + 3px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+
+/* The greeting sits on a soft cream card so the dots never run through the words. */
+.hp__head-text { flex: 0 1 auto; width: fit-content; max-width: min(100%, 640px); padding: 14px 22px 16px; background: rgb(253 249 240 / 88%); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 22px; }
+.hp__head-text .hp__lead { color: #3b4a66; }
 </style>
