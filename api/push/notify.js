@@ -1,4 +1,4 @@
-// POST /api/push/notify   { householdId, type: "chat" | "task" | "feeling" | "heavy", id }
+// POST /api/push/notify   { householdId, type: "chat" | "task" | "feeling" | "heavy" | "cover" | "coverReply", id }
 //
 // Sends a web push to the caller's partner. The caller only says WHICH document is new. The
 // function reads that document itself, so it can check that the caller really wrote it, that
@@ -13,7 +13,7 @@ import { guardLimit } from "../_lib/rateLimit.js";
 import { allowMethod, fail, logLine, ok, readBody } from "../_lib/respond.js";
 import { HEAVY_NIGHT_LOGS, buildPush, countNightLogs, isDeadToken, isFresh, isQuietNow, millisOf, nightKey, todayIso } from "../_lib/push.js";
 
-const TYPES = ["chat", "task", "feeling", "heavy"];
+const TYPES = ["chat", "task", "feeling", "heavy", "cover", "coverReply"];
 const idOk = (value) => typeof value === "string" && value.length > 0 && value.length <= 128 && !value.includes("/");
 
 export default async function handler(req, res) {
@@ -46,7 +46,7 @@ export default async function handler(req, res) {
     if (!partnerUid) return ok(res, { sent: 0, skipped: "no-partner" });
 
     const household$ = db.collection("households").doc(householdId);
-    const collectionOf = { chat: "chat", task: "tasks", feeling: "feelings", heavy: "entries" };
+    const collectionOf = { chat: "chat", task: "tasks", feeling: "feelings", heavy: "entries", cover: "swaps", coverReply: "swaps" };
     const source = await household$.collection(collectionOf[type]).doc(id).get();
     const data = source.exists ? source.data() : null;
     if (!data) return fail(res, 404, "push/not-found", "That item is not there any more.");
@@ -65,6 +65,16 @@ export default async function handler(req, res) {
       if (data.level !== "hard" || data.date !== todayIso()) return ok(res, { sent: 0, skipped: "not-hard-today" });
       if (!isFresh(data.updatedAt)) return ok(res, { sent: 0, skipped: "old" });
       markKey = data.date;
+    } else if (type === "cover") {
+      // A request to take over a night: written by the caller, still waiting, and addressed to the partner.
+      if (data.from !== user.uid) return fail(res, 403, "push/not-yours", "You can only announce your own requests.");
+      if (data.status !== "pending" || (data.to && data.to !== partnerUid)) return ok(res, { sent: 0, skipped: "not-for-partner" });
+      if (!isFresh(data.createdAt)) return ok(res, { sent: 0, skipped: "old" });
+    } else if (type === "coverReply") {
+      // The answer to a request: written by the caller, who is the one that was asked.
+      if (data.to !== user.uid) return fail(res, 403, "push/not-yours", "You can only announce your own answers.");
+      if (data.from !== partnerUid || !["accepted", "declined"].includes(data.status)) return ok(res, { sent: 0, skipped: "not-answered" });
+      if (!isFresh(data.respondedAt)) return ok(res, { sent: 0, skipped: "old" });
     } else {
       if (data.by !== user.uid) return fail(res, 403, "push/not-yours", "You can only announce your own logs.");
       if (!isFresh(data.createdAt)) return ok(res, { sent: 0, skipped: "old" });
@@ -100,6 +110,7 @@ export default async function handler(req, res) {
       title: data.title,
       due: data.due,
       count: nightCount,
+      accepted: data.status === "accepted",
     });
     const result = await messaging.sendEachForMulticast({
       tokens: targets.map((item) => item.token),
