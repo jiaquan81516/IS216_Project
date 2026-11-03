@@ -32,10 +32,6 @@ const fab = ref(null);
 // The most important line sits last, next to the replies and the box.
 const lines = computed(() => [...props.chat.nudges.value].reverse());
 
-// Replies that answer a line sit inside that line. The rest go in the row above the box.
-const repliesFor = (nudge) => props.chat.suggestions.value.filter((s) => s.nudgeId === nudge.id);
-const general = computed(() => props.chat.suggestions.value.filter((s) => !s.nudgeId));
-
 const ACTION_ROUTES = { wellness: ROUTES.WELLNESS, support: ROUTES.SUPPORT };
 const rows = computed(() =>
   props.chat.messages.value.map((m) => ({
@@ -76,9 +72,6 @@ async function sendDraft() {
   const text = draft.value.trim();
   if (!text) return;
   if (await props.chat.send(text, "text")) draft.value = "";
-}
-function sendSuggestion(s) {
-  return props.chat.send(s.text, s.kind, s.nudgeId);
 }
 </script>
 
@@ -121,22 +114,12 @@ function sendSuggestion(s) {
             <p class="cd__line-title">{{ nudge.title }}</p>
             <p class="cd__line-text">{{ nudge.text }}</p>
             <div class="cd__line-actions">
-              <template v-for="s in repliesFor(nudge)" :key="s.text">
-                <button v-if="nudge.kind === 'partner-heavy'" type="button" class="cd__reply" @click="sendSuggestion(s)">{{ s.label }}</button>
-                <AppButton v-else variant="outline" size="sm" @click="sendSuggestion(s)">{{ s.label }}</AppButton>
-              </template>
               <AppButton v-if="nudge.action" variant="outline" size="sm" @click="onAction(nudge)">{{ nudge.action.label }}</AppButton>
               <button type="button" class="cd__link" @click="chat.dismiss(nudge)">Hide</button>
             </div>
           </li>
         </ul>
 
-      </div>
-
-      <div v-if="general.length" class="cd__sugg" aria-label="Suggestions">
-        <AppButton v-for="s in general" :key="s.text" variant="outline" size="sm" @click="sendSuggestion(s)">
-          {{ s.label }}
-        </AppButton>
       </div>
 
       <p v-if="chat.writeError.value" class="app-error-text cd__error" role="alert">{{ chat.writeError.value }}</p>
