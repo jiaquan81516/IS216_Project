@@ -330,7 +330,9 @@ async function copyCode() {
           <AppLink v-if="phase === 'form'" :to="route.query.code ? { path: ROUTES.ACCOUNT, query: { code: route.query.code } } : ROUTES.ACCOUNT" class="app-text-link">Back</AppLink>
 
           <div v-if="phase === 'review'" class="rv" :aria-busy="busy">
-            <ul class="rv__grid" aria-label="Your details">
+            <section class="rv__sec" aria-labelledby="rv-part">
+              <h3 id="rv-part" class="rv__h">Particulars</h3>
+              <ul class="rv__grid" aria-label="Your details">
               <li class="rv__tile">
                 <div class="rv__top">
                   <span class="rv__lab">Name</span>
@@ -366,6 +368,12 @@ async function copyCode() {
                 </select>
               </li>
 
+              </ul>
+            </section>
+
+            <section class="rv__sec" aria-labelledby="rv-house">
+              <h3 id="rv-house" class="rv__h">Household</h3>
+              <ul class="rv__grid" aria-label="Household details">
               <li class="rv__tile">
                 <div class="rv__top">
                   <span class="rv__lab">Stage</span>
@@ -397,6 +405,12 @@ async function copyCode() {
                 </template>
               </li>
 
+              </ul>
+            </section>
+
+            <section v-if="mode === 'create'" class="rv__sec" aria-labelledby="rv-babies">
+              <h3 id="rv-babies" class="rv__h">{{ extraBabies.length ? "Babies" : "Baby" }}</h3>
+              <ul class="rv__grid" aria-label="Baby details">
               <li v-if="mode === 'create'" class="rv__tile">
                 <div class="rv__top">
                   <span class="rv__lab">Baby 1</span>
@@ -439,7 +453,8 @@ async function copyCode() {
   </li>
 </template>
 
-            </ul>
+              </ul>
+            </section>
 
             <div v-if="error" class="alert alert-danger app-alert" role="alert">{{ error }}</div>
             <p v-if="reviewProblem" class="rv__problem" role="status">{{ reviewProblem }}</p>
@@ -494,11 +509,13 @@ async function copyCode() {
 .hh__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: 100%; }
 .hh__code { display: flex; align-items: center; justify-content: center; width: 100%; padding: 32px 48px; background: #fbe3d3; border-radius: 20px; }
 .hh__card--flat { padding: 0; background: transparent; border: 0; }
-.rv { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 720px; }
+.rv { display: flex; flex-direction: column; gap: 22px; width: 100%; max-width: 720px; }
 .rv__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(104px, auto); gap: 12px; margin: 0; padding: 0; list-style: none; }
 .rv__tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 16px 20px 18px; background: #fffdf8; border: 1.5px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 20px; transition: border-color 0.15s ease; }
 .rv__tile:focus-within { border-color: var(--navy, #243560); }
 .rv__tile--wide { grid-column: 1 / -1; }
+.rv__sec { display: flex; flex-direction: column; gap: 10px; }
+.rv__h { margin: 0; font-family: var(--nt-serif); font-size: 1.125rem; font-weight: 700; color: var(--navy, #243560); }
 .rv__top { display: flex; align-items: center; justify-content: space-between; min-height: 28px; }
 .rv__lab { font-size: 0.8125rem; font-weight: 500; color: var(--nt-muted); }
 .rv__edit { padding: 4px 10px; margin: -4px -10px -4px 0; background: transparent; border: 0; border-radius: 8px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--navy, #243560); font-weight: 700; cursor: pointer; }
