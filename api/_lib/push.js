@@ -96,8 +96,27 @@ const clip = (text, max) => {
 // The notification. Chat text is never put in it, so nothing private shows on a lock screen.
 // A task shows its title, because the title is the point of the push. Every value is a string,
 // which is what FCM data messages require.
-export function buildPush({ type, senderName, kind = "text", title = "", due = null, count = 0, note = "", now = new Date() }) {
+export function buildPush({ type, senderName, kind = "text", title = "", due = null, count = 0, note = "", accepted = false, now = new Date() }) {
   const name = firstName(senderName);
+  // A request to take over a night, and the answer to it.
+  if (type === "cover") {
+    return {
+      type: "cover",
+      title: `${name} asks you to take over`,
+      body: "They need to rest. Open NurtureTrack to accept or decline.",
+      url: "/wellness",
+      tag: "cover",
+    };
+  }
+  if (type === "coverReply") {
+    return {
+      type: "coverReply",
+      title: accepted ? `${name} is taking over` : `${name} cannot take over`,
+      body: accepted ? "The sleep rota is updated." : "Open NurtureTrack to see what to do next.",
+      url: "/rota",
+      tag: "cover-reply",
+    };
+  }
   if (type === "room") {
     const reason = clip(note, 100);
     return {

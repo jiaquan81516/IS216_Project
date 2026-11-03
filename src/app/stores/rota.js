@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { notifyPartner } from "@/api/push";
 import { computed, ref } from "vue";
 import {
   cancelSwap as apiCancelSwap,
@@ -327,18 +328,20 @@ export const useRotaStore = defineStore("app-rota", () => {
   }
 
   // I give away `date` and take `withDate` in return (null for nothing in return).
-  function requestSwap({ date, withDate = null, message = "" }) {
-    return attempt(
-      () =>
-        apiRequestSwap(householdId.value, {
-          date,
-          withDate,
-          from: meUid.value,
-          to: partnerUid.value || null,
-          message,
-        }),
-      "We could not send the swap request. Check your connection and try again.",
-    );
+  async function requestSwap({ date, withDate = null, message = "" }) {
+    let createdId = "";
+    const ok = await attempt(async () => {
+      createdId = await apiRequestSwap(householdId.value, {
+        date,
+        withDate,
+        from: meUid.value,
+        to: partnerUid.value || null,
+        message,
+      });
+    }, "We could not send the swap request. Check your connection and try again.");
+    // Handing a night over (nothing in return) is a request for help, so the partner gets an alert.
+    if (ok && createdId && date && !withDate) notifyPartner(householdId.value, "cover", createdId);
+    return ok;
   }
 
   // Accepting moves the nights as well, in one batch.
@@ -350,10 +353,12 @@ export const useRotaStore = defineStore("app-rota", () => {
     const nightsToSet = accept
       ? [...(swap.date ? [{ date: swap.date, onCall: taker }] : []), ...(swap.withDate ? [{ date: swap.withDate, onCall: swap.from }] : [])]
       : [];
-    return attempt(
-      () => respondToSwap(householdId.value, id, accept, { uid: meUid.value, nights: nightsToSet }),
-      "We could not answer that request. Check your connection and try again.",
-    );
+    const handedOver = Boolean(swap.date && !swap.withDate);
+    return attempt(async () => {
+      await respondToSwap(householdId.value, id, accept, { uid: meUid.value, nights: nightsToSet });
+      // The person who asked hears the answer to a request for help.
+      if (handedOver) notifyPartner(householdId.value, "coverReply", id);
+    }, "We could not answer that request. Check your connection and try again.");
   }
 
   function cancelRequest(id) {
