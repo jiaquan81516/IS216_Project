@@ -17,6 +17,7 @@ const props = defineProps({
   error: { type: String, default: "" },
   allowedTypes: { type: Array, default: null },
   lockType: { type: Boolean, default: false },
+  caregiver: { type: Boolean, default: false },
 });
 const emit = defineEmits(["close", "save"]);
 
@@ -31,11 +32,11 @@ let opener = null;
 const typeOptions = computed(() => Object.entries(ENTRY_TYPES)
   .filter(([value]) => !props.allowedTypes || props.allowedTypes.includes(value))
   .map(([value, t]) => ({ value, label: t.label })));
-const methodOptions = [
+const methodOptions = computed(() => [
   { value: "breast", label: "Breast" },
   { value: "bottle", label: "Bottle" },
-  { value: "expressed", label: "Expressed" },
-];
+  { value: "expressed", label: props.caregiver ? "Expressed milk" : "Expressed" },
+].filter((option) => !props.caregiver || option.value !== "breast"));
 const sideOptions = [
   { value: "left", label: "Left" },
   { value: "right", label: "Right" },
@@ -202,6 +203,7 @@ const missing = computed(() => {
   switch (form.type) {
     case "feed":
       if (!form.method) return "Choose how the feed was given.";
+      if (props.caregiver && form.method === "breast") return "Choose bottled or expressed milk.";
       if (form.method === "breast") {
         if (!form.side) return "Choose a side.";
         if (!minutesValue.value) return "Choose how long, or enter the minutes.";
