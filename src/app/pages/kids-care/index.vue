@@ -1,8 +1,8 @@
 <script setup>
 import SkeletonList from "@/app/components/SkeletonList.vue";
 import "@/app/app.css";
-import { computed, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { computed, onMounted, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import AppButton from "@/components/ui/AppButton.vue";
 import Icon from "@/app/components/Icon.vue";
 import { formatDistance, sortByDistance } from "@/app/utils/mapHelpers";
@@ -17,18 +17,18 @@ import {
   normalizeView,
   telHref,
 } from "@/app/utils/kidsCareHelpers";
+import AppPager from "@/app/components/AppPager.vue";
 import OneMapEmbed from "@/app/components/OneMapEmbed.vue";
 import { oneMapPlaceUrl } from "@/app/utils/oneMapHelpers";
 import { loadChasClinics } from "@/api/chasClinics";
 import { useSavedPlaces } from "@/app/composables/useSavedPlaces";
 import { useLocate } from "@/app/composables/useLocate";
 import { useAdmin } from "@/composables/useAdmin";
-import { KIDS_EMERGENCY, KIDS_EMERGENCY_NUMBERS, RETRIEVED_AT } from "@/app/data/kidsEmergency";
 
 defineOptions({ name: "KidsCarePage" });
 
 const route = useRoute();
-const router = useRouter();
+// Clinics only. The children's emergency details now sit on the first Who to call card on Support.
 const view = computed(() => normalizeView(route.query.view));
 
 const query = ref("");
@@ -39,8 +39,8 @@ const filterOpen = ref(false);
 const includeDental = ref(false);
 const located = ref(false);
 const origin = ref(null);
-const mapPlace = ref(null);
-const shown = ref(PAGE_SIZE);
+const selectedId = ref("");
+const page = ref(1);
 
 // Clinics load only when the Clinics view is first opened.
 const clinics = ref([]);
@@ -56,35 +56,38 @@ async function ensureClinics() {
 }
 watch(view, (v) => v === "clinics" && ensureClinics(), { immediate: true });
 watch([view, query, saveView, includeDental, origin], () => {
-  shown.value = PAGE_SIZE;
-  mapPlace.value = null;
+  page.value = 1;
+  selectedId.value = "";
 });
 
 const { savedIds, toggleSaved } = useSavedPlaces(SAVED_KIDS_KEY);
 
-const source = computed(() => (view.value === "emergency" ? [...KIDS_EMERGENCY] : clinics.value));
+const source = computed(() => clinics.value);
 const matches = computed(() => {
   const base = saveView.value === "saved" ? source.value.filter((p) => savedIds.value.includes(p.id)) : source.value;
   const filtered = filterPlaces(base, { text: query.value, includeDental: includeDental.value });
   if (located.value && origin.value) return sortByDistance(filtered, origin.value);
   return view.value === "clinics" ? byName(filtered) : filtered;
 });
-const visible = computed(() => (view.value === "clinics" ? matches.value.slice(0, shown.value) : matches.value));
-const hasMore = computed(() => view.value === "clinics" && matches.value.length > shown.value);
+const visible = computed(() => matches.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE));
 const savedCount = computed(() => source.value.filter((p) => savedIds.value.includes(p.id)).length);
 const count = computed(() => countText(matches.value.length, located.value ? "near you" : "in Singapore"));
 const filterCount = computed(() => (includeDental.value ? 1 : 0));
 
 const clinicsStale = computed(() => view.value === "clinics" && isStale(clinicMeta.value.retrievedAt));
-const retrievedText = computed(() => formatDate(view.value === "emergency" ? RETRIEVED_AT : clinicMeta.value.retrievedAt));
+const retrievedText = computed(() => formatDate(clinicMeta.value.retrievedAt));
 
-function showOnMap(place) {
-  mapPlace.value = place;
-  document.getElementById("kc-map")?.scrollIntoView?.({ block: "nearest" });
-}
-function setView(next) {
-  router.replace({ path: route.path, query: { ...route.query, view: next } });
-}
+// Same as the pumping rooms map: the chosen clinic, else the person's location, else the island.
+const hasPoint = (p) => Number.isFinite(p?.lat) && Number.isFinite(p?.lng);
+const embed = computed(() => {
+  const place = visible.value.find((p) => p.id === selectedId.value);
+  if (place && hasPoint(place)) return { lat: place.lat, lng: place.lng, label: place.name };
+  if (located.value && origin.value) return { lat: origin.value.lat, lng: origin.value.lng, label: "your area" };
+  return { lat: null, lng: null, label: "" };
+});
+const select = (place) => {
+  selectedId.value = place.id;
+};
 const { locating, message: locationMessage, locate: findMe } = useLocate();
 function locate() {
   findMe(({ lat, lng }) => {
@@ -93,60 +96,30 @@ function locate() {
     query.value = "";
   });
 }
+// Open on where the person is. If they say no, the island view and search still work.
+onMounted(locate);
 const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
 </script>
 
 <template>
   <div class="kc">
-    <header class="kc__head">
-      <h1 class="nt-title kc__title">Care for your child</h1>
-      <p class="kc__lede">Find a children's emergency service, or a clinic close to home.</p>
+    <header>
+      <component :is="isAdmin ? 'h1' : 'h2'" class="nt-title kc__title">Find a clinic</component>
     </header>
 
-    <nav class="kc__tabs" aria-label="Kids care views">
-      <a
-        class="kc__tab"
-        :class="{ 'kc__tab--on': view === 'emergency' }"
-        :href="`${route.path}?view=emergency`"
-        :aria-current="view === 'emergency' ? 'page' : undefined"
-        @click.prevent="setView('emergency')"
-      >
-        Emergency
-      </a>
-      <a
-        class="kc__tab"
-        :class="{ 'kc__tab--on': view === 'clinics' }"
-        :href="`${route.path}?view=clinics`"
-        :aria-current="view === 'clinics' ? 'page' : undefined"
-        @click.prevent="setView('clinics')"
-      >
-        Clinics near you
-      </a>
-    </nav>
-
     <div class="kc__field">
-      <label class="kc__flabel" for="kc-search">Search places</label>
+      <label class="kc__flabel" for="kc-search">Search clinics</label>
       <div class="kc__wrap">
-        <input id="kc-search" v-model="query" class="kc__input" type="text" placeholder="Name or area" autocomplete="off" />
+        <input id="kc-search" v-model="query" class="kc__input" type="text" placeholder="Clinic name or area" autocomplete="off" />
         <span class="kc__icon"><Icon name="search" :size="18" /></span>
       </div>
     </div>
 
-    <p v-if="view === 'emergency'" class="kc__notice" role="status">
+    <p class="kc__notice" role="status">
       <svg class="kc__info" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" />
       </svg>
-      <span>
-        For a life-threatening emergency call
-        <a class="app-link" :href="`tel:${KIDS_EMERGENCY_NUMBERS.ambulance}`">{{ KIDS_EMERGENCY_NUMBERS.ambulance }}</a>.
-        Check the hospital's website before you travel.
-      </span>
-    </p>
-    <p v-else class="kc__notice" role="status">
-      <svg class="kc__info" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" />
-      </svg>
-      <span>CHAS subsidies depend on your card. Check with the clinic. For emergencies use the Emergency tab.</span>
+      <span>CHAS subsidies depend on your card. Check with the clinic. For an emergency call <a class="app-link" href="tel:995">995</a>.</span>
     </p>
     <p v-if="clinicsStale" class="kc__notice" role="status">
       <span>This clinic list was last updated on {{ retrievedText }}, so some details may have changed. Check with the clinic before you go.</span>
@@ -187,17 +160,16 @@ const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
       </button>
     </div>
 
-    <div id="kc-map" class="kc__map">
-      <OneMapEmbed :lat="mapPlace?.lat ?? null" :lng="mapPlace?.lng ?? null" :label="mapPlace ? mapPlace.name : ''" />
-    </div>
+    <section class="kc__map" aria-label="Map">
+      <OneMapEmbed :lat="embed.lat" :lng="embed.lng" :label="embed.label" />
+    </section>
 
-    <ul v-if="visible.length" class="kc__list" :aria-label="view === 'emergency' ? 'Children\'s emergency services' : 'CHAS clinics'">
-      <li v-for="place in visible" :id="`kc-card-${place.id}`" :key="place.id" class="kc__card">
+    <ul v-if="visible.length" class="kc__list" aria-label="CHAS clinics">
+      <li v-for="place in visible" :id="`kc-card-${place.id}`" :key="place.id" class="kc__card" :class="{ 'kc__card--on': place.id === selectedId }" :aria-current="place.id === selectedId ? 'true' : undefined" @click="select(place)">
         <h2 class="kc__name">{{ place.name }}</h2>
         <p class="kc__text">{{ place.address }}</p>
-        <p class="kc__type">{{ place.kind === "emergency" ? place.type : place.type === "dental" ? "CHAS clinic, dental" : "CHAS clinic" }}</p>
-        <p v-if="place.kind === 'emergency'" class="kc__muted">{{ place.note }}</p>
-        <p v-else class="kc__muted">CHAS subsidies depend on your card. Check with the clinic. For emergencies use the Emergency tab.</p>
+        <p class="kc__type">{{ place.type === "dental" ? "CHAS clinic, dental" : "CHAS clinic" }}</p>
+                <p class="kc__muted">CHAS subsidies depend on your card. Check with the clinic.</p>
         <p v-if="distanceOf(place)" class="kc__muted">{{ distanceOf(place) }} away</p>
         <div class="kc__actions">
           <button
@@ -206,18 +178,18 @@ const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
             class="app-textbtn"
             :aria-pressed="savedIds.includes(place.id) ? 'true' : 'false'"
             :aria-label="`${savedIds.includes(place.id) ? 'Remove' : 'Save'} ${place.name}`"
-            @click="toggleSaved(place)"
+            @click.stop="toggleSaved(place)"
           >
             {{ savedIds.includes(place.id) ? "Saved" : "Save" }}
           </button>
-          <a v-if="oneMapPlaceUrl(place.lat, place.lng)" class="app-link" :href="oneMapPlaceUrl(place.lat, place.lng)" target="_blank" rel="noopener noreferrer">
+          <a v-if="oneMapPlaceUrl(place.lat, place.lng)" class="app-link" :href="oneMapPlaceUrl(place.lat, place.lng)" target="_blank" rel="noopener noreferrer" @click.stop>
             Open in OneMap<span class="visually-hidden"> for {{ place.name }}, opens in a new tab</span>
           </a>
-          <button type="button" class="app-textbtn" :aria-label="`Show ${place.name} on map`" @click="showOnMap(place)">Show on map</button>
-          <a v-if="telHref(place.phone)" class="app-link" :href="telHref(place.phone)">
+          <button type="button" class="app-textbtn" :aria-label="`Show ${place.name} on map`" @click.stop="select(place)">Show on map</button>
+          <a v-if="telHref(place.phone)" class="app-link kc__call" :href="telHref(place.phone)" @click.stop>
             Call<span class="visually-hidden"> {{ place.name }}</span>
           </a>
-          <a v-if="place.sourceUrl" class="kc__source" :href="place.sourceUrl" target="_blank" rel="noopener noreferrer">
+          <a v-if="place.sourceUrl" class="kc__source" :href="place.sourceUrl" target="_blank" rel="noopener noreferrer" @click.stop>
             Source<span class="visually-hidden"> for {{ place.name }}, opens in a new tab</span>
           </a>
         </div>
@@ -231,7 +203,7 @@ const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
         <h2 class="nt-heading nt-heading--sm">The clinic list is not available yet</h2>
         <p class="kc__muted">
           {{ clinicsState === "failed" ? "The clinic list could not be loaded." : "The CHAS clinic list has not been added to this app yet." }}
-          Use the Emergency tab to find care, or search OneMap for a clinic near you.
+          Search OneMap for a clinic near you.
         </p>
       </template>
       <template v-else>
@@ -240,16 +212,10 @@ const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
       </template>
     </div>
 
-    <p v-if="hasMore" class="kc__more">
-      <button type="button" class="app-textbtn" @click="shown += PAGE_SIZE">Show more</button>
-      <span class="kc__muted"> Showing {{ visible.length }} of {{ matches.length }}</span>
-    </p>
+    <AppPager v-model="page" :total="matches.length" :page-size="PAGE_SIZE" label="Clinic pages" />
 
     <footer class="kc__foot">
-      <p v-if="view === 'emergency'" class="kc__muted">
-        Hospital details were checked against each hospital's own website on {{ retrievedText }}. Addresses from OneMap. General guidance only.
-      </p>
-      <p v-else class="kc__muted">
+      <p class="kc__muted">
         Dataset: {{ clinicMeta.dataset || "CHAS Clinics" }}. Source: data.gov.sg. Licence: Singapore Open Data Licence.
         {{ retrievedText ? `Retrieved ${retrievedText}.` : "Snapshot not loaded yet." }}
         The list shows CHAS participation only, not child specialties.
@@ -259,43 +225,55 @@ const distanceOf = (p) => (located.value ? formatDistance(p.distance) : "");
 </template>
 
 <style scoped>
-.kc { max-width: 1120px; margin: 0 auto; color: var(--nt-ink); font-family: Inter, sans-serif; }
-.kc__head { margin-bottom: 20px; }
-.kc__title { margin: 0 0 8px; font-size: 1.75rem; line-height: 1.25; }
-.kc__lede { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-muted); }
-.kc__tabs, .kc__views { display: flex; flex-wrap: wrap; gap: 4px 24px; margin-bottom: 16px; border-bottom: 1px solid var(--nt-line); }
-.kc__views { border-bottom: 0; margin-bottom: 16px; }
-.kc__tab { padding: 8px 0; margin-bottom: -1px; background: none; border: 0; border-bottom: 2px solid transparent; font: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-muted); text-decoration: none; cursor: pointer; }
-.kc__tab:hover { color: var(--nt-ink); }
-.kc__tab--on { color: var(--nt-plum); border-bottom-color: var(--nt-plum); font-weight: 600; }
-.kc__views .kc__tab { margin-bottom: 0; }
-.kc__tab:focus-visible, .kc__source:focus-visible, .kc__input:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
-.kc__field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; max-width: 520px; }
-.kc__flabel { font-size: 0.875rem; font-weight: 600; }
+/* The app's look: serif banner, cream cards with a sand edge, pill buttons in navy and sand. */
+.kc { --navy: #243560; --navy-2: #2d3f70; --ink: #1f2a52; --sand: #e9d9b8; --cream: #fdf9f0; display: flex; flex-direction: column; gap: 16px; min-width: 0; color: var(--ink); font-family: Inter, sans-serif; }
+.kc > * { margin: 0; }
+.kc__tabs, .kc__views { display: flex; flex-wrap: wrap; gap: 8px; }
+.kc__tab { display: inline-flex; align-items: center; min-height: 40px; padding: 7px 20px; background: #fff; border: 1.5px solid var(--sand); border-bottom-width: 3px; border-radius: 999px; font: inherit; font-size: 0.9375rem; font-weight: 600; color: var(--navy); text-decoration: none; cursor: pointer; transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease; }
+.kc__tab:hover { border-color: var(--navy); color: var(--navy); transform: translateY(-1px); }
+.kc__tab--on, .kc__tab--on:hover { background: var(--navy); border-color: #182246; color: #fff; }
+.kc__tab:focus-visible, .kc__source:focus-visible, .kc__input:focus-visible { outline: 3px solid #f2a477; outline-offset: 2px; }
+.kc__title { margin: 0; font-size: 1.75rem; line-height: 1.25; }
+.kc__field { display: flex; flex-direction: column; gap: 6px; }
+.kc__flabel { font-size: 0.9375rem; font-weight: 600; }
 .kc__wrap { position: relative; }
-.kc__input { width: 100%; padding: 12px 44px 12px 16px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 8px; font: inherit; font-size: 0.875rem; color: var(--nt-ink); }
-.kc__icon { position: absolute; right: 14px; top: 50%; display: inline-flex; transform: translateY(-50%); color: var(--nt-muted); pointer-events: none; }
-.kc__notice { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; font-size: 0.875rem; line-height: 1.5; color: var(--nt-muted); }
-.kc__info { flex: none; margin-top: 3px; }
-.kc__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.kc__count { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
+.kc__input { width: 100%; padding: 12px 44px 12px 16px; background: #fff; border: 1.5px solid var(--sand); border-radius: 14px; font: inherit; font-size: 1rem; color: var(--ink); }
+.kc__input:focus { border-color: var(--navy); }
+.kc__icon { position: absolute; right: 14px; top: 50%; display: inline-flex; transform: translateY(-50%); color: #6b7392; pointer-events: none; }
+.kc__notice { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; background: var(--cream); border: 1px solid var(--sand); border-radius: 16px; font-size: 0.9375rem; line-height: 1.5; color: var(--ink); }
+.kc__notice :deep(.app-link) { color: var(--navy); font-weight: 700; }
+.kc__info { flex: none; margin-top: 3px; color: #6b7392; }
+.kc__bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.kc__count { margin: 0; font-size: 1rem; font-weight: 600; color: var(--ink); }
 .kc__controls { display: flex; flex-wrap: wrap; gap: 8px; }
-.kc__filters { margin-bottom: 12px; padding: 12px 16px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 8px; }
-.kc__check { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; }
-.kc__map { margin-bottom: 16px; }
-.kc__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
-.kc__card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 24px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
-.kc__name { margin: 0; font-family: inherit; font-size: 1rem; line-height: 1.4; font-weight: 600; }
-.kc__text { margin: 0; font-size: 0.875rem; line-height: 1.5; }
-.kc__type { margin: 0; font-size: 0.875rem; line-height: 1.5; font-weight: 600; color: var(--nt-muted); }
-.kc__muted { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-muted); }
-.kc__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 20px; margin-top: 8px; }
-.kc__source { font-size: 0.875rem; color: var(--nt-muted); text-decoration: underline; text-underline-offset: 3px; }
-.kc__empty { display: flex; flex-direction: column; gap: 8px; padding: 24px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
-.kc__empty h2 { margin: 0; }
-.kc__more { margin: 16px 0 0; }
-.kc__foot { margin-top: 24px; padding-bottom: 24px; }
+.kc__controls :deep(.btn) { min-height: 40px; padding: 7px 18px; background: #fff; border: 1.5px solid var(--sand); border-bottom-width: 3px; border-radius: 999px; color: var(--navy); font-size: 0.9375rem; font-weight: 600; transition: border-color 0.18s ease, transform 0.18s ease; }
+.kc__controls :deep(.btn:hover:not(:disabled)) { background: #fff; border-color: var(--navy); color: var(--navy); transform: translateY(-1px); }
+.kc__controls :deep(.btn:focus-visible) { outline: 3px solid #f2a477; outline-offset: 2px; }
+.kc__filters { padding: 14px 18px; background: var(--cream); border: 1px solid var(--sand); border-radius: 16px; }
+.kc__check { display: flex; align-items: center; gap: 8px; font-size: 0.9375rem; }
+.kc__map { margin: 0; }
+.kc__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0; padding: 0; list-style: none; }
+.kc__card { cursor: pointer; transition: background-color 150ms, border-color 150ms; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 22px 26px 20px; background: var(--cream); border: 1px solid var(--sand); border-bottom-width: 4px; border-radius: 24px; }
+.kc__card:hover { background: #fffdf8; border-color: #d9c79a; }
+.kc__card--on { border-color: #f2a477; }
+.kc__name { margin: 0; font-family: var(--nt-serif); font-size: 1.3125rem; line-height: 1.25; font-weight: 700; color: var(--ink); }
+.kc__text { margin: 0; font-size: 0.9375rem; line-height: 1.5; }
+.kc__type { margin: 0; font-size: 0.875rem; line-height: 1.5; font-weight: 700; color: var(--navy); }
+.kc__muted { margin: 0; font-size: 0.9375rem; line-height: 1.5; color: #6b7392; }
+.kc__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; margin-top: auto; padding-top: 12px; }
+.kc__actions :deep(.app-textbtn), .kc__actions :deep(.app-link) { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 6px 16px; background: #fff; border: 1.5px solid var(--sand); border-bottom-width: 3px; border-radius: 999px; color: var(--navy); font: inherit; font-size: 0.9375rem; font-weight: 600; text-decoration: none; cursor: pointer; transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease; }
+.kc__actions :deep(.app-textbtn:hover), .kc__actions :deep(.app-link:hover) { border-color: var(--navy); color: var(--navy); transform: translateY(-1px); }
+.kc__actions :deep(.app-textbtn[aria-pressed="true"]) { background: var(--navy); border-color: #182246; color: #fff; }
+.kc__actions :deep(.kc__call) { background: var(--navy); border-color: #182246; color: #fff; }
+.kc__actions :deep(.kc__call:hover) { background: #2c4175; color: #fff; }
+.kc__actions :deep(a:focus-visible), .kc__actions :deep(button:focus-visible) { outline: 3px solid #f2a477; outline-offset: 2px; }
+.kc__source { margin-left: auto; font-size: 0.875rem; color: #6b7392; text-decoration: underline; text-underline-offset: 3px; }
+.kc__empty { display: flex; flex-direction: column; gap: 8px; padding: 24px 28px; background: var(--cream); border: 1px solid var(--sand); border-bottom-width: 4px; border-radius: 24px; }
+.kc__empty h2 { margin: 0; font-family: var(--nt-serif); font-size: 1.375rem; font-weight: 700; }
+.kc__foot { padding-bottom: 24px; }
 @media (max-width: 991px) {
   .kc__list { grid-template-columns: minmax(0, 1fr); }
 }
+@media (max-width: 575px) { .kc__card { padding: 18px 18px 16px; } }
+@media (prefers-reduced-motion: reduce) { .kc__tab, .kc__back, .kc__controls :deep(.btn), .kc__actions :deep(.app-textbtn), .kc__actions :deep(.app-link) { transition: none; } }
 </style>

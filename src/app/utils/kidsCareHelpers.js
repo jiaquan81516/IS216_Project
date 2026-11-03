@@ -3,9 +3,9 @@
 import { oneMapPlaceUrl } from "@/app/utils/oneMapHelpers";
 
 export const KIDS_VIEWS = Object.freeze(["emergency", "clinics"]);
-export const DEFAULT_KIDS_VIEW = "emergency";
+export const DEFAULT_KIDS_VIEW = "clinics";
 export const SAVED_KIDS_KEY = "nurturetrack:saved-kids-care";
-export const PAGE_SIZE = 50;
+export const PAGE_SIZE = 25;
 
 export function normalizeView(value) {
   const v = Array.isArray(value) ? value[0] : value;
