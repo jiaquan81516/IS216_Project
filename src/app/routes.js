@@ -26,6 +26,7 @@ export const ROUTES = Object.freeze({
   SETTINGS: "/settings",
   PROFILE: "/profile",
   CARE_BRIEF: "/care-brief",
+  CARE_DUTY: "/care-brief/duty",
 });
 
 export const JOURNEYS = Object.freeze(["preparing", "newborn"]);

@@ -20,7 +20,11 @@ const GUARDED_APP_PATHS = new Set([
   ROUTES.SETTINGS,
   ROUTES.PROFILE,
   ROUTES.CARE_BRIEF,
+  ROUTES.CARE_DUTY,
 ]);
+
+// The pages a caregiver can open. Parents are sent to Home from these, and caregivers to the care brief from everything else.
+const CAREGIVER_PATHS = new Set([ROUTES.CARE_BRIEF, ROUTES.CARE_DUTY]);
 
 const SETUP_PATHS = new Set([
   ROUTES.JOURNEY, ROUTES.ROLE, ROUTES.ACCOUNT, ROUTES.SIGN_IN, ROUTES.HOUSEHOLD,
@@ -106,7 +110,7 @@ export function installGuard(router) {
         if (profile && !profile.householdId) {
           if (profile.householdIds?.length) {
             const households = await withTimeout(getCaregiverHouseholds(currentUser.value.uid), 4000);
-            if (households.length) return to.path === ROUTES.CARE_BRIEF ? true : ROUTES.CARE_BRIEF;
+            if (households.length) return CAREGIVER_PATHS.has(to.path) ? true : ROUTES.CARE_BRIEF;
           }
           return ROUTES.HOUSEHOLD;
         }
@@ -115,12 +119,12 @@ export function installGuard(router) {
           if (!me) {
             if (profile.householdIds?.length) {
               const households = await withTimeout(getCaregiverHouseholds(currentUser.value.uid), 4000);
-              if (households.length) return to.path === ROUTES.CARE_BRIEF ? true : ROUTES.CARE_BRIEF;
+              if (households.length) return CAREGIVER_PATHS.has(to.path) ? true : ROUTES.CARE_BRIEF;
             }
             return ROUTES.HOUSEHOLD;
           }
-          if (me && me.accessLevel !== "parent" && to.path !== ROUTES.CARE_BRIEF) return ROUTES.CARE_BRIEF;
-          if (me?.accessLevel === "parent" && to.path === ROUTES.CARE_BRIEF) return ROUTES.HOME;
+          if (me && me.accessLevel !== "parent" && !CAREGIVER_PATHS.has(to.path)) return ROUTES.CARE_BRIEF;
+          if (me?.accessLevel === "parent" && CAREGIVER_PATHS.has(to.path)) return ROUTES.HOME;
         }
       } catch {
         // If the profile cannot be read, let the page load and show its own error state.

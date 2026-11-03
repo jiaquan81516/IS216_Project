@@ -15,6 +15,7 @@ import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { useShared, SHARED_KEY } from "@/app/composables/useShared";
 import { useNudges, NUDGES_KEY } from "@/app/composables/useNudges";
+import { useCaregiverJoins, CAREGIVER_JOINS_KEY } from "@/app/composables/useCaregiverJoins";
 import { usePush, usePushMessages } from "@/app/composables/usePush";
 import { buildStream, unreadCount } from "@/app/utils/stream";
 import { resetLimits } from "@/app/utils/limits";
@@ -93,7 +94,13 @@ onMounted(() => {
   router.replace({ path: route.path, query: rest });
 });
 
-const { toasts: appToasts, closeToast: closeAppToast } = useToast();
+const { toasts: appToasts, closeToast: closeAppToast, showToast } = useToast();
+
+// A parent hears when somebody joins as a caregiver: a pop up now, and a notice on Home until it is read.
+const caregiverJoins = useCaregiverJoins(home.householdId, meUid, (who) =>
+  showToast({ title: `${who.name} joined as a caregiver`, text: `${who.role}. Check what they can see in Settings.`, ms: 9000 }),
+);
+provide(CAREGIVER_JOINS_KEY, caregiverJoins);
 
 const menuOpen = ref(false);
 const menuButton = ref(null);
@@ -112,6 +119,10 @@ const ADMIN_NAV = ADMIN_SECTIONS.map((section) => ({
   to: { path: ROUTES.ADMIN, query: { tab: section.id } },
 }));
 const adminSection = computed(() => (ADMIN_SECTIONS.some((s) => s.id === route.query.tab) ? route.query.tab : ADMIN_SECTIONS[0].id));
+// Open checklist tasks that are yours or shared, shown as a count on the Checklist link.
+const checklistCount = computed(
+  () => (shared.tasks.tasks ?? []).filter((t) => !t.done && (t.owner === meUid.value || t.owner === "both")).length,
+);
 const items = computed(() =>
   (adminWorkspace.value ? ADMIN_NAV : NAV).map((item) => ({
     ...item,
@@ -119,6 +130,7 @@ const items = computed(() =>
       ? route.path === ROUTES.ADMIN && adminSection.value === item.key
       : item.to === route.path || route.path.startsWith(item.to + "/"),
     dot: item.key === "today" && unread.value > 0,
+    badge: !adminWorkspace.value && item.key === "checklist" ? checklistCount.value : 0,
   })),
 );
 // Daily pages sit on the bar; the rest live under "More". An administrator's sections are all primary.
@@ -243,6 +255,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
                   <span>{{ item.label }}</span>
                   <span v-if="item.dot" class="top__dot" aria-hidden="true"></span>
                   <span v-if="item.dot" class="visually-hidden">unread</span>
+                  <span v-if="item.badge" class="top__badge" aria-hidden="true">{{ item.badge > 9 ? "9+" : item.badge }}</span>
+                  <span v-if="item.badge" class="visually-hidden">{{ item.badge }} to do</span>
                 </RouterLink>
               </li>
               <li v-if="moreItems.length" ref="moreWrap" class="top__more" :class="{ 'top__more--open': moreOpen }">
@@ -547,6 +561,20 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   .top__more--open .top__morelist {
     transition: none;
   }
+}
+.top__badge {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: #f2a477;
+  border-radius: 999px;
+  color: #243560;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
 }
 .top__dot {
   width: 8px;

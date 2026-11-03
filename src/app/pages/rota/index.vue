@@ -1,7 +1,7 @@
 <script setup>
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
-import { computed, inject, nextTick, onMounted, ref } from "vue";
+import { computed, inject, nextTick, onMounted, ref, watch } from "vue";
 import Collapse from "@/app/components/Collapse.vue";
 import DaySchedule from "@/app/components/DaySchedule.vue";
 import DateWheel from "@/app/components/DateWheel.vue";
@@ -88,6 +88,16 @@ const carers = computed(() =>
     .filter((m) => m?.uid && m.accessLevel === "caregiver" && m.permissions?.dutyView === true)
     .map((m) => ({ uid: m.uid, label: firstWord(m.displayName) || "Carer" })),
 );
+// When a carer with "Edit the day schedule" changed the shifts last, say so, so nothing moves unnoticed.
+const lastEditedByCarer = computed(() => {
+  const by = store.plan?.updatedBy;
+  const m = (home?.members?.value ?? []).find((x) => x?.uid === by && x.accessLevel === "caregiver");
+  if (!m) return "";
+  const at = store.plan?.updatedAt?.toDate?.();
+  const when = at ? `, ${at.getDate()} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][at.getMonth()]}` : "";
+  return `Shifts last changed by ${firstWord(m.displayName) || "a carer"}${when}.`;
+});
+watch(carers, (list) => store.setCarers(Object.fromEntries(list.map((c) => [c.uid, c.label]))), { immediate: true });
 const carerNames = computed(() => [...new Set([...carers.value.map((c) => c.label), ...(store.view.carerNights ?? []).map((c) => c.label)])]);
 const CARER_DAYS = ["M", "T", "W", "T", "F", "S", "S"];
 const CARER_DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -482,6 +492,7 @@ async function finishSetup() {
       <section id="day" class="rt__card rt__daycard" aria-labelledby="rt-day">
         <h2 id="rt-day" class="rt__h2">Day</h2>
         <p class="rt__muted">Who looks after {{ babyLabel }} from 6 AM to 6 PM. Tap or drag on a day to add a shift.</p>
+        <p v-if="lastEditedByCarer" class="rt__muted">{{ lastEditedByCarer }}</p>
         <DaySchedule :rota="store.view" :names="names" :has-partner="Boolean(home?.partner?.value)" :baby-label="babyLabel" :carers="carerNames" @save="store.setSchedule" />
       </section>
 

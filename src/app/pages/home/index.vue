@@ -18,6 +18,7 @@ import { isStruggling, moodStageFor } from "@/app/utils/moodStage";
 import { toDate } from "@/app/utils/entryHelpers";
 import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { NUDGES_KEY } from "@/app/composables/useNudges";
+import { CAREGIVER_JOINS_KEY } from "@/app/composables/useCaregiverJoins";
 import { useCheckinsStore } from "@/app/stores/checkins";
 import { encouragementFor } from "@/app/data/encouragement";
 import { MOODS } from "@/app/data/wellness";
@@ -40,6 +41,17 @@ const shared = inject(SHARED_KEY, null) ?? useShared(householdId, myUid, partner
 const posts = shared.posts;
 const taskStore = shared.tasks;
 const nudgeState = inject(NUDGES_KEY, null);
+const caregiverJoins = inject(CAREGIVER_JOINS_KEY, null);
+const newCaregivers = computed(() => caregiverJoins?.unseen.value ?? []);
+const newCaregiverText = computed(() => {
+  const list = newCaregivers.value;
+  if (list.length === 1) return `${list[0].name} joined as ${list[0].role.toLowerCase()}.`;
+  return `${list.length} caregivers joined: ${list.map((c) => c.name).join(", ")}.`;
+});
+function reviewCaregivers() {
+  caregiverJoins?.markSeen();
+  router.push({ path: ROUTES.SETTINGS, query: { section: "st-caregivers" } });
+}
 const checkins = useCheckinsStore();
 
 const router = useRouter();
@@ -297,7 +309,6 @@ const lookingAfter = computed(() => {
   };
 });
 // Offers your partner has made that need your answer.
-const listOpen = ref(false);
 const smallThings = computed(() => incomingSwaps.value.length + waiting.value.length);
 const cheerLine = computed(() => (smallThings.value === 1 ? "No rush. You've got this." : "One at a time, no rush. You've got this."));
 const incomingSwaps = computed(() => (rotaStore.value?.pending ?? []).filter((x) => x.from !== myUid.value && (!x.to || x.to === myUid.value)));
@@ -483,67 +494,53 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
     </div>
 
     <template v-if="!loading && !error">
+      <aside v-if="newCaregivers.length" class="hp__join" role="status">
+        <span class="hp__join-ico" aria-hidden="true"><Icon name="briefcase" :size="22" /></span>
+        <div class="hp__join-text">
+          <p class="hp__join-title">New caregiver</p>
+          <p class="hp__join-sub">{{ newCaregiverText }} Check what they can see.</p>
+        </div>
+        <button type="button" class="hp__join-btn" @click="reviewCaregivers">Review access</button>
+        <button type="button" class="hp__join-x" aria-label="Dismiss" @click="caregiverJoins.markSeen()"><Icon name="close" :size="18" /></button>
+      </aside>
       <header class="hp__head">
         <div class="hp__head-text">
           <h1 class="hp__title">Good {{ greeting }}, {{ partnerFirst ? `${myName} and ${partnerFirst}` : myName }}.</h1>
           <p class="hp__lead">{{ lede }}</p>
         </div>
-        <!-- Top right: your checklist -->
-        <div class="hp__head-tools">
-          <!-- Your list: a house with a speech bubble. Tap the bubble to open the to-dos. -->
-          <article v-if="smallThings" class="hp__open hp__list" aria-labelledby="hp-wait-title">
-            <div class="hp__house-row">
-              <svg class="hp__house" viewBox="0 0 120 112" fill="none" aria-hidden="true" focusable="false">
-                <rect x="8" y="104" width="104" height="4" rx="2" fill="#1f3a68" opacity="0.18" />
-                <rect x="22" y="48" width="76" height="56" rx="3" fill="#fbf3e6" stroke="#1f3a68" stroke-width="2.5" />
-                <path d="M12 52 L60 10 L108 52 Z" fill="#1f3a68" stroke="#1f3a68" stroke-width="2.5" stroke-linejoin="round" />
-                <rect x="84" y="20" width="11" height="22" fill="#1f3a68" stroke="#1f3a68" stroke-width="2" />
-                <rect x="49" y="70" width="22" height="34" rx="3" fill="#b5532f" stroke="#1f3a68" stroke-width="2.5" />
-                <circle cx="66" cy="88" r="1.8" fill="#fbf3e6" />
-                <rect x="30" y="62" width="14" height="14" rx="2" fill="#cfe0f3" stroke="#1f3a68" stroke-width="2" />
-                <rect x="76" y="62" width="14" height="14" rx="2" fill="#cfe0f3" stroke="#1f3a68" stroke-width="2" />
-                <path d="M37 62 V76 M30 69 H44 M83 62 V76 M76 69 H90" stroke="#1f3a68" stroke-width="1.4" />
-              </svg>
-              <button type="button" class="hp__bubble" :aria-expanded="listOpen ? 'true' : 'false'" aria-controls="hp-list-panel" @click="listOpen = !listOpen">
-                <span class="hp__bubble-count" aria-hidden="true">{{ smallThings }}</span>
-                <span class="hp__bubble-text">
-                  <span class="hp__label">Your checklist</span>
-                  <span id="hp-wait-title" class="hp__bubble-title">Important things on my checklist</span>
-                  <span class="visually-hidden">{{ smallThings }} {{ smallThings === 1 ? "item" : "items" }}.</span>
-                </span>
-                <svg class="hp__bubble-chev" :class="{ 'is-open': listOpen }" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7l5 5 5-5" /></svg>
-              </button>
-            </div>
-            <Transition name="hp-pop">
-            <div v-if="listOpen" id="hp-list-panel" class="hp__list-panel">
-              <p class="hp__small">{{ cheerLine }}</p>
-              <ul class="hp__todo-list">
-                <li v-for="swap in incomingSwaps" :key="swap.id" class="hp__todo">
-                  <div class="hp__todo-text">
-                    <p class="hp__text">{{ swapLine(swap) }}</p>
-                    <p class="hp__small">Duty</p>
-                  </div>
-                  <div class="hp__action">
-                    <button type="button" class="hp__btn hp__btn--primary" @click="answerSwap(swap, true)">Say yes</button>
-                    <button type="button" class="hp__link hp__link--sm" @click="answerSwap(swap, false)">Not tonight</button>
-                  </div>
-                </li>
-                <li v-for="item in waiting" :key="item.id" class="hp__todo">
-                  <button type="button" class="hp__check" :aria-label="item.kind === 'message' ? `Got it: ${item.text}` : `Done: ${item.text}`" @click="item.kind === 'message' ? gotIt(item) : markDone(item)">
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7" /></svg>
-                  </button>
-                  <div class="hp__todo-text">
-                    <p class="hp__text">{{ item.text }}</p>
-                    <p class="hp__small">{{ metaLine(item) }}</p>
-                  </div>
-                  <span class="hp__todo-hint">{{ item.kind === "message" ? "Tap to say got it" : "Tap when done" }}</span>
-                </li>
-              </ul>
-            </div>
-            </Transition>
-          </article>
-        </div>
       </header>
+
+      <section v-if="smallThings" class="hp__need" aria-labelledby="hp-wait-title">
+        <div class="hp__need-head">
+          <span class="hp__need-count" aria-hidden="true">{{ smallThings }}</span>
+          <div>
+            <h2 id="hp-wait-title" class="hp__need-title">Needs you</h2>
+            <p class="hp__need-sub">{{ cheerLine }}</p>
+          </div>
+        </div>
+          <ul class="hp__todo-list">
+            <li v-for="swap in incomingSwaps" :key="swap.id" class="hp__todo">
+              <div class="hp__todo-text">
+                <p class="hp__text">{{ swapLine(swap) }}</p>
+                <p class="hp__small">Duty</p>
+              </div>
+              <div class="hp__action">
+                <button type="button" class="hp__btn hp__btn--primary" @click="answerSwap(swap, true)">Say yes</button>
+                <button type="button" class="hp__link hp__link--sm" @click="answerSwap(swap, false)">Not tonight</button>
+              </div>
+            </li>
+            <li v-for="item in waiting" :key="item.id" class="hp__todo">
+              <button type="button" class="hp__check" :aria-label="item.kind === 'message' ? `Got it: ${item.text}` : `Done: ${item.text}`" @click="item.kind === 'message' ? gotIt(item) : markDone(item)">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 7.5l3 3 6-7" /></svg>
+              </button>
+              <div class="hp__todo-text">
+                <p class="hp__text">{{ item.text }}</p>
+                <p class="hp__small">{{ metaLine(item) }}</p>
+              </div>
+              <span class="hp__todo-hint">{{ item.kind === "message" ? "Tap to say got it" : "Tap when done" }}</span>
+            </li>
+          </ul>
+      </section>
 
       <section class="hp__trio" :class="{ 'hp__trio--multi': multiBabies }" aria-label="Everyday">
         <!-- Every baby, today, when there is more than one -->
@@ -770,18 +767,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__card-head > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 /* Your list: a calm card with a small spark, and rows you tick off, so it feels like progress */
 /* The house and its speech bubble */
-.hp__house-row { display: flex; align-items: center; gap: 22px; }
-.hp__house { flex: none; width: 104px; height: auto; }
-.hp__bubble { position: relative; flex: 1; display: flex; align-items: center; gap: 14px; min-width: 0; padding: 14px 18px; background: #fff; border: 1.5px solid var(--navy); border-radius: 18px; font-family: inherit; text-align: left; color: var(--ink); cursor: pointer; transition: transform 0.15s, background-color 0.15s; }
-.hp__bubble::before { content: ""; position: absolute; top: 50%; left: -9px; width: 16px; height: 16px; background: #fff; border-bottom: 1.5px solid var(--navy); border-left: 1.5px solid var(--navy); transform: translateY(-50%) rotate(45deg); transition: background-color 0.15s; }
-.hp__bubble:hover { transform: translateY(-2px); background: #fffdf8; }
-.hp__bubble:hover::before { background: #fffdf8; }
-.hp__bubble:focus-visible { outline: 2px solid var(--navy); outline-offset: 3px; }
-.hp__bubble-count { display: grid; flex: none; place-items: center; min-width: 34px; height: 34px; border-radius: 50%; background: var(--warm); font-size: 1rem; font-weight: 600; color: #fff; }
-.hp__bubble-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
-.hp__bubble-title { font-family: var(--serif); font-size: 1.125rem; line-height: 1.3; color: var(--ink); }
-.hp__bubble-chev { flex: none; color: var(--navy); transition: transform 0.2s; }
-.hp__bubble-chev.is-open { transform: rotate(180deg); }
 .hp__list-panel { display: flex; flex-direction: column; gap: var(--s1); padding-top: var(--s2); border-top: 1px solid var(--line); }
 .hp__todo-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
 .hp__todo { display: flex; align-items: center; gap: var(--s2); padding: 12px 0; border-top: 1px solid var(--line); }
@@ -893,8 +878,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 }
 @media (max-width: 575px) {
   .hp__open.hp__us { padding: 70px 24px 80px; border-radius: 120px 120px 14px 14px; }
-  .hp__house { width: 76px; }
-  .hp__house-row { gap: 18px; }
 }
 
 /* Sections that sit on the page itself: no box, just cream text on the deep blue and a soft rule above */
@@ -915,9 +898,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__open .hp__btn--warm svg { color: #f0906c; }
 .hp__open .hp__plant.is-attention { box-shadow: inset 3px 0 0 #f0906c; }
 /* The house and its bubble keep their own colours */
-.hp__open .hp__bubble { color: #16233b; }
-.hp__open .hp__bubble .hp__label { color: #55627a; }
-.hp__open .hp__bubble-title { color: #16233b; }
 /* How you are both doing: an arched nursery window onto a garden at night */
 .hp__open.hp__us { position: relative; isolation: isolate; overflow: hidden; padding: 76px 44px 84px; border: 2px solid rgb(251 243 230 / 30%); border-radius: 170px 170px 14px 14px; background: linear-gradient(180deg, #0e1d39 0%, #162b52 55%, #1f3c6e 100%); box-shadow: 0 9px 0 -2px rgb(251 243 230 / 22%); }
 .hp__list { max-width: 460px; margin-top: var(--s1); }
@@ -952,9 +932,6 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__rcol .hp__tonight > .hp__small { display: none; }
 /* The photo, the day's idea and the checklist */
 .hp__open { padding-top: var(--s2); gap: var(--s1); }
-.hp__house { width: 72px; }
-.hp__bubble { padding: 10px 14px; }
-.hp__bubble-title { font-size: 1rem; }
 /* The week strip */
 /* Share the load, lately, baby */
 .hp__trio { gap: var(--s3); }
@@ -1037,17 +1014,8 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__layout[aria-label="Today"] .hp__lcol .hp__us .hp__noteform .hp__note-box { flex: 1 1 auto; height: auto; min-height: 3.5rem; resize: none; }
 
 /* Top right: the checklist sits beside the greeting; the checklist opens as a panel under them */
-.hp__head { flex-direction: row; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--s3); }
+.hp__head { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3); }
 .hp__head-text { display: flex; flex: 1 1 22rem; flex-direction: column; gap: 4px; min-width: 0; }
-.hp__head-tools { position: relative; display: flex; flex: 0 1 auto; align-items: flex-start; gap: 12px; margin-left: auto; max-width: 100%; }
-.hp__head-tools .hp__list { flex: 0 1 380px; min-width: 0; max-width: 380px; margin: 0; padding: 0; border: 0; }
-.hp__head-tools .hp__house-row { gap: 12px; }
-.hp__head-tools .hp__house { width: 54px; }
-.hp__head-tools .hp__bubble { padding: 8px 12px; gap: 10px; }
-.hp__head-tools .hp__bubble-count { min-width: 28px; height: 28px; font-size: 0.9375rem; }
-.hp__head-tools .hp__bubble-title { font-size: 0.9375rem; }
-.hp__head-tools .hp__list-panel { position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; width: min(440px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; padding: var(--s2); background: #fff; border: 1px solid #c9d3e3; border-radius: 12px; }
-@media (max-width: 575px) { .hp__head-tools { width: 100%; justify-content: space-between; } .hp__head-tools .hp__list { flex: 1 1 auto; } }
 
 /* Today: two plain lanes on a 6 AM to 6 AM ruler, so every time can be read */
 
@@ -1283,20 +1251,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 .hp__lcol .hp__us .hp__noteform .hp__note-box { flex: 1 1 auto; height: auto; min-height: 3.5rem; resize: none; }
 
 /* The checklist panel springs open from the bubble, its items follow one by one, and the arrow turns. */
-.hp__bubble-chev { transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
-.hp-pop-enter-active { transition: opacity 0.22s ease, transform 0.34s cubic-bezier(0.34, 1.56, 0.64, 1); transform-origin: 85% 0; }
-.hp-pop-leave-active { transition: opacity 0.16s ease, transform 0.16s ease; transform-origin: 85% 0; }
-.hp-pop-enter-from, .hp-pop-leave-to { opacity: 0; transform: translateY(-10px) scale(0.94); }
-.hp-pop-enter-active .hp__todo { animation: hp-todo-in 0.32s ease both; }
-.hp-pop-enter-active .hp__todo:nth-child(2) { animation-delay: 0.06s; }
-.hp-pop-enter-active .hp__todo:nth-child(3) { animation-delay: 0.12s; }
-.hp-pop-enter-active .hp__todo:nth-child(n + 4) { animation-delay: 0.18s; }
 @keyframes hp-todo-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) {
-  .hp-pop-enter-active, .hp-pop-leave-active, .hp__bubble-chev { transition: none; }
-  .hp-pop-enter-active .hp__todo { animation: none; }
-}
-:root[data-app-motion="reduce"] .hp__bubble-chev { transition: none; }
 
 /* The checklist shows four items at most; the rest scroll inside the panel. */
 .hp__list-panel .hp__todo { box-sizing: border-box; min-height: 4.25rem; }
@@ -1305,4 +1260,31 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
 /* The greeting sits on a soft cream card so the dots never run through the words. */
 .hp__head-text { flex: 0 1 auto; width: fit-content; max-width: min(100%, 640px); padding: 14px 22px 16px; background: rgb(253 249 240 / 88%); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 22px; }
 .hp__head-text .hp__lead { color: #3b4a66; }
+
+/* The notice for a new caregiver: a cream card with a sage badge, in the same style as the other cards. */
+.hp__join { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; padding: 16px 20px; background: var(--cream, #fdf9f0); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 22px; }
+.hp__join-ico { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 46px; height: 46px; background: #cfe3d4; border-radius: 50%; color: #2f5a46; }
+.hp__join-text { flex: 1; min-width: 0; }
+.hp__join-text p { margin: 0; }
+.hp__join-title { font-family: var(--nt-serif); font-size: 1.125rem; color: var(--navy, #243560); }
+.hp__join-sub { font-size: 1rem; color: #4a5272; }
+.hp__join-btn { flex: none; padding: 10px 20px; background: #f2a477; border: 0; border-bottom: 3px solid #d78251; border-radius: 999px; font: inherit; font-size: 0.9375rem; font-weight: 700; color: #243560; cursor: pointer; }
+.hp__join-btn:hover { background: #f5ad84; }
+.hp__join-x { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 36px; height: 36px; background: transparent; border: 0; border-radius: 50%; color: #6b7392; cursor: pointer; }
+.hp__join-x:hover { background: var(--sand, #e9d9b8); }
+.hp__join-btn:focus-visible, .hp__join-x:focus-visible { outline: 3px solid var(--navy, #243560); outline-offset: 2px; }
+@media (max-width: 640px) {
+  .hp__join { flex-wrap: wrap; }
+  .hp__join-text { flex-basis: calc(100% - 120px); }
+  .hp__join-btn { order: 3; margin-left: 62px; }
+}
+
+/* "Needs you": swaps to answer, notes to acknowledge and your own open tasks, always open under the greeting. */
+.hp__need { display: flex; flex-direction: column; gap: 12px; padding: 18px 22px 8px; background: var(--cream, #fdf9f0); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 22px; }
+.hp__need-head { display: flex; align-items: center; gap: 14px; }
+.hp__need-count { display: grid; flex: none; place-items: center; width: 40px; height: 40px; background: var(--warm, #b5532f); border-radius: 50%; font-size: 1.0625rem; font-weight: 600; color: #fff; }
+.hp__need-title { margin: 0; font-family: var(--nt-serif); font-size: 1.375rem; color: var(--navy, #243560); }
+.hp__need-sub { margin: 0; font-size: 0.9375rem; color: #4a5272; }
+.hp__need .hp__todo { box-sizing: border-box; min-height: 4.25rem; }
+.hp__need .hp__todo-list { max-height: calc(4 * 4.25rem + 3px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 </style>
