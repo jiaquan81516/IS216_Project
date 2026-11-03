@@ -1,4 +1,5 @@
 <script setup>
+import DateField from "@/app/components/DateField.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
@@ -51,14 +52,14 @@ import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 defineOptions({ name: "SettingsPage" });
 
 const NAV = [
-  { id: "st-notif", label: "Notifications" },
-  { id: "st-cal", label: "Google Calendar" },
-  { id: "st-display", label: "Display" },
-  { id: "st-privacy", label: "Privacy" },
-  { id: "st-partner-h", label: "Partner" },
-  { id: "st-caregivers", label: "Caregivers" },
-  { id: "st-house", label: "Household" },
-  { id: "st-danger", label: "Danger zone" },
+  { id: "st-notif", label: "Notifications", icon: "chat" },
+  { id: "st-cal", label: "Google Calendar", icon: "calendar" },
+  { id: "st-display", label: "Display", icon: "sliders" },
+  { id: "st-privacy", label: "Privacy", icon: "lifebuoy" },
+  { id: "st-partner-h", label: "Partner", icon: "heart" },
+  { id: "st-caregivers", label: "Caregivers", icon: "briefcase" },
+  { id: "st-house", label: "Household", icon: "pin" },
+  { id: "st-danger", label: "Danger zone", icon: "trash" },
 ];
 
 const router = useRouter();
@@ -234,6 +235,17 @@ const CALENDAR_RETURNS = {
   error: { text: "We could not connect Google Calendar. Try again, or check docs/setup.md.", alert: true },
   denied: { text: "Google Calendar was not connected, because access was not granted.", alert: true },
 };
+
+// A link such as /settings?section=st-caregivers scrolls straight to that card, then tidies the address.
+onMounted(async () => {
+  const section = Array.isArray(route.query?.section) ? route.query.section[0] : route.query?.section;
+  if (!section) return;
+  await nextTick();
+  goTo(section);
+  const rest = { ...route.query };
+  delete rest.section;
+  router.replace({ path: route.path, query: rest });
+});
 
 onMounted(() => {
   const flag = route.query?.calendar;
@@ -548,7 +560,7 @@ async function confirmDelete() {
 
 <template>
   <div ref="rootEl" class="st">
-    <PageHero eyebrow="Make it yours" title="Settings" lead="Changes save as you make them." />
+    <PageHero title="Settings" />
 
     <LoadingScreen v-if="loading" variant="inline" label="Loading" />
 
@@ -566,7 +578,7 @@ async function confirmDelete() {
           :href="`#${item.id}`"
           :aria-current="activeId === item.id ? 'true' : undefined"
           @click.prevent="goTo(item.id)"
-        >{{ item.label }}</a>
+        ><Icon :name="item.icon" :size="18" class="st__nav-ico" aria-hidden="true" />{{ item.label }}</a>
       </nav>
       <div class="st__cards">
       <p class="st__save" role="status" aria-live="polite">{{ savedAt }}</p>
@@ -794,7 +806,7 @@ async function confirmDelete() {
                 autocomplete="off"
                 autocapitalize="characters"
                 spellcheck="false"
-                placeholder="NT-XXXX"
+                placeholder="NT-XXXXXXXX"
                 :disabled="joinBusy"
                 :aria-invalid="joinError ? 'true' : undefined"
               />
@@ -847,13 +859,7 @@ async function confirmDelete() {
             </div>
             <div class="st__field">
               <label class="st__label" :for="`st-baby-date-${i}`">{{ babyDateLabel(b) }}</label>
-              <input
-                :id="`st-baby-date-${i}`"
-                class="app-control st__time"
-                type="date"
-                :value="b.babyDate"
-                @change="setBaby(b.id, 'babyDate', $event.target.value)"
-              />
+              <DateField :id="`st-baby-date-${i}`" :model-value="b.babyDate" @update:model-value="setBaby(b.id, 'babyDate', $event)" />
             </div>
           </div>
           <p class="st__save" role="status" aria-live="polite">{{ babySaved }}</p>
@@ -922,8 +928,9 @@ async function confirmDelete() {
 <style scoped>
 .st { display: flex; flex-direction: column; gap: 20px; max-width: 860px; margin: 0 auto; font-size: 1rem; color: var(--ink, #1f2a52); }
 .st__layout { display: flex; flex-direction: column; gap: 16px; }
-.st__nav { display: flex; gap: 8px; padding-bottom: 2px; overflow-x: auto; }
-.st__nav-link { flex: none; padding: 8px 16px; background: #fffdf8; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 999px; font-size: 0.9375rem; font-weight: 600; color: var(--navy, #243560); text-decoration: none; white-space: nowrap; transition: background 0.15s, color 0.15s; }
+.st__nav { display: flex; flex-wrap: wrap; gap: 8px; }
+.st__nav-ico { display: none; }
+.st__nav-link { flex: none; padding: 6px 14px; background: #fffdf8; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 999px; font-size: 0.875rem; font-weight: 600; color: var(--navy, #243560); text-decoration: none; white-space: nowrap; transition: background 0.15s, color 0.15s; }
 .st__nav-link[aria-current="true"] { background: var(--navy, #243560); border-color: var(--navy, #243560); color: #fff; }
 .st__nav-link:hover { border-color: var(--navy, #243560); }
 .st__nav-link:focus-visible { outline: 3px solid var(--navy, #243560); outline-offset: 2px; }
@@ -972,4 +979,18 @@ async function confirmDelete() {
 .st :deep(.app-error-text) { font-weight: 600; color: #a4541f; }
 
 @media (max-width: 575px) { .st__card { padding: 18px 16px 22px; } .st__h { font-size: 1.3125rem; } }
+
+/* On wide screens the sections sit in a menu beside the cards that stays in view while you scroll. */
+@media (min-width: 960px) {
+  .st__layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; align-items: start; }
+  .st__nav { position: sticky; top: 100px; max-height: calc(100vh - 124px); overflow-y: auto; flex-direction: column; flex-wrap: nowrap; gap: 6px; padding: 10px; background: var(--cream, #fdf9f0); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 22px; }
+  .st__nav-link { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: transparent; border: 0; border-radius: 14px; font-size: 0.9375rem; }
+  .st__nav-ico { display: inline-block; flex: none; }
+  .st__nav-link:hover { background: var(--sand, #e9d9b8); }
+  .st__nav-link[aria-current="true"] { background: var(--navy, #243560); color: #fff; }
+}
+
+/* The "saved" note floats as a small pill, so it never pushes the first card down. */
+.st__cards > .st__save { position: fixed; right: 24px; bottom: 24px; z-index: 40; min-height: 0; padding: 8px 16px; background: var(--navy, #243560); border-radius: 999px; box-shadow: 0 8px 20px rgb(36 53 96 / 28%); font-weight: 600; color: #fff; }
+.st__cards > .st__save:empty { display: none; }
 </style>

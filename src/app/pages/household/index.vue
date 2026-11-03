@@ -7,6 +7,8 @@ import OptionCard from "@/app/components/OptionCard.vue";
 import Field from "@/app/components/Field.vue";
 import BabyFields from "@/app/components/BabyFields.vue";
 import AddBabyForm from "@/app/components/AddBabyForm.vue";
+import DateField from "@/app/components/DateField.vue";
+import SelectField from "@/app/components/SelectField.vue";
 import BabyCard from "@/app/components/BabyCard.vue";
 import AppLink from "@/components/ui/AppLink.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
@@ -34,6 +36,10 @@ const draft = useOnboarding();
 
 const JOURNEY_LABELS = { preparing: "Preparing for baby", newborn: "Caring for a newborn" };
 const ROLE_LABELS = { parent: "Parent", caregiver: "Caregiver" };
+const toOptions = (labels) => Object.entries(labels).map(([value, label]) => ({ value, label }));
+const ROLE_OPTIONS = toOptions(ROLE_LABELS);
+const JOURNEY_OPTIONS = toOptions(JOURNEY_LABELS);
+const STATUS_OPTIONS = [{ value: "born", label: "Born" }, { value: "expected", label: "Expected" }];
 // "form" collects the household choice; "review" shows everything before it is saved.
 const phase = ref("form");
 // Each card on the review can be changed where it stands, so there is no trip back to an earlier page.
@@ -363,9 +369,7 @@ async function copyCode() {
                   <button v-else type="button" class="rv__edit" @click="done">Done</button>
                 </div>
                 <p v-if="editing !== 'role'" class="rv__val">{{ roleLabel }}</p>
-                <select v-else v-model="draft.role" class="app-control rv__in" aria-label="Your role" @change="done" @keydown.esc.stop.prevent="done">
-                  <option v-for="(label, value) in ROLE_LABELS" :key="value" :value="value">{{ label }}</option>
-                </select>
+                <SelectField v-else v-model="draft.role" :options="ROLE_OPTIONS" class="rv__in" aria-label="Your role" @change="done" @keydown.esc.stop.prevent="done" />
               </li>
 
               </ul>
@@ -381,9 +385,7 @@ async function copyCode() {
                   <button v-else type="button" class="rv__edit" @click="done">Done</button>
                 </div>
                 <p v-if="editing !== 'stage'" class="rv__val">{{ stageLabel }}</p>
-                <select v-else v-model="draft.journey" class="app-control rv__in" aria-label="Your stage" @change="done" @keydown.esc.stop.prevent="done">
-                  <option v-for="(label, value) in JOURNEY_LABELS" :key="value" :value="value">{{ label }}</option>
-                </select>
+                <SelectField v-else v-model="draft.journey" :options="JOURNEY_OPTIONS" class="rv__in" aria-label="Your stage" @change="done" @keydown.esc.stop.prevent="done" />
               </li>
 
               <li class="rv__tile" :class="{ 'rv__tile--wide': mode === 'join' }">
@@ -423,11 +425,8 @@ async function copyCode() {
                 </template>
                 <div v-else class="rv__stack" @keydown.esc.stop.prevent="done">
                   <input v-model="baby.name" class="app-control rv__in" maxlength="60" placeholder="Baby’s name" aria-label="Baby’s name" />
-                  <select v-model="baby.status" class="app-control rv__in" aria-label="Born or expected">
-                    <option value="born">Born</option>
-                    <option value="expected">Expected</option>
-                  </select>
-                  <input v-model="baby.date" type="date" class="app-control rv__in" aria-label="Baby’s date" />
+                  <SelectField v-model="baby.status" :options="STATUS_OPTIONS" aria-label="Born or expected" />
+                  <DateField v-model="baby.date" class="rv__in" aria-label="Baby’s date" />
                 </div>
               </li>
 
@@ -444,11 +443,8 @@ async function copyCode() {
               </template>
               <div v-else class="rv__stack" @keydown.esc.stop.prevent="done">
                 <input v-model="b.name" class="app-control rv__in" maxlength="60" placeholder="Baby’s name" aria-label="Baby’s name" />
-                <select v-model="b.status" class="app-control rv__in" aria-label="Born or expected">
-        <option value="born">Born</option>
-        <option value="expected">Expected</option>
-      </select>
-      <input v-model="b.date" type="date" class="app-control rv__in" aria-label="Baby’s date" />
+                <SelectField v-model="b.status" :options="STATUS_OPTIONS" aria-label="Born or expected" />
+      <DateField v-model="b.date" class="rv__in" aria-label="Baby’s date" />
     </div>
   </li>
 </template>

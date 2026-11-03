@@ -499,11 +499,6 @@ onBeforeUnmount(() => {
   box-shadow: 0 24px 60px rgb(24 34 70 / 35%);
   overflow: hidden;
   color: var(--nt-ink);
-  animation: clp-pop 0.18s ease-out;
-}
-@keyframes clp-pop {
-  from { opacity: 0; transform: translate(-50%, -47%); }
-  to { opacity: 1; transform: translate(-50%, -50%); }
 }
 .clp__head {
   display: flex;
@@ -730,7 +725,6 @@ onBeforeUnmount(() => {
     width: 100%;
     max-height: 92vh;
     border-radius: 24px 24px 0 0;
-    animation: none;
   }
   .clp__head,
   .clp__body,
@@ -739,13 +733,13 @@ onBeforeUnmount(() => {
     padding-right: 16px;
   }
 }
-/* Slide in from the right and out again, with the backdrop fading, instead of appearing at once. */
-.drawer-enter-active .clp__panel { transition: transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1); }
-.drawer-leave-active .clp__panel { transition: transform 240ms cubic-bezier(0.4, 0, 1, 1); }
-.drawer-enter-active .clp__backdrop { transition: opacity 320ms ease; }
-.drawer-leave-active .clp__backdrop { transition: opacity 240ms ease; }
+/* The dialog and its backdrop fade in and out; nothing slides. */
+.drawer-enter-active .clp__panel,
+.drawer-enter-active .clp__backdrop { transition: opacity 220ms ease; }
+.drawer-leave-active .clp__panel,
+.drawer-leave-active .clp__backdrop { transition: opacity 180ms ease; }
 .drawer-enter-from .clp__panel,
-.drawer-leave-to .clp__panel { transform: translateX(100%); }
+.drawer-leave-to .clp__panel,
 .drawer-enter-from .clp__backdrop,
 .drawer-leave-to .clp__backdrop { opacity: 0; }
 @media (prefers-reduced-motion: reduce) {

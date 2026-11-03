@@ -87,6 +87,8 @@ export const useRotaStore = defineStore("app-rota", () => {
   const householdId = ref("");
   const meUid = ref("");
   const partnerUid = ref("");
+  // Carers who can see Duty, { uid: first name }, so a carer's own shifts read as her, not as the partner.
+  const carerLabels = ref({});
 
   let stops = [];
   let seen = new Set();
@@ -179,6 +181,9 @@ export const useRotaStore = defineStore("app-rota", () => {
   function setPartnerUid(uid) {
     partnerUid.value = uid ?? "";
   }
+  function setCarers(map) {
+    carerLabels.value = map && typeof map === "object" ? map : {};
+  }
 
   // The settings with defaults filled in, still holding uids.
   const plan = computed(() => {
@@ -208,8 +213,10 @@ export const useRotaStore = defineStore("app-rota", () => {
       if (who) overrides[date] = who;
     }
     const toKind = (who) => (who === "both" || who === "other" ? who : ownerKey(who, me));
+    // A shift stored under a carer's uid shows as that carer (someone else), never as the partner.
+    const carerShift = (s) => (s?.who && s.who !== me && carerLabels.value[s.who] ? { ...s, who: "other", label: carerLabels.value[s.who] } : { ...s, who: toKind(s?.who) });
     const schedule = plan.value.schedule
-      ? cleanShifts(plan.value.schedule.map((s) => ({ ...s, who: toKind(s?.who) })))
+      ? cleanShifts(plan.value.schedule.map(carerShift))
       : fromHourCells(plan.value.hourCover.map((cell) => (cell ? { ...cell, who: toKind(cell.who) } : null)));
     return {
       pattern: plan.value.pattern,
@@ -282,6 +289,15 @@ export const useRotaStore = defineStore("app-rota", () => {
       who: s.who === "me" || s.who === "partner" ? ownerUid(s.who, meUid.value, partnerUid.value) || "" : s.who,
       label: s.label,
     }));
+    // A carer's shift keeps her uid when a parent saves the list, so it is never turned into a plain name.
+    for (const s of stored) {
+      if (s.who !== "other") continue;
+      const uid = Object.keys(carerLabels.value).find((k) => carerLabels.value[k] === s.label);
+      if (uid) {
+        s.who = uid;
+        s.label = "";
+      }
+    }
     return saveSettings({ schedule: stored.filter((s) => s.who) });
   }
   // Carers who take fixed nights every week. Saves the whole list.
@@ -396,6 +412,7 @@ export const useRotaStore = defineStore("app-rota", () => {
     bind,
     unbind,
     setPartnerUid,
+    setCarers,
     saveSettings,
     setPattern,
     setFirstOnDuty,
