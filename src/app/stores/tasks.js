@@ -89,7 +89,7 @@ export const useTasksStore = defineStore("app-tasks", () => {
     if (!householdId.value) return false;
     writeError.value = "";
     try {
-      lastResult = await action();
+      await action();
       return true;
     } catch (cause) {
       console.error("[app tasks]", cause?.code, cause);
@@ -97,9 +97,6 @@ export const useTasksStore = defineStore("app-tasks", () => {
       return false;
     }
   }
-
-  // What the last successful write returned, so addTask can read the new task's id.
-  let lastResult;
 
   // A task given to the other parent gets a system notification. "both" and your own tasks
   // do not. Fire and forget: the server re-reads the task and checks everything itself.
@@ -111,11 +108,16 @@ export const useTasksStore = defineStore("app-tasks", () => {
   async function addTask(data) {
     const task = cleanTask(data);
     if (!task) return null;
+    // Captured locally (not in a variable shared across calls) so two addTask calls racing
+    // each other can never announce the wrong task's id.
+    let newId;
     const ok = await attempt(
-      () => apiAddTask(householdId.value, meUid.value, task),
+      async () => {
+        newId = await apiAddTask(householdId.value, meUid.value, task);
+      },
       "We could not add the task. Check your connection and try again.",
     );
-    if (ok) announce(lastResult, task.owner);
+    if (ok) announce(newId, task.owner);
     return ok ? task : null;
   }
 

@@ -741,7 +741,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
                 <header class="hp__card-head">
                   <div>
                     <p class="hp__label">Daily check-in</p>
-                    <h2 id="hp-us-title" class="hp__card-title">{{ partnerAlert ? `${partnerFirst} is having a hard time` : "How you are both doing" }}</h2>
+                    <h2 id="hp-us-title" class="hp__card-title">{{ partnerAlert ? `${partnerFirst} is having a hard time` : partner ? "How you are both doing" : "How you are doing" }}</h2>
                   </div>
                 </header>
                 <div class="hp__garden">

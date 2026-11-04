@@ -6,6 +6,8 @@ import handler from "../../../api/rooms/location.js";
 let fetchMock;
 beforeEach(() => {
   mocks.requireUser.mockResolvedValue({ admin: true });
+  vi.stubEnv("ONEMAP_EMAIL", "");
+  vi.stubEnv("ONEMAP_PASSWORD", "");
   vi.stubEnv("ONEMAP_TOKEN", "test-token");
   fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
@@ -25,10 +27,13 @@ it("uses exact postal matches and returns numeric coordinates", async () => {
   expect((await request()).body).toEqual({ ok: true, postalCode: "012345", lat: 1.3, lng: 103.8 });
   expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("searchVal=012345"), expect.objectContaining({ headers: { Authorization: "test-token" } }));
 });
-it("requires an admin", async () => {
+it("allows signed-in non-admin users", async () => {
   mocks.requireUser.mockResolvedValue({ admin: false });
-  expect((await request()).status).toBe(403);
-  expect(fetchMock).not.toHaveBeenCalled();
+  fetchMock.mockResolvedValue({ ok: true, json: async () => ({ results: [
+    { POSTAL: "012345", LATITUDE: "1.3", LONGITUDE: "103.8" },
+  ] }) });
+  expect((await request()).status).toBe(200);
+  expect(fetchMock).toHaveBeenCalledOnce();
 });
 it("rejects malformed postal codes", async () => {
   expect((await request("12345")).status).toBe(400);

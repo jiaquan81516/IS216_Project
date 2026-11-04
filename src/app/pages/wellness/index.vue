@@ -2,6 +2,7 @@
 import "@/app/app.css";
 import { computed, inject, nextTick, ref, watch } from "vue";
 import AppButton from "@/components/ui/AppButton.vue";
+import Icon from "@/app/components/Icon.vue";
 import SuggestionArt from "@/app/components/SuggestionArt.vue";
 import { NUDGES_KEY } from "@/app/composables/useNudges";
 import { REPLIES } from "@/app/utils/askHelpers";
@@ -155,10 +156,14 @@ const answers = () => ({
 
 // "steps" is the check-in, "summary" the reading of the saved answers.
 const view = ref(store.recent() ? "summary" : "steps");
-const STEPS = ["light", "tank", "stones", "close", "weigh", "need", "review"];
+// "What would help from your partner" only makes sense once a partner has joined the household;
+// without one there is nobody for the ask to reach, so the step (and its review tile) is left out.
+const STEPS = computed(() =>
+  partnerName.value ? ["light", "tank", "stones", "close", "weigh", "need", "review"] : ["light", "tank", "stones", "close", "weigh", "review"],
+);
 const REQUIRED = { light: () => mood.value, stones: () => stress.value };
 const step = ref(0);
-const current = computed(() => STEPS[step.value]);
+const current = computed(() => STEPS.value[step.value]);
 const isOptional = computed(() => !REQUIRED[current.value] && current.value !== "review");
 const titles = computed(() => ({
   light: "If you answered honestly, how is today going?",
@@ -182,7 +187,7 @@ const error = ref("");
 const heading = ref(null);
 async function go(index) {
   view.value = "steps";
-  step.value = Math.max(0, Math.min(STEPS.length - 1, index));
+  step.value = Math.max(0, Math.min(STEPS.value.length - 1, index));
   error.value = "";
   await nextTick();
   heading.value?.focus();
@@ -195,7 +200,7 @@ function next() {
   }
   go(step.value + 1);
 }
-const goTo = (id) => go(STEPS.indexOf(id));
+const goTo = (id) => go(STEPS.value.indexOf(id));
 
 // The four sentence questions share one set of choices.
 const STATEMENTS = computed(() => ({
@@ -217,7 +222,10 @@ function setLine(value) {
   else if (current.value === "close") closeness.value = value;
 }
 
-// Took and gave
+// Took and gave. Each list shows its top 6 as chips; anything else is typed in free text,
+// stored as one extra plain-text entry in the same array (the rules only check the array
+// length, not each entry's shape), so it reads back exactly like a chip everywhere.
+const OTHER_MAX = 60;
 const atLimit = computed(() => concerns.value.length >= MAX_CONCERNS);
 const flip = (list, value) => (list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
 const toggleConcern = (value) => {
@@ -226,6 +234,35 @@ const toggleConcern = (value) => {
 const toggleLift = (value) => {
   lifts.value = flip(lifts.value, value);
 };
+
+const CONCERN_VALUES = new Set(CONCERN_ITEMS.map((c) => c.value));
+const LIFT_VALUES = new Set(LIFT_ITEMS.map((l) => l.value));
+const showConcernOther = ref(concerns.value.some((v) => !CONCERN_VALUES.has(v)));
+const showLiftOther = ref(lifts.value.some((v) => !LIFT_VALUES.has(v)));
+const concernOther = computed({
+  get: () => concerns.value.find((v) => !CONCERN_VALUES.has(v)) ?? "",
+  set: (text) => {
+    const trimmed = text.trim().slice(0, OTHER_MAX);
+    const known = concerns.value.filter((v) => CONCERN_VALUES.has(v));
+    concerns.value = trimmed ? [...known, trimmed].slice(0, MAX_CONCERNS) : known;
+  },
+});
+const liftOther = computed({
+  get: () => lifts.value.find((v) => !LIFT_VALUES.has(v)) ?? "",
+  set: (text) => {
+    const trimmed = text.trim().slice(0, OTHER_MAX);
+    const known = lifts.value.filter((v) => LIFT_VALUES.has(v));
+    lifts.value = trimmed ? [...known, trimmed] : known;
+  },
+});
+function toggleConcernOther() {
+  showConcernOther.value = !showConcernOther.value;
+  if (!showConcernOther.value) concernOther.value = "";
+}
+function toggleLiftOther() {
+  showLiftOther.value = !showLiftOther.value;
+  if (!showLiftOther.value) liftOther.value = "";
+}
 
 // What the current step says back.
 const reflection = computed(() => {
@@ -246,7 +283,8 @@ const reflection = computed(() => {
   }
 });
 
-const labelOf = (list, value) => list.find((o) => o.value === value)?.label ?? "";
+// A value not in the list is free text someone typed in; show it as itself.
+const labelOf = (list, value) => list.find((o) => o.value === value)?.label ?? value;
 const labelsOf = (list, values) => values.map((v) => labelOf(list, v)).filter(Boolean).join(", ");
 const kind = computed(() => kindWords(answers()));
 
@@ -670,10 +708,10 @@ const meters = computed(() => {
       <!-- 6. What took and what gave -->
       <div v-else-if="current === 'weigh'" class="wl__weigh">
         <fieldset class="wl__group">
-          <legend class="wl__legend">
-            Taking up room
-            <span class="wl__muted-inline">Pick up to {{ MAX_CONCERNS }}</span>
-          </legend>
+          <div class="wl__group-head">
+            <legend class="wl__legend">Taking up room</legend>
+            <span class="wl__group-note">Pick up to {{ MAX_CONCERNS }}</span>
+          </div>
           <div class="wl__chips" role="group" aria-label="Taking up room">
             <button
               v-for="c in CONCERN_ITEMS"
@@ -686,10 +724,30 @@ const meters = computed(() => {
             >
               {{ c.label }}
             </button>
+            <button
+              type="button"
+              class="app-chip"
+              :aria-pressed="showConcernOther ? 'true' : 'false'"
+              :disabled="atLimit && !showConcernOther"
+              @click="toggleConcernOther"
+            >
+              Something else
+            </button>
           </div>
+          <input
+            v-if="showConcernOther"
+            class="wl__other"
+            type="text"
+            :maxlength="OTHER_MAX"
+            placeholder="What else is taking up room?"
+            :value="concernOther"
+            @input="concernOther = $event.target.value"
+          />
         </fieldset>
         <fieldset class="wl__group">
-          <legend class="wl__legend">Gave something back</legend>
+          <div class="wl__group-head">
+            <legend class="wl__legend">Giving something back</legend>
+          </div>
           <div class="wl__chips" role="group" aria-label="Gave a little back">
             <button
               v-for="l in LIFT_ITEMS"
@@ -701,7 +759,24 @@ const meters = computed(() => {
             >
               {{ l.label }}
             </button>
+            <button
+              type="button"
+              class="app-chip"
+              :aria-pressed="showLiftOther ? 'true' : 'false'"
+              @click="toggleLiftOther"
+            >
+              Something else
+            </button>
           </div>
+          <input
+            v-if="showLiftOther"
+            class="wl__other"
+            type="text"
+            :maxlength="OTHER_MAX"
+            placeholder="What else gave something back?"
+            :value="liftOther"
+            @input="liftOther = $event.target.value"
+          />
         </fieldset>
       </div>
 
@@ -765,13 +840,13 @@ const meters = computed(() => {
               <span class="wl__tile-text">
                 <span class="wl__tile-name">Taking up room</span>
                 <span class="wl__tile-value" :class="{ 'is-skipped': !concerns.length }">{{ labelsOf(CONCERN_ITEMS, concerns) || "Nothing picked" }}</span>
-                <span class="wl__tile-name wl__tile-name--gap">Gave something back</span>
+                <span class="wl__tile-name wl__tile-name--gap">Giving something back</span>
                 <span class="wl__tile-value" :class="{ 'is-skipped': !lifts.length }">{{ labelsOf(LIFT_ITEMS, lifts) || "Nothing yet" }}</span>
               </span>
               <span class="wl__change">Change</span>
             </button>
           </li>
-          <li>
+          <li v-if="partnerName">
             <button type="button" class="wl__tile" @click="goTo('need')">
               <span class="wl__tile-text">
                 <span class="wl__tile-name">If today is hard</span>
@@ -839,7 +914,7 @@ const meters = computed(() => {
             <p class="wl__rd-chips"><span v-for="c in savedEntry.concerns" :key="c" class="wl__rd-chip">{{ labelOf(CONCERN_ITEMS, c) }}</span></p>
           </div>
           <div v-if="savedEntry.lifts.length" class="wl__rd-tagbox wl__rd-tagbox--gave">
-            <p class="wl__rd-name">Gave something back</p>
+            <p class="wl__rd-name">Giving something back</p>
             <p class="wl__rd-chips"><span v-for="l in savedEntry.lifts" :key="l" class="wl__rd-chip">{{ labelOf(LIFT_ITEMS, l) }}</span></p>
           </div>
         </div>
@@ -982,7 +1057,10 @@ const meters = computed(() => {
 
       <div class="wl__nav">
         <span class="wl__spacer" />
-        <router-link class="app-link" :to="ROUTES.HOME">Back to Home</router-link>
+        <router-link class="wl__home-back" :to="ROUTES.HOME">
+          <Icon name="chevron-left" :size="16" />
+          Back to Home
+        </router-link>
       </div>
     </div>
 
@@ -1023,7 +1101,7 @@ const meters = computed(() => {
 .wl__option-sub { font-size: 0.875rem; color: var(--nt-muted); }
 .wl__option:focus-visible, .wl__pair:focus-visible, .wl__tile:focus-visible, .wl__tick:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 
-.wl__chips { display: flex; flex-wrap: wrap; align-content: center; gap: 8px; }
+.wl__chips { display: flex; flex-wrap: wrap; align-content: center; gap: 8px 10px; }
 .wl__chips .app-chip:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .wl__close { display: flex; flex-direction: column; gap: 12px; }
@@ -1043,9 +1121,14 @@ const meters = computed(() => {
 
 .wl__options--wide { max-width: 34rem; }
 .wl__option-sub { text-align: right; }
-.wl__weigh { display: flex; flex-direction: column; gap: 20px; }
-.wl__group { display: flex; flex-direction: column; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
-.wl__legend { float: none; width: auto; margin: 0 0 10px; padding: 0; font-size: 0.9375rem; font-weight: 600; color: var(--nt-ink); }
+.wl__weigh { display: flex; flex-direction: column; gap: 16px; }
+.wl__group { display: flex; flex-direction: column; gap: 12px; min-width: 0; margin: 0; padding: 18px 20px 20px; border: 1.5px solid var(--sand); border-bottom-width: 3px; border-radius: 18px; background: var(--cream, #fdf9f0); }
+.wl__group-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.wl__legend { float: none; width: auto; margin: 0; padding: 0; font-size: 0.9375rem; font-weight: 600; color: var(--nt-ink); }
+.wl__group-note { font-size: 0.8125rem; font-weight: 500; color: var(--nt-muted); }
+.wl__other { width: 100%; padding: 10px 14px; background: #fff; border: 1.5px solid var(--sand); border-radius: 12px; font: inherit; font-size: 0.9375rem; color: var(--ink); }
+.wl__other:focus { outline: none; border-color: var(--navy); }
+.wl__other::placeholder { color: var(--nt-muted); }
 .wl__muted-inline { margin-left: 6px; font-weight: 400; color: var(--nt-muted); }
 
 .wl__reflect { margin: 4px 0 0; max-width: 56ch; font-size: 0.9375rem; line-height: 1.6; color: var(--nt-ink); }
@@ -1069,6 +1152,10 @@ const meters = computed(() => {
 .wl__kind { margin: 4px 0 0; font-size: 1.25rem; line-height: 1.4; }
 
 .wl__nav { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; padding-top: 8px; }
+.wl__home-back { display: inline-flex; align-items: center; gap: 4px; padding: 6px 14px 6px 10px; background: var(--cream, #fdf9f0); border: 1.5px solid var(--sand); border-bottom-width: 3px; border-radius: 999px; color: var(--navy); font-size: 0.9375rem; font-weight: 600; text-decoration: none; transition: border-color 0.18s ease, transform 0.18s ease; }
+.wl__home-back:hover { border-color: var(--navy); transform: translateX(-2px); }
+.wl__home-back:focus-visible { outline: 3px solid var(--apricot, #f2a477); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .wl__home-back { transition: none; } }
 .wl__spacer { flex: 1; }
 .wl__back::before { content: "\2190\00a0"; }
 

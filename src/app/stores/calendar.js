@@ -58,6 +58,10 @@ export const useCalendarStore = defineStore("app-calendar", () => {
     error.value = null;
     writeError.value = "";
     householdId.value = "";
+    // Without this, rebinding to a different household (useShared.js re-binds whenever
+    // householdId/meUid change) would never run legacy migration for that household, since
+    // `migrating` stayed true from the very first bind of this store instance's lifetime.
+    migrating = false;
   }
 
   function fail(cause) {

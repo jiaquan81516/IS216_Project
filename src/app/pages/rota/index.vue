@@ -50,6 +50,7 @@ function fullName(person, fallback) {
   return first ? displayName(first) : fallback;
 }
 const myName = computed(() => fullName(home?.me?.value, "Me"));
+const hasPartner = computed(() => Boolean(home?.partner?.value));
 const partnerName = computed(() => fullName(home?.partner?.value, "Partner"));
 const names = computed(() => ({
   me: myName.value,
@@ -222,13 +223,30 @@ function cellLabel(night) {
   return `${dateLabel(night.date)}${today}. ${d.title}`;
 }
 
-// Plan settings
-const PATTERN_OPTIONS = [
-  { value: "manual", label: "I will set each night", hint: "Every night starts open. Assign them yourselves from This week." },
-  { value: "alternate", label: "Alternate nights", hint: "You take turns owning the whole night." },
-  { value: "smart", label: "Plan around early starts", hint: "Tell us your early mornings and we protect them." },
-];
-const selectedPattern = ref("alternate");
+// Plan settings. Alternating and the early-starts plan both hand nights to "partner", so
+// solo households (nobody else has joined) only get to set nights themselves.
+const PATTERN_OPTIONS = computed(() =>
+  hasPartner.value
+    ? [
+        { value: "manual", label: "I will set each night", hint: "Every night starts open. Assign them yourselves from This week." },
+        { value: "alternate", label: "Alternate nights", hint: "You take turns owning the whole night." },
+        { value: "smart", label: "Plan around early starts", hint: "Tell us your early mornings and we protect them." },
+      ]
+    : [{ value: "manual", label: "I will set each night", hint: "Every night starts open. Assign them from This week." }],
+);
+// "manual" is always a safe starting value; the correct default (and any saved plan) is set
+// once household data has actually loaded, below.
+const selectedPattern = ref("manual");
+// A partner who leaves mid-session should never leave the page on a pattern that only makes
+// sense with someone to alternate with. Not `immediate`: the initial case (hasPartner still
+// settling after mount) is handled by the one-shot initialiser below instead.
+watch(hasPartner, (has) => {
+  if (!has && selectedPattern.value !== "manual") selectedPattern.value = "manual";
+  // The handover toggle only makes sense with a partner too: without this, a handover
+  // left on from when a partner was still around could silently hand a "second" carer
+  // slot to "partner" on a now-solo household's saved nights (see addOptionalHandover).
+  if (!has && handoverEnabled.value) handoverEnabled.value = false;
+});
 
 const setupStartDate = ref(store.view.startDate || todayIso);
 const earlyStarts = ref({ me: [], partner: [] });
@@ -276,7 +294,11 @@ function addOptionalHandover(night) {
   };
 }
 
+// Restores a saved setup draft, and reports whether it found one to restore.
 function readLocalPlan() {
+  // A plan saved from an earlier, two-person household is meaningless once nobody is there
+  // to take the "partner" half of it, so a solo household never restores it.
+  if (!hasPartner.value) return false;
   try {
     const saved = JSON.parse(
       localStorage.getItem("nurturetrack-smart-rota-plan") || "null",
@@ -290,13 +312,24 @@ function readLocalPlan() {
       handoverEnabled.value = Boolean(saved.handoverEnabled);
       handoverClock.value = saved.handoverClock || "02:00";
       handoverParent.value = saved.handoverParent || "partner";
+      return true;
     }
   } catch (error) {
     console.warn("Saved sleep rota data could not be read.", error);
   }
+  return false;
 }
 
-readLocalPlan();
+// Household data, including whether a partner has joined, loads after this page mounts, so
+// the starting pattern (a restored draft, or the right default) is only settled once that has
+// loaded and hasPartner is accurate. Guarded to run only once, the first time loading clears.
+let patternInitialised = false;
+watch(loading, (isLoading) => {
+  if (isLoading || patternInitialised) return;
+  patternInitialised = true;
+  const restored = readLocalPlan();
+  if (!restored) selectedPattern.value = hasPartner.value ? "alternate" : "manual";
+}, { immediate: true });
 
 function addDateOnly(value, amount) {
   const [year, month, day] = value.split("-").map(Number);
@@ -335,10 +368,11 @@ const HANDOVER_MODES = [
   { value: "off", label: "Whole night" },
   { value: "on", label: "Hand over mid-night" },
 ];
-const takeoverOptions = computed(() => [
-  { value: "me", label: myName.value },
-  { value: "partner", label: partnerName.value },
-]);
+const takeoverOptions = computed(() =>
+  hasPartner.value
+    ? [{ value: "me", label: myName.value }, { value: "partner", label: partnerName.value }]
+    : [{ value: "me", label: myName.value }],
+);
 const confirmReset = ref(false);
 const setupStatus = ref("");
 async function doReset() {
@@ -463,7 +497,7 @@ async function finishSetup() {
 
 <template>
   <div class="rt">
-    <PageHero :eyebrow="`Taking turns with ${partnerName}`" title="Duty" :lead="`Who is looking after ${babyLabel}, day and night.`">
+    <PageHero :eyebrow="hasPartner ? `Taking turns with ${partnerName}` : 'Duty'" title="Duty" :lead="`Who is looking after ${babyLabel}, day and night.`">
       <StatusPill v-if="carerNow" icon="moon" tone="ok">Now: {{ carerNow.text }} {{ carerNow.verb }} looking after {{ babyLabel }}</StatusPill>
     </PageHero>
 
@@ -493,7 +527,7 @@ async function finishSetup() {
         <h2 id="rt-day" class="rt__h2">Day</h2>
         <p class="rt__muted">Who looks after {{ babyLabel }} from 6 AM to 6 PM. Tap or drag on a day to add a shift.</p>
         <p v-if="lastEditedByCarer" class="rt__muted">{{ lastEditedByCarer }}</p>
-        <DaySchedule :rota="store.view" :names="names" :has-partner="Boolean(home?.partner?.value)" :baby-label="babyLabel" :carers="carerNames" @save="store.setSchedule" />
+        <DaySchedule :rota="store.view" :names="names" :has-partner="hasPartner" :allow-both="hasPartner" :baby-label="babyLabel" :carers="carerNames" @save="store.setSchedule" />
       </section>
 
       <!-- Night -->
@@ -617,6 +651,7 @@ async function finishSetup() {
                     I take it
                   </button>
                   <button
+                    v-if="hasPartner"
                     type="button"
                     class="rt__link"
                     @click="assignSelectedNight('partner')"
@@ -700,7 +735,7 @@ async function finishSetup() {
             Helpers and family you invite can take fixed nights once "View who is on duty" is on for them in Caregiver access.
           </p>
           <template v-else>
-            <p class="rt__muted">Pick the nights each carer takes every week. You and your partner share the rest.</p>
+            <p class="rt__muted">{{ hasPartner ? "Pick the nights each carer takes every week. You and your partner share the rest." : "Pick the nights each carer takes every week. You cover the rest." }}</p>
             <div v-for="c in carers" :key="c.uid" class="rt__carer">
               <span class="rt__carer-name">{{ c.label }}</span>
               <div class="rt__dchips" role="group" :aria-label="`Nights for ${c.label}`">
@@ -801,7 +836,7 @@ async function finishSetup() {
         </Collapse>
 
         <Collapse>
-          <section v-if="selectedPattern === 'manual'" class="rt__sec" aria-labelledby="rt-s-hand">
+          <section v-if="selectedPattern === 'manual' && hasPartner" class="rt__sec" aria-labelledby="rt-s-hand">
             <h2 id="rt-s-hand" class="rt__h2">Hand over in the night?</h2>
             <p class="rt__muted">Split a night so one of you sleeps first and the other takes over.</p>
             <SegToggle v-model="handoverMode" :options="HANDOVER_MODES" label="Night style" class="rt__seg" />
