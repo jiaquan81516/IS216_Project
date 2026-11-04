@@ -35,15 +35,19 @@ defineProps({
 <style scoped>
 .as { min-height: 100vh; background: #f1eee7; }
 .as__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.as__logo { transform: scale(0.85); transform-origin: left center; }
-.as__side .as__logo--light { position: absolute; top: 28px; left: 32px; z-index: 1; padding: 4px 16px 4px 12px; background: var(--cream, #fdf9f0); border-radius: 999px; transform: none; }
+.as__logo { min-height: 44px; }
+.as__logo :deep(img) { width: 27px; height: 27px; }
+.as__logo :deep(.brand__name) { font-size: 1.275rem; }
+.as__side .as__logo--light { position: absolute; top: 28px; left: 32px; z-index: 1; min-height: 44px; padding: 4px 16px 4px 12px; background: var(--cream, #fdf9f0); border-radius: 999px; }
+.as__side .as__logo--light :deep(img) { width: 32px; height: 32px; }
+.as__side .as__logo--light :deep(.brand__name) { font-size: 1.5rem; }
 .as__nav { display: inline-flex; align-items: center; gap: 16px; font-size: 0.9375rem; font-weight: 600; margin-left: auto; }
 .as__nav :deep(a) { color: var(--navy, #243560); text-decoration: none; }
 .as__nav :deep(a:hover) { text-decoration: underline; text-underline-offset: 4px; }
 .as__main { display: flex; justify-content: center; padding: clamp(24px, 7vh, 72px) 16px 64px; }
-.as__card { width: 100%; max-width: 720px; background: var(--cream, #fdf9f0); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 5px; box-shadow: 0 18px 40px rgb(36 53 96 / 8%); border-radius: 32px; overflow: hidden; animation: as-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
-.as__card--wide { max-width: 1000px; }
-.as__card--split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); max-width: 960px; }
+.as__card { width: 100%; max-width: 45rem; background: var(--cream, #fdf9f0); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 5px; box-shadow: 0 18px 40px rgb(36 53 96 / 8%); border-radius: 32px; overflow: hidden; animation: as-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.as__card--wide { max-width: 62.5rem; }
+.as__card--split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); max-width: 60rem; }
 .as__body { display: flex; flex-direction: column; gap: 20px; min-width: 0; padding: 34px 38px 38px; color: var(--ink, #1f2a52); }
 .as__side { position: relative; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 24px; padding: 88px 40px 56px; text-align: center; overflow: hidden; background: var(--navy, #243560); color: #fff; }
 .as__side::before { content: ""; position: absolute; top: -44px; right: -44px; width: 150px; height: 150px; border-radius: 50%; background: #f2a477; }
@@ -54,6 +58,9 @@ defineProps({
   .as__card--split { grid-template-columns: minmax(0, 1fr); }
   .as__side { display: none; }
   .as__body { padding: 24px 20px 28px; }
+}
+@media (max-width: 360px) {
+  .as__head { gap: 8px; }
 }
 
 /* Shared form pieces, in the app's look while they sit in this card. */
@@ -69,7 +76,7 @@ defineProps({
 .as__body :deep(.app-btn:focus-visible) { outline: 3px solid var(--navy, #243560); outline-offset: 2px; }
 .as__body :deep(.app-alert) { border-radius: 14px; }
 .as__body :deep(.app-note) { padding: 12px 16px; background: #fdf0e3; border: 1.5px solid #f2c9a6; border-radius: 14px; color: var(--ink, #1f2a52); }
-.as__body :deep(.app-text-link) { display: inline-flex; align-items: center; align-self: flex-start; padding: 8px 18px; background: #fff; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 999px; color: var(--navy, #243560); font-size: 0.9375rem; font-weight: 600; text-decoration: none; }
+.as__body :deep(.app-text-link) { display: inline-flex; align-items: center; align-self: flex-start; min-height: 44px; padding: 8px 18px; background: #fff; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 999px; color: var(--navy, #243560); font-size: 0.9375rem; font-weight: 600; text-decoration: none; }
 .as__body :deep(.app-text-link:hover) { border-color: var(--navy, #243560); }
-.as__body :deep(.app-text-link--sm) { font-weight: 700; color: var(--navy, #243560); }
+.as__body :deep(.app-text-link--sm) { display: inline-flex; align-items: center; min-height: 44px; padding-block: 8px; font-weight: 700; color: var(--navy, #243560); white-space: nowrap; }
 </style>

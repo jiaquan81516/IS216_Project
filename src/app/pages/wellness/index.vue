@@ -1312,7 +1312,7 @@ const meters = computed(() => {
 }
 
 /* ===== The same look as the Sleep rota, Care log and Checklist: a navy hero, cream cards with a sand edge ===== */
-.wl { --navy: #243560; --navy-2: #2d3f70; --ink: #1f2a52; --cream: #fdf9f0; --sand: #e9d9b8; --apricot: #f2a477; width: 100%; max-width: 1020px; margin: 0 auto; gap: 20px; color: var(--ink); }
+.wl { --navy: #243560; --navy-2: #2d3f70; --ink: #1f2a52; --cream: #fdf9f0; --sand: #e9d9b8; --apricot: #f2a477; width: 100%; max-width: 63.75rem; margin: 0 auto; gap: 20px; color: var(--ink); }
 .wl__banner-hero { display: flex; flex-direction: column; gap: 10px; padding: 32px 40px; background: var(--navy-2); border-radius: 28px; border-bottom: 5px solid #182246; color: #fff; }
 .wl__eyebrow { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--apricot); }
 .wl__h1 { margin: 0; font-family: var(--nt-serif); font-size: 2.5rem; line-height: 1.05; font-weight: 700; color: #fff; }

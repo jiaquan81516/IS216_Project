@@ -527,7 +527,7 @@ function toggleBaby(slug) {
 </template>
 
 <style scoped>
-.sp { display: flex; flex-direction: column; gap: 20px; max-width: 1040px; margin: 0 auto; font-size: 1rem; color: var(--ink, #1f2a52); }
+.sp { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 65rem; margin: 0 auto; font-size: 1rem; color: var(--ink, #1f2a52); }
 .sp__muted { margin: 0; font-size: 0.9063rem; line-height: 1.5; color: var(--mut, #5b6692); }
 .sp__text { margin: 0; font-size: 0.9375rem; line-height: 1.55; color: var(--ink, #1f2a52); }
 .sp__strong { font-weight: 600; }

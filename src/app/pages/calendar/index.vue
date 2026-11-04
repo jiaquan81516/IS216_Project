@@ -44,7 +44,7 @@ const { selectedBaby } = useSelectedBaby();
 // An event shows for this baby if it has no babyIds (older events, or "all babies")
 // or if the selected baby is in its list.
 const forSelectedBaby = (e) =>
-  !e.babyIds?.length || e.babyIds.includes(selectedBaby.value?.id ?? "primary");
+  !e.babyIds?.length || Boolean(selectedBaby.value?.id && e.babyIds.includes(selectedBaby.value.id));
 
 const names = computed(() => {
   const mine = home?.me?.value?.firstName;
@@ -160,9 +160,42 @@ function pickMini(iso) {
 // View menu
 const viewMenu = ref(false);
 const menuRoot = ref(null);
+const viewButton = ref(null);
+const viewItems = ref([]);
 const viewLabel = computed(() => VIEWS.find((v) => v.value === view.value).label);
+function focusViewItem(index) {
+  const items = viewItems.value.filter(Boolean);
+  if (!items.length) return;
+  items[(index + items.length) % items.length]?.focus();
+}
+async function openViewMenu(position = "current") {
+  viewMenu.value = true;
+  await nextTick();
+  const current = Math.max(0, VIEWS.findIndex((option) => option.value === view.value));
+  focusViewItem(position === "first" ? 0 : position === "last" ? VIEWS.length - 1 : current);
+}
+function closeViewMenu(restoreFocus = false) {
+  if (!viewMenu.value) return;
+  viewMenu.value = false;
+  if (restoreFocus) nextTick(() => viewButton.value?.focus());
+}
+function onViewButtonKey(event) {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+  event.preventDefault();
+  openViewMenu(event.key === "ArrowUp" ? "last" : "current");
+}
+function onViewMenuKey(event) {
+  const items = viewItems.value.filter(Boolean);
+  const at = items.indexOf(document.activeElement);
+  if (event.key === "ArrowDown") (event.preventDefault(), focusViewItem(at + 1));
+  else if (event.key === "ArrowUp") (event.preventDefault(), focusViewItem(at - 1));
+  else if (event.key === "Home") (event.preventDefault(), focusViewItem(0));
+  else if (event.key === "End") (event.preventDefault(), focusViewItem(items.length - 1));
+  else if (event.key === "Escape") (event.stopPropagation(), closeViewMenu(true));
+  else if (event.key === "Tab") closeViewMenu();
+}
 function onDocClick(event) {
-  if (viewMenu.value && !menuRoot.value?.contains(event.target)) viewMenu.value = false;
+  if (viewMenu.value && !menuRoot.value?.contains(event.target)) closeViewMenu();
 }
 
 // Search
@@ -251,7 +284,8 @@ function goToday() {
   focusIso.value = todayIso;
 }
 function setView(next) {
-  viewMenu.value = false;
+  const restoreFocus = viewMenu.value;
+  closeViewMenu(restoreFocus);
   view.value = next;
 }
 function inMonth(iso) {
@@ -261,6 +295,10 @@ function inMonth(iso) {
 // Swipe sideways to move on, like the phone app.
 let touch = null;
 function onTouchStart(event) {
+  if (view.value === "week") {
+    touch = null;
+    return;
+  }
   const t = event.touches[0];
   touch = { x: t.clientX, y: t.clientY };
 }
@@ -324,7 +362,7 @@ const nowTop = computed(() => `${(nowMin.value / 60) * HOUR_PX}px`);
 let clock = 0;
 function onKey(event) {
   if (event.key === "Escape") {
-    viewMenu.value = false;
+    closeViewMenu(true);
     closeMobileSidebar();
     return;
   }
@@ -418,7 +456,7 @@ function onDelete(id) {
 </script>
 
 <template>
-  <div class="cal">
+  <div class="cal" :class="`cal--${view}`">
     <h1 class="visually-hidden">Calendar</h1>
 
     <section class="cal__toolbar" :class="{ 'cal__toolbar--searching': searchOpen }" aria-label="Calendar controls">
@@ -467,19 +505,22 @@ function onDelete(id) {
         </button>
         <div ref="menuRoot" class="cal__viewwrap">
           <button
+            ref="viewButton"
             type="button"
             class="cal__view"
             aria-haspopup="menu"
             :aria-expanded="viewMenu ? 'true' : 'false'"
-            aria-label="Calendar view"
-            @click="viewMenu = !viewMenu"
+            :aria-label="`Calendar view: ${viewLabel}`"
+            @click="viewMenu ? closeViewMenu() : openViewMenu()"
+            @keydown="onViewButtonKey"
           >
             <span>{{ viewLabel }}</span>
             <Icon name="chevron-down" :size="16" />
           </button>
-          <ul v-if="viewMenu" class="cal__menulist" role="menu" aria-label="Calendar view">
-            <li v-for="option in VIEWS" :key="option.value" role="none">
+          <ul v-if="viewMenu" class="cal__menulist" role="menu" aria-label="Calendar view" @keydown="onViewMenuKey">
+            <li v-for="(option, index) in VIEWS" :key="option.value" role="none">
               <button
+                :ref="(element) => (viewItems[index] = element)"
                 type="button"
                 role="menuitemradio"
                 class="cal__menuitem"
@@ -812,25 +853,30 @@ button { font-family: inherit; }
 
 /* Toolbar */
 .cal__toolbar { display: flex; align-items: center; gap: 4px; min-height: 64px; padding: 0 12px; background: rgb(255 255 255 / 88%); border: 1px solid rgb(31 58 104 / 12%); border-radius: 16px; }
-.cal__icon { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; background: transparent; border: 0; border-radius: 50%; color: var(--g-mute); cursor: pointer; }
+.cal__icon { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; background: transparent; border: 0; border-radius: 50%; color: var(--g-mute); cursor: pointer; }
 .cal__menu-toggle { margin-right: 4px; }
-.cal__icon--sm { width: 32px; height: 32px; }
+.cal__icon--sm { width: 44px; height: 44px; }
 .cal__icon:hover { background: var(--g-hover); }
-.cal__today { display: inline-flex; align-items: center; justify-content: center; height: 40px; margin: 0 12px 0 8px; padding: 0 20px; background: transparent; border: 1px solid #747775; border-radius: 20px; font-size: 0.875rem; font-weight: 500; color: var(--g-ink); cursor: pointer; }
+.cal__today { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; margin: 0 12px 0 8px; padding: 0 20px; background: transparent; border: 1px solid #747775; border-radius: 22px; font-size: 0.875rem; font-weight: 500; color: var(--g-ink); cursor: pointer; }
 .cal__today:hover { background: var(--g-hover); }
 .cal__todaynum { display: none; }
 .cal__steps { display: inline-flex; gap: 4px; }
 .cal__month { flex: 1 1 auto; min-width: 0; margin: 0 0 0 8px; overflow: hidden; font-family: inherit; font-size: 1.375rem; font-weight: 400; line-height: 1.2; color: var(--g-ink); white-space: nowrap; text-overflow: ellipsis; }
 .cal__tools { display: flex; flex: none; align-items: center; gap: 4px; }
 .cal__search { width: 220px; max-width: 100%; height: 40px; padding: 0 16px; background: var(--g-hover); border: 1px solid transparent; border-radius: 20px; font-family: inherit; font-size: 0.875rem; color: var(--g-ink); }
-.cal__viewwrap { position: relative; margin-left: 8px; }
-.cal__view { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px 0 20px; background: transparent; border: 1px solid #747775; border-radius: 20px; font-size: 0.875rem; font-weight: 500; color: var(--g-ink); cursor: pointer; }
-.cal__view:hover, .cal__view[aria-expanded="true"] { background: var(--g-hover); }
-.cal__menulist { position: absolute; top: 44px; right: 0; z-index: 25; min-width: 160px; margin: 0; padding: 8px 0; list-style: none; background: #fff; border-radius: 8px; box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3), 0 2px 6px 2px rgba(60, 64, 67, 0.15); }
-.cal__menuitem { display: flex; align-items: center; justify-content: space-between; gap: 24px; width: 100%; height: 36px; padding: 0 16px; background: transparent; border: 0; font-size: 0.875rem; color: var(--g-ink); text-align: left; cursor: pointer; }
-.cal__menuitem:hover { background: var(--g-hover); }
-.cal__menuitem[aria-checked="true"] { color: var(--g-blue); font-weight: 600; }
-.cal__kbd { font-family: inherit; font-size: 0.75rem; color: var(--g-mute); }
+.cal__viewwrap { position: relative; flex: none; margin-left: 8px; }
+.cal__view { display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 112px; height: 44px; padding: 0 12px 0 16px; background: #fffdf8; border: 1.5px solid #d9c9aa; border-radius: 13px; box-shadow: 0 2px 0 rgb(210 184 132 / 25%); font-size: 0.875rem; font-weight: 700; color: #243560; cursor: pointer; transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease; }
+.cal__view:hover { background: #fff8ee; border-color: #bda77d; }
+.cal__view[aria-expanded="true"] { background: #f6d8c6; border-color: #e3a584; box-shadow: 0 0 0 3px rgb(242 164 119 / 18%); }
+.cal__view :deep(svg) { flex: none; transition: transform 160ms ease; }
+.cal__view[aria-expanded="true"] :deep(svg) { transform: rotate(180deg); }
+.cal__menulist { position: absolute; top: calc(100% + 8px); right: 0; z-index: 35; width: 184px; margin: 0; padding: 7px; list-style: none; background: #fffaf2; border: 1px solid #e2d3b8; border-radius: 14px; box-shadow: 0 16px 36px rgb(22 35 59 / 20%), 0 3px 10px rgb(22 35 59 / 10%); }
+.cal__menulist > li + li { margin-top: 2px; }
+.cal__menuitem { display: flex; align-items: center; justify-content: space-between; gap: 18px; width: 100%; min-height: 44px; padding: 8px 9px 8px 12px; background: transparent; border: 0; border-radius: 9px; font-size: 0.875rem; font-weight: 600; color: #243560; text-align: left; cursor: pointer; }
+.cal__menuitem:hover { background: #f6ead8; }
+.cal__menuitem[aria-checked="true"] { background: #f6d8c6; color: #1f3556; font-weight: 700; }
+.cal__kbd { display: inline-grid; place-items: center; flex: none; width: 26px; height: 26px; padding: 0; background: #e8edf5; border: 1px solid #d4ddea; border-radius: 7px; font-family: inherit; font-size: 0.6875rem; font-weight: 700; line-height: 1; color: #536184; }
+.cal__menuitem[aria-checked="true"] .cal__kbd { background: #243560; border-color: #243560; color: #fff8f1; }
 .cal__today:focus-visible, .cal__icon:focus-visible, .cal__view:focus-visible, .cal__menuitem:focus-visible, .cal__search:focus-visible, .cal__item:focus-visible, .cal__more:focus-visible, .cal__block:focus-visible, .cal__create:focus-visible, .cal__miniday:focus-visible, .cal__fab:focus-visible { outline: 2px solid var(--g-blue); outline-offset: 2px; }
 
 .cal__status { margin: 0; font-size: 0.875rem; color: var(--g-mute); }
@@ -857,7 +903,7 @@ button { font-family: inherit; }
 
 .cal__layers-h { margin: 0 0 4px; padding: 0 8px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--g-ink); }
 .cal__layerlist { margin: 0; padding: 0; list-style: none; }
-.cal__layer { position: relative; display: flex; align-items: center; gap: 14px; min-height: 36px; padding: 0 8px; border-radius: 8px; cursor: pointer; font-size: 0.875rem; color: var(--g-ink); }
+.cal__layer { position: relative; display: flex; align-items: center; gap: 14px; min-height: 44px; padding: 0 8px; border-radius: 8px; cursor: pointer; font-size: 0.875rem; color: var(--g-ink); }
 .cal__layer:hover { background: var(--g-hover); }
 .cal__layer:has(input:focus-visible) .cal__box { outline: 2px solid var(--g-blue); outline-offset: 2px; }
 .cal__box { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 18px; height: 18px; border: 2px solid var(--c, var(--g-mute)); border-radius: 3px; background: #fff; color: #fff; }
@@ -995,12 +1041,14 @@ button { font-family: inherit; }
 @media (max-width: 599px) {
   .cal__toolbar { min-height: 56px; }
   .cal__steps { display: none; }
-  .cal__today { width: 36px; height: 36px; margin: 0 0 0 4px; padding: 0; border-radius: 8px; }
+  .cal__icon { width: 44px; height: 44px; }
+  .cal__today { width: 44px; height: 44px; margin: 0; padding: 0; border-radius: 10px; }
   .cal__todaytxt { display: none; }
   .cal__todaynum { display: inline; font-size: 0.9375rem; font-weight: 500; }
   .cal__month { margin-left: 4px; font-size: 1.0625rem; }
-  .cal__view { padding: 0 8px 0 14px; }
+  .cal__view { min-width: 92px; height: 44px; padding: 0 9px 0 12px; border-radius: 11px; }
   .cal__viewwrap { margin-left: 0; }
+  .cal__menulist { width: min(176px, calc(100vw - 24px)); }
   .cal__toolbar--searching .cal__today,
   .cal__toolbar--searching .cal__month,
   .cal__toolbar--searching .cal__viewwrap { display: none; }
@@ -1024,9 +1072,13 @@ button { font-family: inherit; }
   .cal__hour { right: 4px; }
   .cal__wkscroll { max-height: calc(100dvh - 300px); }
   .cal__fab { right: 16px; }
+  .cal--week .cal__main { overflow-x: auto; overscroll-behavior-inline: contain; }
+  .cal--week .cal__wk { min-width: 620px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cal__create { transition: none; }
+  .cal__create,
+  .cal__view,
+  .cal__view :deep(svg) { transition: none; }
 }
 </style>

@@ -106,6 +106,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", onPointer));
 .ss__btn:hover:not(:disabled) { border-color: var(--navy, #243560); }
 .ss__btn:focus-visible, .ss--open .ss__btn { outline: none; border-color: var(--navy, #243560); box-shadow: 0 0 0 3px rgb(36 53 96 / 15%); }
 .ss__btn:disabled { opacity: 0.6; cursor: default; }
+.ss__value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ss__value--empty { color: var(--mut, #6b7392); font-weight: 400; }
 .ss__chev { flex: none; transition: transform 0.22s cubic-bezier(0.34, 1.4, 0.64, 1); }
 .ss--open .ss__chev { transform: rotate(180deg); }

@@ -17,7 +17,7 @@ export function useEntries(householdId, { max = ENTRIES_PAGE_SIZE } = {}) {
   // What pages see: only the selected baby's entries. Entries saved before babies existed
   // have no babyId, so they count as the first baby ("primary").
   const entries = computed(() => {
-    const id = selectedBaby.value?.id ?? "primary";
+    const id = selectedBaby.value?.id ?? "";
     return allEntries.value.filter((e) => (e.babyId ?? "primary") === id);
   });
   const loading = ref(true);

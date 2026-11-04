@@ -11,7 +11,7 @@ import Icon from "@/app/components/Icon.vue";
 import { ownerKey, ownerLabel } from "@/app/utils/sharedHelpers";
 import { agendaGroups, agendaHeading, eventTimeLabel } from "@/app/utils/calendarHelpers";
 import { buildStream } from "@/app/utils/stream";
-import { agoText, todaySummary, tonightDate } from "@/app/utils/homeSummary";
+import { agoText, tonightDate } from "@/app/utils/homeSummary";
 import { readBaby } from "@/app/utils/babyMood";
 import { joinNames, mondayOf, toIso, weekNights } from "@/app/utils/rotaHelpers";
 import { isStruggling, moodStageFor } from "@/app/utils/moodStage";
@@ -176,23 +176,20 @@ const QUICK_LOG = [
 ];
 // What the baby is doing right now, read from the care log: asleep (a sleep with no end yet), just
 // fed (within 40 minutes), getting hungry (three hours since the last feed), or simply awake.
-const babyName = computed(() => home.baby.value.name || "Baby");
-const babyNow = computed(() => readBaby(entriesShared.entries.value ?? [], babyName.value, now.value));
-const sleepToday = computed(() => babyNow.value.sleep);
-
 // With more than one baby, Home shows every baby, so a parent never misses one.
 const { babies, selectBaby } = useSelectedBaby();
 const multiBabies = computed(() => babies.value.length > 1);
 // The duty plan covers every baby, so the duty card names them all.
-const dutyBabies = computed(() => joinNames(babies.value.map((b, i) => b.babyName || `Baby ${i + 1}`)) || babyName.value);
+const dutyBabies = computed(() => joinNames(babies.value.map((b, i) => b.babyName || `Baby ${i + 1}`)) || "the baby");
 const babyCards = computed(() => {
   const all = entriesShared.raw?.value ?? [];
   return babies.value.map((b, i) => {
     const name = b.babyName || `Baby ${i + 1}`;
     const list = all.filter((e) => (e.babyId ?? "primary") === b.id);
-    return { id: b.id, name, ...readBaby(list, name, now.value) };
+    return { id: b.id, name, ...readBaby(list, name, now.value, b) };
   });
 });
+const singleBaby = computed(() => babyCards.value[0] ?? null);
 
 // ---- Covering tonight, through the real sleep rota ----
 const fmtHour = (hour) => {
@@ -453,7 +450,6 @@ async function sendLetter() {
 
 // ---- The baby, kept small ----
 const entriesFailed = computed(() => Boolean(entriesShared.error?.value));
-const summary = computed(() => todaySummary({ entries: entriesShared.entries.value, now: now.value }));
 // The next few things on the shared calendar and open tasks with a due date, soonest first.
 const KIND_LABEL = { appointment: "Appointment", family: "Family", work: "Work", task: "Task" };
 const kindClass = (kind) => `hp__kind--${String(kind).toLowerCase()}`;
@@ -619,33 +615,42 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
         <template v-if="multiBabies">
           <article v-for="b in babyCards" :key="b.id" class="hp__card hp__trio-card hp__trio-card--baby hp__bcard" :aria-labelledby="`hp-baby-${b.id}`">
             <BabyScene on-dark :state="b.state" :title="b.title" :detail="b.detail" :title-id="`hp-baby-${b.id}`" />
-            <ul v-if="!entriesFailed" class="hp__tally">
+            <ul v-if="!entriesFailed && !b.expected" class="hp__tally">
               <li><b>{{ b.feeds }}</b><span>feeds</span></li>
               <li><b>{{ b.nappies }}</b><span>nappies</span></li>
               <li><b>{{ b.sleep }}</b><span>sleep</span></li>
             </ul>
-            <div class="hp__quicklog">
+            <div v-if="!b.expected" class="hp__quicklog">
               <AppLink v-for="q in QUICK_LOG" :key="q.key" class="hp__qbtn" :to="{ path: ROUTES.CARE_LOG, query: { log: q.key } }" @click="selectBaby(b.id)">
                 <Icon :name="q.icon" :size="18" />{{ q.label }}
               </AppLink>
             </div>
-            <AppLink class="hp__carelink" :to="ROUTES.CARE_LOG" @click="selectBaby(b.id)">Open {{ b.name }}'s care log</AppLink>
+            <AppLink v-if="!b.expected" class="hp__carelink" :to="ROUTES.CARE_LOG" @click="selectBaby(b.id)">Open {{ b.name }}'s care log</AppLink>
+            <AppLink v-else class="hp__carelink" :to="ROUTES.PROFILE">{{ b.due }} · View baby details</AppLink>
           </article>
         </template>
         <!-- Baby, today -->
-        <article v-else class="hp__card hp__trio-card hp__trio-card--baby" aria-labelledby="hp-baby-title">
-          <BabyScene on-dark :state="babyNow.state" :title="babyNow.title" :detail="babyNow.detail" title-id="hp-baby-title" />
-          <ul v-if="!entriesFailed" class="hp__tally">
-            <li><b>{{ summary.feeds }}</b><span>feeds</span></li>
-            <li><b>{{ summary.nappies }}</b><span>nappies</span></li>
-            <li><b>{{ sleepToday }}</b><span>sleep</span></li>
+        <article v-else-if="singleBaby" class="hp__card hp__trio-card hp__trio-card--baby" aria-labelledby="hp-baby-title">
+          <BabyScene on-dark :state="singleBaby.state" :title="singleBaby.title" :detail="singleBaby.detail" title-id="hp-baby-title" />
+          <ul v-if="!entriesFailed && !singleBaby.expected" class="hp__tally">
+            <li><b>{{ singleBaby.feeds }}</b><span>feeds</span></li>
+            <li><b>{{ singleBaby.nappies }}</b><span>nappies</span></li>
+            <li><b>{{ singleBaby.sleep }}</b><span>sleep</span></li>
           </ul>
-          <div class="hp__quicklog">
-            <AppLink v-for="q in QUICK_LOG" :key="q.key" class="hp__qbtn" :to="{ path: ROUTES.CARE_LOG, query: { log: q.key } }">
+          <div v-if="!singleBaby.expected" class="hp__quicklog">
+            <AppLink v-for="q in QUICK_LOG" :key="q.key" class="hp__qbtn" :to="{ path: ROUTES.CARE_LOG, query: { log: q.key } }" @click="selectBaby(singleBaby.id)">
               <Icon :name="q.icon" :size="18" />{{ q.label }}
             </AppLink>
           </div>
-          <AppLink class="hp__carelink" :to="ROUTES.CARE_LOG">Open the care log</AppLink>
+          <AppLink v-if="!singleBaby.expected" class="hp__carelink" :to="ROUTES.CARE_LOG" @click="selectBaby(singleBaby.id)">Open {{ singleBaby.name }}'s care log</AppLink>
+          <AppLink v-else class="hp__carelink" :to="ROUTES.PROFILE">{{ singleBaby.due }} · View baby details</AppLink>
+        </article>
+        <article v-else class="hp__card hp__trio-card hp__trio-card--baby" aria-labelledby="hp-no-baby-title">
+          <div>
+            <h2 id="hp-no-baby-title" class="hp__card-title">No active baby</h2>
+            <p class="hp__small">Add a baby whenever your household needs care tracking again.</p>
+          </div>
+          <AppLink class="hp__carelink" :to="{ path: ROUTES.PROFILE, query: { addBaby: '1' } }">Add a baby</AppLink>
         </article>
 
       </section>
@@ -817,7 +822,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
   --line: rgb(31 58 104 / 14%);
   --s1: 8px; --s2: 16px; --s3: 24px; --s4: 32px; --s5: 48px; --s6: 64px; --s7: 96px;
   --serif: "Literata", Georgia, serif;
-  display: flex; flex-direction: column; gap: var(--s5); width: 100%; max-width: 1320px; margin: 0 auto; font-size: 1rem; line-height: 1.5; color: var(--ink);
+  display: flex; flex-direction: column; gap: var(--s5); width: 100%; max-width: 82.5rem; margin: 0 auto; font-size: 1rem; line-height: 1.5; color: var(--ink);
 }
 .hp__live { position: absolute; }
 .hp__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s2) var(--s3); background: #fbe3da; border-radius: 16px; font-size: 0.875rem; color: #6e2a14; }

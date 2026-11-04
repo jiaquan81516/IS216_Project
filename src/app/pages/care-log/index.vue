@@ -56,7 +56,7 @@ const live = shared.entries;
 const entriesLoading = computed(() => !householdId.value || shared.loading.value);
 const entriesErrorInfo = computed(() => (shared.error.value ? describeEntriesError(shared.error.value.code) : null));
 const { selectedBaby } = useSelectedBaby();
-const babyId = computed(() => selectedBaby.value?.id ?? "primary");
+const babyId = computed(() => selectedBaby.value?.id ?? "");
 
 // `older` keeps every baby's older entries, so the "load older" position stays correct.
 // Only the selected baby's are shown.
@@ -116,7 +116,7 @@ const feedStatus = computed(() => {
 });
 
 // The same bassinet picture as Home, following the selected baby.
-const babyMood = computed(() => readBaby(allEntries.value, selectedBaby.value?.babyName || "Baby", now.value));
+const babyMood = computed(() => readBaby(allEntries.value, selectedBaby.value?.babyName || "Baby", now.value, selectedBaby.value ?? {}));
 
 // While a sleep has no end yet, the hero offers "awake now", which ends it at this moment.
 const openSleep = computed(() => (babyMood.value.state === "sleeping" ? lastOfType(allEntries.value, "sleep") : null));
@@ -216,6 +216,7 @@ const saveError = ref("");
 let trigger = null;
 
 function openPanel(type = "feed", event = null) {
+  if (!selectedBaby.value || babyMood.value.expected) return;
   trigger = event?.currentTarget ?? null;
   editing.value = null;
   panelType.value = type;
@@ -239,7 +240,7 @@ async function closePanel() {
 }
 const { showToast } = useToast();
 async function onSave(payload) {
-  if (saving.value || !householdId.value) return;
+  if (!selectedBaby.value || babyMood.value.expected || saving.value || !householdId.value) return;
   saving.value = true;
   saveError.value = "";
   try {
@@ -343,8 +344,8 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 
     <template v-if="!loading && !error">
   <PageHero :eyebrow="`Shared by ${sharedBy}`" title="Care log">
-    <template #lead>Tap what just happened.<template v-if="partnerFirst">{{ " " }}{{ partnerFirst }} sees it straight away.</template></template>
-    <StatusPill icon="feed" :tone="feedStatus ? feedStatus.tone : 'none'">
+    <template #lead><template v-if="babyMood.expected">{{ babyMood.due }}. Care logging starts after birth.</template><template v-else>Tap what just happened.<template v-if="partnerFirst">{{ " " }}{{ partnerFirst }} sees it straight away.</template></template></template>
+    <StatusPill v-if="!babyMood.expected" icon="feed" :tone="feedStatus ? feedStatus.tone : 'none'">
       <template v-if="feedStatus">
         <span class="visually-hidden">{{ feedStatus.word }}.</span>Last feed <strong>{{ feedStatus.ago }}</strong>
       </template>
@@ -360,7 +361,7 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
   </PageHero>
   <BabySwitch />
 
-  <section aria-labelledby="cl-now">
+  <section v-if="selectedBaby && !babyMood.expected" aria-labelledby="cl-now">
     <div class="cl__row-head">
       <h2 id="cl-now" class="cl__h2">Log now</h2>
     </div>
@@ -445,13 +446,13 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
     </template>
   </section>
 
-  <CareLogPanel :open="panelOpen" :entry="editing" :initial-type="panelType" :lock-type="true" :saving="saving" :error="saveError" @close="closePanel" @save="onSave" />
+  <CareLogPanel :open="panelOpen && Boolean(selectedBaby)" :entry="editing" :initial-type="panelType" :lock-type="true" :saving="saving" :error="saveError" @close="closePanel" @save="onSave" />
   </template>
   </div>
 </template>
 
 <style scoped>
-.cl { --navy: #243560; --navy-2: #2d3f70; --ink: #1f2a52; --cream: #fdf9f0; --sand: #e9d9b8; display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 1020px; margin: 0 auto; color: var(--ink); }
+.cl { --navy: #243560; --navy-2: #2d3f70; --ink: #1f2a52; --cream: #fdf9f0; --sand: #e9d9b8; display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 63.75rem; margin: 0 auto; color: var(--ink); }
 .cl__muted { margin: 0; font-size: 0.875rem; color: #6b7392; }
 .cl__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; border-radius: 8px; }
 
@@ -530,6 +531,13 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
   .cl__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cl__stats { grid-template-columns: 1fr; }
   .cl__timeline { padding: 20px 16px; }
-  .cl__card { flex-wrap: wrap; }
+  .cl__card { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 12px; }
+  .cl__card-icon { grid-column: 1; grid-row: 1; }
+  .cl__body { grid-column: 2; min-width: 0; }
+  .cl__side { grid-column: 2; justify-self: end; min-width: 0; }
+  .cl__side:has(.cl__confirm) { grid-column: 1 / -1; justify-self: stretch; width: 100%; }
+  .cl__confirm { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .cl__confirm-text { grid-column: 1 / -1; }
+  .cl__confirm .btn { width: 100%; min-width: 0; }
 }
 </style>

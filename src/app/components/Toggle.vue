@@ -44,11 +44,12 @@ function toggle() {
 .tg__text { min-width: 0; }
 .tg__label { display: block; font-size: 0.9375rem; font-weight: 600; line-height: 1.4; color: var(--ink, #1f2a52); }
 .tg__hint { margin: 2px 0 0; font-size: 0.875rem; line-height: 1.45; color: var(--mut, #5b6692); }
-.tg__switch { position: relative; flex: none; width: 48px; height: 28px; padding: 0; background: #d9d2c0; border: 0; border-radius: 999px; cursor: pointer; transition: background-color 0.15s; }
-.tg__switch[aria-checked="true"] { background: var(--navy, #243560); }
+.tg__switch { position: relative; flex: none; width: 48px; height: 44px; padding: 0; background: transparent; border: 0; border-radius: 999px; cursor: pointer; }
+.tg__switch::before { content: ""; position: absolute; inset: 8px 0; background: #d9d2c0; border-radius: 999px; transition: background-color 0.15s; }
+.tg__switch[aria-checked="true"]::before { background: var(--navy, #243560); }
 .tg__switch:disabled { opacity: 0.55; cursor: not-allowed; }
 .tg__switch:focus-visible { outline: 3px solid var(--navy, #243560); outline-offset: 2px; }
-.tg__knob { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; background: #fff; border-radius: 999px; box-shadow: 0 1px 3px rgb(0 0 0 / 25%); transition: transform 0.15s; }
+.tg__knob { position: absolute; top: 11px; left: 3px; width: 22px; height: 22px; background: #fff; border-radius: 999px; box-shadow: 0 1px 3px rgb(0 0 0 / 25%); transition: transform 0.15s; }
 .tg__switch[aria-checked="true"] .tg__knob { transform: translateX(20px); }
 @media (prefers-reduced-motion: reduce) { .tg__knob, .tg__switch { transition: none; } }
 </style>

@@ -9,11 +9,9 @@ import { addRoomFeedback, listRoomFeedback } from "@/api/rooms";
 import { useAuth } from "@/composables/useAuth";
 import AppButton from "@/components/ui/AppButton.vue";
 import Icon from "@/app/components/Icon.vue";
-import RoomFeedbackManager from "@/app/components/RoomFeedbackManager.vue";
 
 const { currentUser } = useAuth();
 const feedbackOpen = ref(false);
-const manageFeedbackOpen = ref(false);
 const feedbackText = ref("");
 const feedbackItems = ref([]);
 const feedbackLoading = ref(false);
@@ -110,11 +108,8 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
         Open in OneMap<span class="visually-hidden"> for {{ room.name }}, opens in a new tab</span>
       </a>
       <template v-if="canManage">
-        <button type="button" class="rc__action" @click.stop="emit('edit', room)">Edit<span class="visually-hidden"> {{ room.name }}</span></button>
+        <button type="button" class="rc__action" @click.stop="emit('edit', room)">Edit<span class="visually-hidden"> {{ room.name }}, including its parent feedback</span></button>
         <button type="button" class="rc__action" @click.stop="emit('delete', room)">Delete<span class="visually-hidden"> {{ room.name }}</span></button>
-        <button type="button" class="rc__action" :class="{ 'rc__action--active': manageFeedbackOpen }" :aria-expanded="manageFeedbackOpen" :aria-controls="`admin-feedback-${room.id}`" @click.stop="manageFeedbackOpen = !manageFeedbackOpen">
-          <Icon name="edit" :size="16" /> Edit feedback<span class="visually-hidden"> for {{ room.name }}</span>
-        </button>
       </template>
       </div>
       <div v-if="!canManage" class="rc__action-group rc__action-group--end">
@@ -139,7 +134,6 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
       </button>
       </div>
     </div>
-    <RoomFeedbackManager v-if="canManage && manageFeedbackOpen" :id="`admin-feedback-${room.id}`" :room-id="room.id" :rooms="[room]" @click.stop @edit-room="emit('edit', $event)" />
     <Collapse>
     <section v-if="feedbackOpen" :id="`room-feedback-${room.id}`" class="rc__feedback" :aria-labelledby="`room-feedback-title-${room.id}`" @click.stop @keydown.esc.stop="closeFeedback">
       <h3 :id="`room-feedback-title-${room.id}`" class="rc__feedback-title">Parent feedback</h3>
@@ -189,7 +183,7 @@ const placeUrl = computed(() => oneMapPlaceUrl(props.room.lat, props.room.lng));
 /* One tidy row of buttons, left aligned and pinned to the bottom so cards in a row line up. */
 .rc__actions--room { width: 100%; margin-top: auto; padding-top: 14px; }
 .rc__action-group, .rc__action-group--end { display: contents; }
-.rc__action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 6px 14px; border: 1.5px solid #e9d9b8; border-bottom-width: 3px; border-radius: 999px; background: #fff; color: #243560; font: inherit; font-size: 0.875rem; font-weight: 600; line-height: 1.4; text-decoration: none; cursor: pointer; transition: background-color 150ms, border-color 150ms, color 150ms, transform 150ms; }
+.rc__action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 6px 14px; border: 1.5px solid #e9d9b8; border-bottom-width: 3px; border-radius: 999px; background: #fff; color: #243560; font: inherit; font-size: 0.875rem; font-weight: 600; line-height: 1.4; text-decoration: none; cursor: pointer; transition: background-color 150ms, border-color 150ms, color 150ms, transform 150ms; }
 .rc__action :deep(svg) { flex-shrink: 0; color: #6b7392; }
 .rc__action:hover { border-color: #243560; background: #fff; color: #243560; transform: translateY(-1px); }
 .rc__action:hover :deep(svg) { color: #243560; }

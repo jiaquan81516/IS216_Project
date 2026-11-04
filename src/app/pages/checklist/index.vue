@@ -224,7 +224,7 @@ function doneMeta(task) {
 </template>
 
 <style scoped>
-.ck { --navy: #243560; --navy-2: #2d3f70; --ink: #1f2a52; --cream: #fdf9f0; --sand: #e9d9b8; display: flex; flex-direction: column; gap: 24px; width: 100%; max-width: 1020px; margin: 0 auto; color: var(--ink); }
+.ck { --navy: #243560; --navy-2: #2d3f70; --ink: #1f2a52; --cream: #fdf9f0; --sand: #e9d9b8; display: flex; flex-direction: column; gap: 24px; width: 100%; max-width: 63.75rem; margin: 0 auto; color: var(--ink); }
 .ck__muted { margin: 0; font-size: 0.875rem; color: #6b7392; }
 .ck__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; border-radius: 8px; }
 

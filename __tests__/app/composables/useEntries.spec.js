@@ -16,7 +16,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   subscribeEntries.mockImplementation(() => vi.fn());
   const { babies, selectBaby } = useSelectedBaby();
-  babies.value = [];
+  babies.value = [{ id: "primary", babyName: "Alex" }];
   selectBaby("primary");
   vi.useFakeTimers();
 });
@@ -64,6 +64,16 @@ describe("useEntries", () => {
       { id: "e3", babyId: "primary" },
     ]);
     expect(entries.value.map((e) => e.id).sort()).toEqual(["e2", "e3"]);
+  });
+
+  it("does not expose an archived baby's entries when there is no active baby", () => {
+    const { babies, selectBaby } = useSelectedBaby();
+    babies.value = [];
+    selectBaby("");
+    const householdId = ref("house1");
+    const { entries } = withScope(() => useEntries(householdId));
+    subscribeEntries.mock.calls[0][1]([{ id: "e1", babyId: "primary" }]);
+    expect(entries.value).toEqual([]);
   });
 
   it("surfaces a subscription error", () => {

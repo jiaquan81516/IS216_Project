@@ -27,13 +27,13 @@ defineProps({
 </template>
 
 <style scoped>
-.sia { grid-column: 1 / -1; display: flex; align-items: center; width: 100%; min-height: 38px; }
+.sia { grid-column: 1 / -1; display: flex; align-items: center; width: 100%; min-height: 44px; }
 /* Edit and Delete share the row equally, so the pair is the same width on every card. */
 .sia__row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; width: 100%; }
 .sia__row :deep(.btn) { flex: 1 1 0; min-width: 0; }
 .sia__ask { flex: 1 0 100%; }
 .sia__ask { font-size: 0.9375rem; font-weight: 600; color: #1f2a52; }
-.sia :deep(.btn) { min-height: 36px; padding: 4px 16px; background: #fff; border: 1.5px solid #e9d9b8; border-bottom-width: 3px; border-radius: 999px; color: #243560; font-size: 0.9375rem; font-weight: 600; transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease; }
+.sia :deep(.btn) { min-height: 44px; padding: 4px 16px; background: #fff; border: 1.5px solid #e9d9b8; border-bottom-width: 3px; border-radius: 999px; color: #243560; font-size: 0.9375rem; font-weight: 600; transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease; }
 .sia :deep(.btn:hover:not(:disabled)) { background: #fff; border-color: #243560; color: #243560; transform: translateY(-1px); }
 .sia :deep(.btn:active:not(:disabled)) { transform: none; }
 .sia :deep(.btn:focus-visible) { outline: 3px solid #f2a477; outline-offset: 2px; }

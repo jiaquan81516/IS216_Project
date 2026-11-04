@@ -905,7 +905,7 @@ async function finishSetup() {
   flex-direction: column;
   gap: 20px;
   width: 100%;
-  max-width: 1020px;
+  max-width: 63.75rem;
   margin: 0 auto;
   color: var(--ink);
 }

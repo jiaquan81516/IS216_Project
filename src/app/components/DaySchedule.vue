@@ -140,6 +140,7 @@ function hideTip() {
 
 // ---- Drag or tap on a day to add ----
 let drag = null;
+let skipTap = false;
 const preview = reactive({ day: -1, start: 0, end: 0 });
 const SNAP = 30;
 function minuteAt(event, el) {
@@ -148,13 +149,15 @@ function minuteAt(event, el) {
   return DAY_START + Math.round((frac * SPAN) / SNAP) * SNAP;
 }
 function onDown(event, day) {
-  if (props.readonly || event.target.closest(".ds__sh") || event.button > 0) return;
+  // Touch gestures are left to the browser so the schedule can still scroll.
+  // A completed mobile tap is handled by onTap below.
+  if (event.pointerType !== "mouse" || props.readonly || event.target.closest(".ds__sh") || event.button > 0) return;
   const el = event.currentTarget;
-  drag = { day, el, a: minuteAt(event, el), b: minuteAt(event, el), y: event.clientY, mouse: event.pointerType === "mouse" };
-  if (drag.mouse) el.setPointerCapture?.(event.pointerId);
+  drag = { day, el, a: minuteAt(event, el), b: minuteAt(event, el), y: event.clientY };
+  el.setPointerCapture?.(event.pointerId);
 }
 function onMove(event) {
-  if (!drag || !drag.mouse) return;
+  if (!drag) return;
   drag.b = minuteAt(event, drag.el);
   if (Math.abs(event.clientY - drag.y) < 6) return;
   preview.day = drag.day;
@@ -163,16 +166,29 @@ function onMove(event) {
 }
 function onUp(event) {
   if (!drag) return;
-  const { day, a, b, y, mouse } = drag;
+  const { day, a, b, y } = drag;
   drag = null;
   preview.day = -1;
-  if (mouse && Math.abs(event.clientY - y) >= 6) {
+  if (Math.abs(event.clientY - y) >= 6) {
+    // Pointer-up is followed by a click. The drag already created the shift,
+    // so ignore only that synthetic tap and clear the guard immediately after.
+    skipTap = true;
+    window.setTimeout(() => {
+      skipTap = false;
+    }, 0);
     const start = Math.min(a, b);
     openSheet({ day, start, end: Math.max(Math.max(a, b), start + SNAP) });
+  }
+}
+function onTap(event, day) {
+  if (props.readonly) return;
+  if (skipTap) {
+    skipTap = false;
     return;
   }
-  // A tap: two hours from the tapped hour, kept inside the day.
-  const start = Math.min(Math.floor(a / 60) * 60, DAY_END - 60);
+  // A tap creates a two-hour draft from the selected hour, kept inside the day.
+  const minute = minuteAt(event, event.currentTarget);
+  const start = Math.min(Math.floor(minute / 60) * 60, DAY_END - 60);
   openSheet({ day, start, end: Math.min(start + 120, DAY_END) });
 }
 function onCancel() {
@@ -307,6 +323,24 @@ function onSheetKey(event) {
   if (event.key === "Escape") {
     event.stopPropagation();
     closeSheet();
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const items = [...(sheetEl.value?.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href]') ?? [])]
+    .filter((item) => item.offsetParent !== null);
+  if (!items.length) {
+    event.preventDefault();
+    sheetEl.value?.focus();
+    return;
+  }
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (event.shiftKey && (document.activeElement === first || document.activeElement === sheetEl.value)) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
   }
 }
 
@@ -360,6 +394,7 @@ function addButton() {
           @pointermove="onMove"
           @pointerup="onUp"
           @pointercancel="onCancel"
+          @click.self="onTap($event, d)"
         >
           <button
             v-for="s in shiftsOf(d)"
@@ -492,7 +527,7 @@ function addButton() {
 .ds__add:active { transform: translateY(1px) scale(0.98); }
 .ds__nav { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ds__title { margin: 0 6px; min-width: 150px; text-align: center; font-family: var(--nt-serif, inherit); font-size: 1.25rem; font-weight: 700; color: var(--ink); }
-.ds__arr { width: 36px; height: 36px; padding: 0; background: #fffdf8; border: 1.5px solid var(--sand); border-radius: 50%; font-size: 1.125rem; line-height: 1; color: var(--navy); cursor: pointer; transition: border-color 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); }
+.ds__arr { width: 44px; height: 44px; padding: 0; background: #fffdf8; border: 1.5px solid var(--sand); border-radius: 50%; font-size: 1.125rem; line-height: 1; color: var(--navy); cursor: pointer; transition: border-color 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); }
 .ds__arr:hover { border-color: var(--navy); }
 .ds__arr:active { transform: scale(0.92); }
 .ds__today { padding: 6px 16px; background: transparent; border: 1.5px solid var(--navy); border-radius: 999px; font-family: inherit; font-size: 0.875rem; font-weight: 600; color: var(--navy); cursor: pointer; }
