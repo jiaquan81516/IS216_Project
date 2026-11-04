@@ -2,7 +2,7 @@
 // The baby in a bassinet. The picture follows what the care log says: asleep, just fed, getting
 // hungry, or simply awake. All motion is gentle and stops for people who ask for less movement.
 const props = defineProps({
-  state: { type: String, default: "awake" }, // "sleeping" | "fed" | "hungry" | "awake"
+  state: { type: String, default: "awake" }, // "expected" | "sleeping" | "fed" | "hungry" | "awake"
   title: { type: String, default: "" },
   detail: { type: String, default: "" },
   titleId: { type: String, default: "" },
@@ -47,7 +47,7 @@ const props = defineProps({
       <rect x="58" y="20" width="124" height="176" rx="18" fill="#fbf3e6" stroke="#1f3a68" stroke-width="2.4" />
 
       <!-- The baby, seen from above, face up: a round head on a pillow, and a snug swaddle below -->
-      <g class="bs__baby">
+      <g v-if="props.state !== 'expected'" class="bs__baby">
         <rect x="74" y="26" width="92" height="52" rx="20" fill="#fff" stroke="#1f3a68" stroke-width="2.2" />
         <g class="bs__breathe">
           <path d="M84 96 C80 140 88 188 120 192 C152 188 160 140 156 96 Z" fill="#cfe0f3" stroke="#1f3a68" stroke-width="2.5" stroke-linejoin="round" />
@@ -87,6 +87,15 @@ const props = defineProps({
         <g v-if="props.state === 'hungry'" class="bs__wave">
           <circle cx="165" cy="100" r="8" fill="#f8d9bf" stroke="#1f3a68" stroke-width="2.4" />
         </g>
+      </g>
+
+      <!-- Expected: an empty bassinet being readied, with a heart in place of a newborn. -->
+      <g v-else class="bs__expected">
+        <path d="M120 78 C101 54 70 69 75 96 C80 123 120 151 120 151 C120 151 160 123 165 96 C170 69 139 54 120 78 Z" fill="#f6d8c6" stroke="#1f3a68" stroke-width="3" stroke-linejoin="round" />
+        <path d="M97 162h46" stroke="#9db8d8" stroke-width="3" stroke-linecap="round" />
+        <circle cx="104" cy="174" r="3" fill="#9db8d8" />
+        <circle cx="120" cy="174" r="3" fill="#9db8d8" />
+        <circle cx="136" cy="174" r="3" fill="#9db8d8" />
       </g>
 
       <!-- A bottle resting on the swaddle after a feed -->

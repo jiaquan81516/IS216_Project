@@ -29,7 +29,6 @@ import { useToast } from "@/app/composables/useToast";
 import { useLocate } from "@/app/composables/useLocate";
 import { useAuth } from "@/composables/useAuth";
 import RoomManager from "@/app/components/RoomManager.vue";
-import RoomFeedbackManager from "@/app/components/RoomFeedbackManager.vue";
 import { useAdmin } from "@/composables/useAdmin";
 import { saveManagedRoom, subscribeRoomOverrides } from "@/api/roomManagement";
 import AddressPicker from "@/app/components/AddressPicker.vue";
@@ -327,7 +326,6 @@ watch(supportTab, (id) => {
 
         <div class="pr__views" role="group" aria-label="Show">
           <button type="button" class="app-chip" :aria-pressed="view === 'all' ? 'true' : 'false'" @click="view = 'all'">All rooms</button>
-          <button v-if="isAdmin" type="button" class="app-chip" :aria-pressed="view === 'feedback'" @click="view = 'feedback'">All feedback</button>
           <AppButton v-if="isAdmin" ref="addButton" variant="outline" size="sm" @click="openForm">
             <Icon name="plus" :size="16" />
             Add room
@@ -368,8 +366,7 @@ watch(supportTab, (id) => {
           </TransitionGroup>
         </section>
 
-        <RoomFeedbackManager v-if="isAdmin && view === 'feedback'" :rooms="allRooms" @edit-room="manager?.edit($event)" />
-        <div v-else-if="roomsStore.loading && !roomsError" class="pr__pad pr__skel"><SkeletonList :rows="3" :height="140" label="Loading pumping rooms" /></div>
+        <div v-if="roomsStore.loading && !roomsError" class="pr__pad pr__skel"><SkeletonList :rows="3" :height="140" label="Loading pumping rooms" /></div>
         <TransitionGroup tag="ul" name="li" v-else-if="visible.length" class="pr__list" aria-label="Pumping rooms">
           <RoomCard
             v-for="room in pageRooms"
@@ -394,7 +391,7 @@ watch(supportTab, (id) => {
           </p>
         </div>
 
-        <AppPager v-if="view !== 'feedback'" v-model="page" class="pr__pager" :total="visible.length" :page-size="PAGE_SIZE" label="Room pages" />
+        <AppPager v-model="page" class="pr__pager" :total="visible.length" :page-size="PAGE_SIZE" label="Room pages" />
 
         <div v-if="!isAdmin" class="pr__foot">
           <p class="pr__muted pr__note">

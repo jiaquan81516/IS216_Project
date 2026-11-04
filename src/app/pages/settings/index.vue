@@ -926,7 +926,7 @@ async function confirmDelete() {
 </template>
 
 <style scoped>
-.st { display: flex; flex-direction: column; gap: 20px; max-width: 860px; margin: 0 auto; font-size: 1rem; color: var(--ink, #1f2a52); }
+.st { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 53.75rem; margin: 0 auto; font-size: 1rem; color: var(--ink, #1f2a52); }
 .st__layout { display: flex; flex-direction: column; gap: 16px; }
 .st__nav { display: flex; flex-wrap: wrap; gap: 8px; }
 .st__nav-ico { display: none; }

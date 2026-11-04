@@ -462,11 +462,13 @@ function canEdit(entry) {
   return Boolean(p.careLogEdit && entry.by === currentUser.value?.uid && (entry.type !== "medication" || p.careLogMedication));
 }
 function openAdd() {
+  if (babyMood.value.expected) return;
   editing.value = null;
   panelError.value = "";
   panelOpen.value = true;
 }
 function openEdit(entry) {
+  if (babyMood.value.expected) return;
   editing.value = entry;
   panelError.value = "";
   panelOpen.value = true;
@@ -478,6 +480,7 @@ function closePanel() {
 }
 
 async function saveCareEntry(payload) {
+  if (babyMood.value.expected) return;
   if (editing.value) {
     if (!canEdit(editing.value) || panelSaving.value) return;
     panelSaving.value = true;
@@ -536,7 +539,7 @@ function handleClickOutside(event) {
 }
 
 // The same animated bassinet as Home, following the selected baby.
-const babyMood = computed(() => readBaby(selectedEntries.value, babyName.value, new Date()));
+const babyMood = computed(() => readBaby(selectedEntries.value, babyName.value, new Date(), selectedBaby.value ?? {}));
 
 // "Last feed 1 h ago", as on the care log.
 const feedStatus = computed(() => {
@@ -637,9 +640,9 @@ async function wakeUp() {
           <p class="brief__eyebrow">Caregiver view{{ caregiverName }}</p>
           <h1>Today’s care brief</h1>
           <p class="brief__lead">
-            A quick guide for caring for {{ babyName }}.
+            {{ babyMood.expected ? `${babyMood.due}. Care logging starts after birth.` : `A quick guide for caring for ${babyName}.` }}
           </p>
-          <StatusPill v-if="permissions.careLogRead" icon="feed" :tone="feedStatus ? feedStatus.tone : 'none'">
+          <StatusPill v-if="permissions.careLogRead && !babyMood.expected" icon="feed" :tone="feedStatus ? feedStatus.tone : 'none'">
             <template v-if="feedStatus">
               <span class="visually-hidden">{{ feedStatus.word }}.</span>Last feed <strong>{{ feedStatus.ago }}</strong>
             </template>
@@ -715,7 +718,7 @@ async function wakeUp() {
           <BabyScene class="brief__art" on-dark art-only :state="babyMood.state" :title="babyMood.title" />
         </div>
       </header>
-      <div v-if="babies.length > 1 || permissions.careLogAdd" class="brief__bar">
+      <div v-if="babies.length > 1 || (permissions.careLogAdd && !babyMood.expected)" class="brief__bar">
         <div
           v-if="babies.length > 1"
           class="brief__baby-switch"
@@ -738,7 +741,7 @@ async function wakeUp() {
             </button>
           </div>
         </div>
-        <div v-if="permissions.careLogAdd" class="brief__bar-add">
+        <div v-if="permissions.careLogAdd && !babyMood.expected" class="brief__bar-add">
           <p v-if="panelError" class="brief__bar-error" role="alert">{{ panelError }}</p>
           <button type="button" class="brief__fab" @click="openAdd">
             <Icon name="plus" :size="20" />Add a care log
@@ -863,7 +866,7 @@ async function wakeUp() {
       </section>
       <template v-else>
         <div class="brief__body">
-          <div v-if="permissions.careLogRead" class="brief__tiles" aria-label="Right now">
+          <div v-if="permissions.careLogRead && !babyMood.expected" class="brief__tiles" aria-label="Right now">
             <article v-for="tile in tiles" :key="tile.label" class="brief__tile" :class="`brief__tile--${tile.tone}`">
               <span class="brief__tile-ico" aria-hidden="true"><Icon :name="tile.icon" :size="22" /></span>
               <div>
@@ -1040,7 +1043,7 @@ async function wakeUp() {
   flex-direction: column;
   gap: 20px;
   width: 100%;
-  max-width: 1400px;
+  max-width: 87.5rem;
   margin: 0 auto;
   padding: 32px clamp(16px, 4vw, 64px) 48px;
   color: var(--ink);

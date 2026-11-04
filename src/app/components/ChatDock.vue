@@ -166,7 +166,7 @@ async function sendDraft() {
 .cd__panel { display: flex; flex-direction: column; width: min(380px, calc(100vw - 32px)); height: min(560px, calc(100vh - 120px)); background: var(--nt-white, #fff); border: 1px solid var(--nt-line); border-radius: 12px; overflow: hidden; }
 .cd__head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--nt-line); }
 .cd__title { margin: 0; font-size: 1rem; font-weight: 600; color: var(--nt-ink); }
-.cd__close { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; background: transparent; border: 0; border-radius: 8px; color: var(--nt-muted); cursor: pointer; }
+.cd__close { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; background: transparent; border: 0; border-radius: 8px; color: var(--nt-muted); cursor: pointer; }
 .cd__close:hover { color: var(--nt-ink); }
 .cd__close:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 

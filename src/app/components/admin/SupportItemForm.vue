@@ -72,7 +72,7 @@ const removeStep = (i) => draft().steps.splice(i, 1);
 .sf__step { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; width: 100%; padding: 14px 18px 16px; background: #fffdf8; border: 1px solid #e9d9b8; border-radius: 18px; }
 .sf__step .app-field { width: 100%; }
 .sf__actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
-.sf :deep(.btn) { min-height: 40px; padding: 7px 24px; border-radius: 999px; font-size: 0.9375rem; font-weight: 700; transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease; }
+.sf :deep(.btn) { min-height: 44px; padding: 7px 24px; border-radius: 999px; font-size: 0.9375rem; font-weight: 700; transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease; }
 .sf :deep(.btn-primary) { background: #243560; border: 0; border-bottom: 3px solid #182246; color: #fff; }
 .sf :deep(.btn-primary:hover:not(:disabled)) { background: #2c4175; transform: translateY(-1px); }
 .sf :deep(.btn-outline) { background: #fff; border: 1.5px solid #e9d9b8; border-bottom-width: 3px; color: #243560; }

@@ -123,8 +123,20 @@ async function loadBabies() {
 }
 
 async function onBabyAdded(name) {
-  babyAdded.value = name;
+  babyAdded.value = `${name} was added.`;
   showAddBaby.value = false;
+  await loadBabies();
+  await refreshSidebarBabies(householdId.value);
+}
+
+async function onBabyChanged(name) {
+  babyAdded.value = `${name} was updated.`;
+  await loadBabies();
+  await refreshSidebarBabies(householdId.value);
+}
+
+async function onBabyDeleted(name) {
+  babyAdded.value = `${name} was deleted.`;
   await loadBabies();
   await refreshSidebarBabies(householdId.value);
 }
@@ -464,12 +476,22 @@ async function copyCode() {
         <template v-else>
           <div v-if="babies.length" class="hh__babies">
             <h3 class="hh__babies-title">{{ babies.length }} {{ babies.length === 1 ? "baby" : "babies" }} in this household</h3>
-            <BabyCard v-for="(baby, i) in babies" :key="baby.id" :baby="baby" :number="i + 1" />
+            <BabyCard
+              v-for="(baby, i) in babies"
+              :key="baby.id"
+              :baby="baby"
+              :number="i + 1"
+              :editable="canManageBabies"
+              :household-id="householdId"
+              :can-delete="canManageBabies && baby.id !== 'primary'"
+              @changed="onBabyChanged"
+              @deleted="onBabyDeleted"
+            />
           </div>
           <p v-else-if="joined && babyListError" class="hh__hint">We couldn’t load the household’s baby details. Ask a parent to check your caregiver access and that the latest Firestore rules are published.</p>
           <p v-else-if="joined" class="hh__hint">The household’s baby details have not been shared with this caregiver account.</p>
 
-          <p v-if="babyAdded" class="app-text-link" role="status">{{ babyAdded }} was added.</p>
+          <p v-if="babyAdded" class="app-text-link" role="status">{{ babyAdded }}</p>
 
           <button v-if="canManageBabies && !showAddBaby" type="button" class="app-btn app-btn--outline" @click="showAddBaby = true">
             Add another baby
@@ -505,7 +527,7 @@ async function copyCode() {
 .hh__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: 100%; }
 .hh__code { display: flex; align-items: center; justify-content: center; width: 100%; padding: 32px 48px; background: #fbe3d3; border-radius: 20px; }
 .hh__card--flat { padding: 0; background: transparent; border: 0; }
-.rv { display: flex; flex-direction: column; gap: 22px; width: 100%; max-width: 720px; }
+.rv { display: flex; flex-direction: column; gap: 22px; width: 100%; max-width: 45rem; }
 .rv__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(104px, auto); gap: 12px; margin: 0; padding: 0; list-style: none; }
 .rv__tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 16px 20px 18px; background: #fffdf8; border: 1.5px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 20px; transition: border-color 0.15s ease; }
 .rv__tile:focus-within { border-color: var(--navy, #243560); }

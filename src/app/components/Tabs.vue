@@ -110,6 +110,7 @@ function onKeydown(event, index) {
 }
 .apptabs__tab {
   margin-bottom: -1px;
+  min-height: 44px;
   padding: 10px 2px;
   background: none;
   border: 0;

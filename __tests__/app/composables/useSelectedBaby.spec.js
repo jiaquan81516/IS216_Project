@@ -45,11 +45,11 @@ describe("useSelectedBaby", () => {
     expect(selectedBaby.value).toEqual({ id: "baby1", name: "Alex" });
   });
 
-  it("falls back to 'primary' when the household has no babies at all", async () => {
+  it("clears the selected id when the household has no active babies", async () => {
     getHouseholdBabies.mockResolvedValue([]);
     const { loadBabies, selectedBabyId, selectedBaby } = useSelectedBaby();
     await loadBabies("house1");
-    expect(selectedBabyId.value).toBe("primary");
+    expect(selectedBabyId.value).toBe("");
     expect(selectedBaby.value).toBeNull();
   });
 

@@ -38,7 +38,7 @@ defineProps({
 .arc__chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; padding: 0; list-style: none; }
 .arc :deep(.app-pill) { padding: 3px 12px; background: #f6efdc; border: 1px solid #e9d9b8; color: #243560; font-size: 0.8125rem; font-weight: 600; }
 .arc :deep(.arc__actions) { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
-.arc :deep(.btn) { min-height: 40px; padding: 7px 22px; border-radius: 999px; font-size: 0.9375rem; font-weight: 700; transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease; }
+.arc :deep(.btn) { min-height: 44px; padding: 7px 22px; border-radius: 999px; font-size: 0.9375rem; font-weight: 700; transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease; }
 .arc :deep(.btn-primary) { background: #243560; border: 0; border-bottom: 3px solid #182246; color: #fff; }
 .arc :deep(.btn-primary:hover:not(:disabled)) { background: #2c4175; transform: translateY(-1px); }
 .arc :deep(.btn-outline) { background: #fff; border: 1.5px solid #e9d9b8; border-bottom-width: 3px; color: #243560; }

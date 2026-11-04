@@ -26,7 +26,7 @@ export function useSelectedBaby() {
       // A saved selection may belong to another household. Keep the selected id valid
       // before any new care entries are created for this household.
       if (!babies.value.some((baby) => baby.id === selectedBabyId.value)) {
-        selectBaby(babies.value[0]?.id ?? "primary");
+        selectBaby(babies.value[0]?.id ?? "");
       }
     } catch (cause) {
       babies.value = [];

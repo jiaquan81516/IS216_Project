@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import BrandLogo from "@/components/ui/BrandLogo.vue";
 import { useAuth } from "@/composables/useAuth";
@@ -25,17 +25,46 @@ const name = computed(
 
 const menuOpen = ref(false);
 const menuButton = ref(null);
-function toggleMenu() {
-  menuOpen.value = !menuOpen.value;
+const menuPanel = ref(null);
+async function toggleMenu() {
+  if (menuOpen.value) {
+    closeMenu({ restoreFocus: true });
+    return;
+  }
+  menuOpen.value = true;
+  await nextTick();
+  menuPanel.value?.querySelector('[aria-current="page"], a, button')?.focus();
+}
+function closeMenu({ restoreFocus = false } = {}) {
+  menuOpen.value = false;
+  if (restoreFocus) menuButton.value?.focus();
 }
 function onKeydown(event) {
   if (event.key === "Escape" && menuOpen.value) {
-    menuOpen.value = false;
-    menuButton.value?.focus();
+    closeMenu({ restoreFocus: true });
+  }
+}
+function trapMenu(event) {
+  if (!menuOpen.value || event.key !== "Tab") return;
+  const focusable = [...(menuPanel.value?.querySelectorAll('a[href], button:not([disabled])') ?? [])]
+    .filter((item) => item.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
   }
 }
 onMounted(() => window.addEventListener("keydown", onKeydown));
-onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+watch(menuOpen, (open) => document.documentElement.classList.toggle("app-menu-open", open));
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onKeydown);
+  document.documentElement.classList.remove("app-menu-open");
+});
 
 // Signing out asks first, as in the main app.
 const confirmOut = ref(false);
@@ -96,7 +125,7 @@ async function signOut() {
         <span>Menu</span>
       </button>
 
-      <div id="cg-top-panel" class="top__panel" :class="{ 'top__panel--open': menuOpen }">
+      <div id="cg-top-panel" ref="menuPanel" class="top__panel" :class="{ 'top__panel--open': menuOpen }" @keydown="trapMenu">
         <nav class="top__nav" aria-label="Main">
           <ul class="top__list">
             <li>
@@ -128,6 +157,7 @@ async function signOut() {
         </div>
       </div>
     </div>
+    <button v-if="menuOpen" type="button" class="top__scrim" aria-label="Close navigation menu" @click="closeMenu({ restoreFocus: true })"></button>
 
     <Teleport to="body">
       <Transition name="so">
@@ -150,7 +180,7 @@ async function signOut() {
 .top {
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 100;
   background: #1f3556;
   border-bottom: 1px solid rgb(255 255 255 / 10%);
 }
@@ -164,15 +194,20 @@ async function signOut() {
   border-radius: 8px;
 }
 .top__bar {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 32px;
-  max-width: 1360px;
+  max-width: 85rem;
   margin: 0 auto;
   padding: 0 clamp(16px, 4vw, 64px);
   min-height: 64px;
 }
 .top__menu {
+  display: none;
+}
+.top__scrim {
   display: none;
 }
 .top__panel {
@@ -269,50 +304,91 @@ async function signOut() {
   .top__bar {
     justify-content: space-between;
     min-height: 0;
-    padding: 12px 16px;
+    padding: 10px clamp(14px, 3vw, 24px);
   }
   .top__menu {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px;
-    background: #fff;
-    border: 1px solid #c9d3e3;
-    border-radius: 8px;
+    min-height: 44px;
+    padding: 9px 14px;
+    background: rgb(255 255 255 / 8%);
+    border: 1px solid rgb(255 255 255 / 24%);
+    border-radius: 12px;
     font-family: inherit;
     font-size: 0.875rem;
-    font-weight: 500;
-    color: #16233b;
+    font-weight: 700;
+    color: #fdf3e6;
     cursor: pointer;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+  }
+  .top__menu:hover {
+    background: rgb(255 255 255 / 14%);
+    border-color: rgb(255 255 255 / 38%);
+  }
+  .top__menu[aria-expanded="true"] {
+    background: #f6d8c6;
+    border-color: #f6d8c6;
+    color: #1f3556;
+  }
+  .top__menu:focus-visible {
+    outline: 3px solid #f6d8c6;
+    outline-offset: 3px;
+  }
+  .top__scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    display: block;
+    padding: 0;
+    background: rgb(8 16 32 / 46%);
+    border: 0;
   }
   .top__panel {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
+    position: fixed;
+    top: 64px;
     right: 0;
+    z-index: 3;
+    display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 16px;
-    padding: 16px;
+    gap: 12px;
+    width: min(390px, calc(100vw - 32px));
+    height: calc(100dvh - 64px);
+    overflow-y: auto;
+    padding: 18px 16px max(18px, env(safe-area-inset-bottom));
     background: #182a46;
-    border-bottom: 1px solid rgb(255 255 255 / 10%);
+    border-left: 1px solid rgb(255 255 255 / 12%);
+    box-shadow: -18px 20px 48px rgb(8 16 32 / 34%);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(24px);
+    pointer-events: none;
+    transition: opacity 160ms ease, transform 180ms ease, visibility 0s linear 180ms;
   }
   .top__panel--open {
-    display: flex;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    pointer-events: auto;
+    transition: opacity 160ms ease, transform 180ms ease;
   }
   .top__nav {
     align-self: auto;
   }
   .top__list {
     flex-direction: column;
+    align-items: stretch;
     gap: 2px;
+    height: auto;
   }
+  .top__list > li { display: block; }
   .top__link {
-    flex: 1;
+    width: 100%;
     gap: 12px;
-    padding: 10px 12px;
-    border-radius: 8px;
+    min-height: 46px;
+    padding: 11px 12px;
+    border-radius: 10px;
   }
   .top__link::after {
     display: none;
@@ -324,7 +400,25 @@ async function signOut() {
   }
   .top__user {
     order: 3;
+    width: 100%;
+    max-width: none;
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid rgb(255 255 255 / 12%);
   }
+}
+@media (max-width: 575px) {
+  .top__bar { padding: 9px 12px; }
+  .top__menu { width: 44px; padding: 0; justify-content: center; }
+  .top__menu span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  .top__panel { top: 62px; width: 100%; height: calc(100dvh - 62px); padding-inline: 14px; border-left: 0; }
+  .top :deep(.brand__name) { font-size: 1.25rem; }
+  .top :deep(.brand img) { width: 28px; height: 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .top__menu,
+  .top__panel,
+  .top__panel--open { transition: none; }
 }
 </style>
 

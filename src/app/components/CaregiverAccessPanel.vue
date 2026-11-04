@@ -398,7 +398,9 @@ const justJoined = (member) => {
         <fieldset class="cg__contacts" :disabled="busy || briefLoading">
           <legend>Parent phone numbers for this baby</legend>
           <div v-for="(row, index) in contacts" v-show="!row.note" :key="index" class="cg__contact">
-            <SelectField v-model="row.who" class="cg__contact-who" :options="whoOptions(row)" placeholder="Which parent" :aria-label="`Parent for number ${index + 1}`" />
+            <div class="cg__contact-who">
+              <SelectField v-model="row.who" :options="whoOptions(row)" placeholder="Which parent" :aria-label="`Parent for number ${index + 1}: ${row.who || 'not selected'}`" />
+            </div>
             <div class="cg__phone" :class="{ 'cg__phone--bad': row.phone && !isPhoneComplete(row.phone) }">
               <span class="cg__phone-flag" aria-hidden="true">+65</span>
               <input :value="row.phone" type="tel" inputmode="numeric" autocomplete="tel-national" placeholder="9123 4567" maxlength="9" :aria-label="`Phone number ${index + 1}`" @input="typePhone(row, $event)" />
@@ -449,16 +451,20 @@ const justJoined = (member) => {
 .cg__contacts { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; border: 0; }
 .cg__contacts legend { float: none; width: auto; margin: 0 0 6px; padding: 0; font-size: .875rem; font-weight: 600; }
 .cg__contact { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(150px, 1.2fr) auto; align-items: center; gap: 8px; }
+.cg__contact > * { min-width: 0; }
 .cg__phone { display: flex; align-items: center; min-height: 48px; background: #fff; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 14px; overflow: hidden; }
 .cg__phone:focus-within { border-color: var(--navy, #243560); box-shadow: 0 0 0 3px rgb(36 53 96 / 15%); }
 .cg__phone--bad { border-color: #d78251; }
 .cg__phone-flag { align-self: stretch; display: grid; place-items: center; padding: 0 12px; background: #fbf3e6; border-right: 1.5px solid var(--sand, #e9d9b8); font-size: .9375rem; font-weight: 700; color: var(--navy, #243560); }
 .cg__phone input { flex: 1; min-width: 0; padding: 10px 14px; background: transparent; border: 0; outline: 0; font: inherit; font-size: 1rem; font-variant-numeric: tabular-nums; letter-spacing: .04em; color: var(--navy, #243560); }
-.cg__contact-x { width: 36px; height: 36px; background: transparent; border: 0; border-radius: 50%; font-size: 1.25rem; line-height: 1; color: #a4541f; cursor: pointer; }
+.cg__contact-x { width: 44px; height: 44px; background: transparent; border: 0; border-radius: 50%; font-size: 1.25rem; line-height: 1; color: #a4541f; cursor: pointer; }
 .cg__contact-x:hover { background: #fbe3d3; }
 .cg__contact-hint { margin: 0; font-size: .8125rem; color: #a4541f; }
 .cg__addphone { align-self: flex-start; }
-@media (max-width: 560px) { .cg__contact { grid-template-columns: minmax(0, 1fr) auto; } .cg__contact-who { grid-column: 1 / -1; } }
+@media (max-width: 560px) {
+  .cg__contact { grid-template-columns: minmax(0, 1fr) 44px; gap: 10px 8px; }
+  .cg__contact-who { grid-column: 1 / -1; }
+}
 .cg__link--danger { color: var(--nt-coral); }
 .cg__invite-actions .cg__link { color: #a4541f; }
 </style>

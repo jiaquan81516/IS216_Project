@@ -151,6 +151,7 @@ export async function createHousehold(user, input = {}) {
     babyName,
     babyStatus,
     babyDate,
+    primaryBabyActive: true,
   });
   batch.set(doc(db, "households", householdId, "members", user.uid), {
     displayName: profile.displayName || user.displayName || "",
@@ -622,9 +623,22 @@ export async function addBaby(householdId, baby = {}) {
     throw error;
   }
   const clean = cleanBaby(baby);
+  const householdRef = doc(db, "households", householdId);
+  const household = await getDoc(householdRef);
+  if (household.exists() && household.data().primaryBabyActive === false) {
+    const batch = writeBatch(db);
+    batch.update(householdRef, { ...clean, primaryBabyActive: true });
+    batch.set(doc(db, "households", householdId, "careBrief", "child"), {
+      babyName: clean.babyName ?? "",
+      active: true,
+    }, { merge: true });
+    await batch.commit();
+    return { babyId: "primary" };
+  }
   const babyId = crypto.randomUUID();
   await setDoc(doc(db, "households", householdId, "babies", babyId), {
     ...clean,
+    active: true,
     createdAt: serverTimestamp(),
   });
   return { babyId };
@@ -639,9 +653,10 @@ export async function getHouseholdBabies(householdId) {
     // Caregivers cannot read the household document. Their shared child section carries
     // the primary baby's name, while the babies collection contains the additional children.
     try {
-      household = await getCareBrief(householdId, {
+      const brief = await getCareBrief(householdId, {
         routine: false, feeding: false, contacts: false, child: true, allergies: false, medications: false,
       });
+      household = { ...brief, primaryBabyActive: brief.active !== false };
     } catch {
       household = {};
     }
@@ -658,10 +673,11 @@ export async function getHouseholdBabies(householdId) {
   const snap = await getDocs(collection(db, "households", householdId, "babies"));
   const created = (data) => data.createdAt?.toMillis?.() ?? 0;
   const extra = snap.docs
+    .filter((d) => d.data().active !== false)
     .map((d) => ({ id: d.id, ...cleanBaby(d.data()), createdAt: created(d.data()) }))
     .sort((a, b) => a.createdAt - b.createdAt)
     .map(({ createdAt, ...rest }) => rest);
-  return [primary, ...extra];
+  return [...(household.primaryBabyActive === false ? [] : [primary]), ...extra];
 }
 
 export async function updateBaby(householdId, babyId, baby = {}) {
@@ -672,4 +688,18 @@ export async function updateBaby(householdId, babyId, baby = {}) {
   } else {
     await updateDoc(doc(db, "households", householdId, "babies", babyId), { babyName, babyStatus, babyDate });
   }
+}
+
+// Removing a baby hides them from active care without destroying their historical entries.
+// The first baby's profile lives on the household document; extra babies have their own docs.
+export async function deleteBaby(householdId, babyId) {
+  if (!householdId || !babyId) return;
+  if (babyId === "primary") {
+    const batch = writeBatch(db);
+    batch.update(doc(db, "households", householdId), { primaryBabyActive: false });
+    batch.set(doc(db, "households", householdId, "careBrief", "child"), { active: false }, { merge: true });
+    await batch.commit();
+    return;
+  }
+  await updateDoc(doc(db, "households", householdId, "babies", babyId), { active: false });
 }

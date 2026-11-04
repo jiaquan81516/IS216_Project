@@ -137,7 +137,7 @@ function dateLabel(at) {
 .rf :deep(.form-control) { background: #fff; border: 1.5px solid #e9d9b8; border-radius: 14px; color: #1f2a52; }
 .rf :deep(.form-control:focus) { border-color: #243560; box-shadow: 0 0 0 3px rgb(242 164 119 / 45%); }
 .rf__actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.rf :deep(.btn) { min-height: 38px; padding: 6px 20px; border-radius: 999px; font-size: 0.9375rem; font-weight: 700; transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease; }
+.rf :deep(.btn) { min-height: 44px; padding: 6px 20px; border-radius: 999px; font-size: 0.9375rem; font-weight: 700; transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease; }
 .rf :deep(.btn-primary) { background: #243560; border: 0; border-bottom: 3px solid #182246; color: #fff; }
 .rf :deep(.btn-primary:hover:not(:disabled)) { background: #2c4175; transform: translateY(-1px); }
 .rf :deep(.btn-outline) { background: #fff; border: 1.5px solid #e9d9b8; border-bottom-width: 3px; color: #243560; }

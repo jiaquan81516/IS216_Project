@@ -1,7 +1,7 @@
 /* App-only global styles. Imported by the App components; main.css is not touched. */
 .app-container {
   width: 100%;
-  max-width: 1168px;
+  max-width: 73rem;
   margin: 0 auto;
   padding: 0 24px;
 }
@@ -149,6 +149,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-height: 44px;
   margin: 0;
   padding: 6px 14px;
   background: var(--nt-surface, #fff);

@@ -150,9 +150,10 @@ service cloud.firestore {
             || isPrimaryParent()))
         || (isPrimaryParent()
           && request.resource.data.diff(resource.data).affectedKeys()
-               .hasOnly(['babyName', 'babyStatus', 'babyDate', 'inviteCode'])
+               .hasOnly(['babyName', 'babyStatus', 'babyDate', 'primaryBabyActive', 'inviteCode'])
           && (!('babyName' in request.resource.data) || request.resource.data.babyName == null
-            || (request.resource.data.babyName is string && request.resource.data.babyName.size() <= 80)))
+            || (request.resource.data.babyName is string && request.resource.data.babyName.size() <= 80))
+          && (!('primaryBabyActive' in request.resource.data) || request.resource.data.primaryBabyActive is bool))
       );
 
       match /members/{memberId} {
@@ -212,8 +213,10 @@ service cloud.firestore {
               && request.resource.data.keys().hasOnly(['parentContacts'])
               && request.resource.data.parentContacts is string && request.resource.data.parentContacts.size() <= 500)
             || (sectionId == 'child'
-              && request.resource.data.keys().hasOnly(['babyName'])
-              && request.resource.data.babyName is string && request.resource.data.babyName.size() <= 80)
+              && request.resource.data.keys().hasOnly(['babyName', 'active'])
+              && (!('babyName' in request.resource.data)
+                || (request.resource.data.babyName is string && request.resource.data.babyName.size() <= 80))
+              && (!('active' in request.resource.data) || request.resource.data.active is bool))
             || (sectionId == 'allergies'
               && request.resource.data.keys().hasOnly(['allergies'])
               && request.resource.data.allergies is string && request.resource.data.allergies.size() <= 500)
@@ -266,13 +269,14 @@ service cloud.firestore {
           || hasPermission('careLogAdd')
           || hasPermission('appointments');
         allow create, update: if isPrimaryParent()
-          && request.resource.data.keys().hasOnly(['babyName', 'babyStatus', 'babyDate', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['babyName', 'babyStatus', 'babyDate', 'active', 'createdAt'])
           && (request.resource.data.babyName == null
             || (request.resource.data.babyName is string && request.resource.data.babyName.size() <= 80))
           && request.resource.data.babyStatus in ['expected', 'born']
           && (request.resource.data.babyDate == null
-            || (request.resource.data.babyDate is string && request.resource.data.babyDate.size() == 10));
-        allow delete: if false;
+            || (request.resource.data.babyDate is string && request.resource.data.babyDate.size() == 10))
+          && (!('active' in request.resource.data) || request.resource.data.active is bool);
+        allow delete: if isPrimaryParent();
       }
 
       // The care log. Members read. Anyone can add their own entries. Only the author edits

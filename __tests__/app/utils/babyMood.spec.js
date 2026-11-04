@@ -4,6 +4,23 @@ import { readBaby } from "@/app/utils/babyMood";
 describe("readBaby", () => {
   const name = "Baby 1";
 
+  it("uses a prenatal state for an expected baby instead of calling them awake", () => {
+    const at = new Date(2026, 10, 4, 14, 0);
+    const out = readBaby([], "Roy", at, { babyStatus: "expected", babyDate: "2026-11-11" });
+    expect(out).toMatchObject({
+      expected: true,
+      state: "expected",
+      title: "Roy is due in 1 week",
+      due: "Due in 1 week",
+      detail: "Care logging will be available after birth.",
+    });
+  });
+
+  it("keeps the prenatal state when the due date has passed until the status is changed to born", () => {
+    const at = new Date(2026, 10, 12, 14, 0);
+    expect(readBaby([], "Roy", at, { babyStatus: "expected", babyDate: "2026-11-11" }).title).toBe("Roy's due date has passed");
+  });
+
   it("is 'sleeping' for an ongoing sleep with no end", () => {
     const at = new Date(2026, 10, 4, 14, 0);
     const list = [{ type: "sleep", at: new Date(2026, 10, 4, 13, 0) }];

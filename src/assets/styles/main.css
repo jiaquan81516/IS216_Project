@@ -51,9 +51,22 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* Large presentation displays need a larger design pixel, not merely more empty canvas.
+   This is deliberately continuous rather than tied to a breakpoint: it eases back to the
+   normal 16px baseline as the window shrinks, while width-based media queries remain free
+   to rearrange navigation, columns and actions for tablet and mobile layouts. */
+html {
+  font-size: clamp(16px, min(1.111vw, 1.778vh), 24px);
+}
+
 body {
   min-width: 320px;
   -webkit-font-smoothing: antialiased;
+}
+
+html.app-menu-open,
+html.app-menu-open body {
+  overflow: hidden;
 }
 
 /* Buttons: one solid plum per screen, everything else outlined or link. */
@@ -74,6 +87,7 @@ body {
   --bs-btn-padding-y: 0.4rem;
   --bs-btn-padding-x: 0.8rem;
   --bs-btn-font-size: 0.875rem;
+  min-height: 44px;
 }
 .btn-primary {
   --bs-btn-bg: var(--nt-plum);

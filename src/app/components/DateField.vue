@@ -225,11 +225,11 @@ watch(view, () => (yearPage.value = 0));
 
 .df__pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; width: min(320px, calc(100vw - 32px)); padding: 14px; background: var(--cream, #fdf9f0); border: 1.5px solid var(--navy, #243560); border-bottom-width: 4px; border-radius: 20px; box-shadow: 0 14px 30px rgb(36 53 96 / 22%); transform-origin: top left; }
 .df__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-.df__title { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; background: transparent; border: 0; border-radius: 10px; font-family: var(--nt-serif, inherit); font-size: 1.125rem; color: var(--navy, #243560); cursor: pointer; transition: background-color 0.14s ease; }
+.df__title { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 6px 10px; background: transparent; border: 0; border-radius: 10px; font-family: var(--nt-serif, inherit); font-size: 1.125rem; color: var(--navy, #243560); cursor: pointer; transition: background-color 0.14s ease; }
 .df__title:hover, .df__title:focus-visible { outline: none; background: var(--sand, #e9d9b8); }
 .df__tchev { transition: transform 0.2s ease; }
 .df__tchev--up { transform: rotate(180deg); }
-.df__nav { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; background: #fff; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 50%; color: var(--navy, #243560); cursor: pointer; transition: border-color 0.14s ease, background-color 0.14s ease; }
+.df__nav { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; background: #fff; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 50%; color: var(--navy, #243560); cursor: pointer; transition: border-color 0.14s ease, background-color 0.14s ease; }
 .df__nav:hover, .df__nav:focus-visible { outline: none; border-color: var(--navy, #243560); background: var(--cream, #fdf9f0); }
 .df__prev { transform: rotate(90deg); }
 .df__next { transform: rotate(-90deg); }
