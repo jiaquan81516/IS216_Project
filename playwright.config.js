@@ -1,110 +1,98 @@
-import process from 'node:process'
 import { defineConfig, devices } from '@playwright/test'
+import process from 'node:process'
 
-/**
- * Read environment variables from file.
- * https://github.com/motdotla/dotenv
- */
-// require('dotenv').config();
+const authDir = '__tests__/e2e/.auth'
+Object.assign(process.env, {
+  E2E_EMULATORS: 'true',
+  GCLOUD_PROJECT: 'demo-is216',
+  FIREBASE_PROJECT_ID: 'demo-is216',
+  FIREBASE_AUTH_EMULATOR_HOST: '127.0.0.1:9099',
+  FIRESTORE_EMULATOR_HOST: '127.0.0.1:8080',
+  ADMIN_UID: 'e2e-admin',
+})
 
-/**
- * See https://playwright.dev/docs/test-configuration.
- */
 export default defineConfig({
-  testDir: './tests/e2e',
-  /* Maximum time one test can run for. */
-  timeout: 30 * 1000,
-  expect: {
-    /**
-     * Maximum time expect() should wait for the condition to be met.
-     * For example in `await expect(locator).toHaveText();`
-     */
-    timeout: 5000,
-  },
-  /* Fail the build on CI if you accidentally left test.only in the source code. */
+  testDir: './__tests__/e2e',
+  testMatch: '**/*.spec.js',
+  globalSetup: './scripts/e2e-global-setup.mjs',
+  timeout: 30_000,
+  expect: { timeout: 8_000 },
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  /* Retry on CI only */
-  retries: process.env.CI ? 2 : 0,
-  /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? 1 : undefined,
-  /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
-  /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
+  retries: 0,
+  workers: 1,
+  reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    /* Maximum time each action such as `click()` can take. Defaults to 0 (no limit). */
-    actionTimeout: 0,
-    /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: process.env.CI ? 'http://localhost:4173' : 'http://localhost:5173',
-
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
-
-    /* Only on CI systems run the tests headless */
-    headless: !!process.env.CI,
+    baseURL: 'http://127.0.0.1:4173',
+    actionTimeout: 8_000,
+    navigationTimeout: 15_000,
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+    headless: true,
   },
-
-  /* Configure projects for major browsers */
   projects: [
+    { name: 'auth-setup', testMatch: /auth\.setup\.js/ },
+    { name: 'public-chromium', testMatch: /public-smoke\.spec\.js/, use: { ...devices['Desktop Chrome'] } },
+    { name: 'public-firefox', testMatch: /public-smoke\.spec\.js/, use: { ...devices['Desktop Firefox'] } },
+    { name: 'public-webkit', testMatch: /public-smoke\.spec\.js/, use: { ...devices['Desktop Safari'] } },
+    { name: 'public-mobile-chrome', testMatch: /public-smoke\.spec\.js/, use: { ...devices['Pixel 5'] } },
+    { name: 'public-mobile-safari', testMatch: /public-smoke\.spec\.js/, use: { ...devices['iPhone 12'] } },
     {
-      name: 'chromium',
-      use: {
-        ...devices['Desktop Chrome'],
-      },
+      name: 'caregiver-desktop',
+      testMatch: /caregiver\.spec\.js/,
+      dependencies: ['auth-setup'],
+      use: { ...devices['Desktop Chrome'], storageState: `${authDir}/caregiver.json` },
     },
     {
-      name: 'firefox',
-      use: {
-        ...devices['Desktop Firefox'],
-      },
+      name: 'caregiver-tablet',
+      testMatch: /caregiver-responsive\.spec\.js/,
+      dependencies: ['auth-setup'],
+      use: { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 }, hasTouch: true, storageState: `${authDir}/caregiver.json` },
     },
     {
-      name: 'webkit',
-      use: {
-        ...devices['Desktop Safari'],
-      },
+      name: 'caregiver-mobile',
+      testMatch: /caregiver-responsive\.spec\.js/,
+      dependencies: ['auth-setup'],
+      use: { ...devices['iPhone 12'], storageState: `${authDir}/caregiver.json` },
     },
-
-    /* Test against mobile viewports. */
-    // {
-    //   name: 'Mobile Chrome',
-    //   use: {
-    //     ...devices['Pixel 5'],
-    //   },
-    // },
-    // {
-    //   name: 'Mobile Safari',
-    //   use: {
-    //     ...devices['iPhone 12'],
-    //   },
-    // },
-
-    /* Test against branded browsers. */
-    // {
-    //   name: 'Microsoft Edge',
-    //   use: {
-    //     channel: 'msedge',
-    //   },
-    // },
-    // {
-    //   name: 'Google Chrome',
-    //   use: {
-    //     channel: 'chrome',
-    //   },
-    // },
+    {
+      name: 'parent-desktop',
+      testMatch: /calendar\.spec\.js/,
+      dependencies: ['auth-setup'],
+      use: { ...devices['Desktop Chrome'], storageState: `${authDir}/parent.json` },
+    },
+    {
+      name: 'parent-mobile',
+      testMatch: /calendar-responsive\.spec\.js/,
+      dependencies: ['auth-setup'],
+      use: { ...devices['iPhone 12'], storageState: `${authDir}/parent.json` },
+    },
+    {
+      name: 'admin-desktop',
+      testMatch: /admin\.spec\.js/,
+      dependencies: ['auth-setup'],
+      use: { ...devices['Desktop Chrome'], storageState: `${authDir}/admin.json` },
+    },
+    {
+      name: 'admin-mobile',
+      testMatch: /admin-responsive\.spec\.js/,
+      dependencies: ['auth-setup'],
+      use: { ...devices['iPhone 12'], storageState: `${authDir}/admin.json` },
+    },
   ],
-
-  /* Folder for test artifacts such as screenshots, videos, traces, etc. */
-  // outputDir: 'test-results/',
-
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    /**
-     * Use the dev server by default for faster feedback loop.
-     * Use the preview server on CI for more realistic testing.
-     * Playwright will re-use the local server if there is already a dev-server running.
-     */
-    command: process.env.CI ? 'npm run preview' : 'npm run dev',
-    port: process.env.CI ? 4173 : 5173,
-    reuseExistingServer: !process.env.CI,
-  },
+  webServer: [
+    {
+      command: 'pnpm e2e:emulators',
+      url: 'http://127.0.0.1:4400',
+      timeout: 60_000,
+      reuseExistingServer: false,
+    },
+    {
+      command: 'pnpm dev:e2e',
+      url: 'http://127.0.0.1:4173',
+      timeout: 75_000,
+      reuseExistingServer: false,
+    },
+  ],
 })
