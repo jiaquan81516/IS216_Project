@@ -13,7 +13,7 @@ import BabyCard from "@/app/components/BabyCard.vue";
 import AppLink from "@/components/ui/AppLink.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import { useDelayedFlag } from "@/app/composables/useDelayedFlag";
-import { SAMPLE } from "@/shared/constants/appConstants";
+import { SAMPLE } from "@/constants/appConstants";
 import { ROUTES } from "@/app/routes";
 import { SETUP_MESSAGES, WELCOME_MS, wait } from "@/app/utils/pause";
 import { useAuth } from "@/app/composables/useAuth";

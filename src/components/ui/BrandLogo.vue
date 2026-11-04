@@ -1,7 +1,7 @@
 <script setup>
 import { RouterLink } from "vue-router";
-import { ROUTES } from "@/shared/constants/routes";
-import { APP_NAME } from "@/shared/constants/appConstants";
+import { ROUTES } from "@/app/routes";
+import { APP_NAME } from "@/constants/appConstants";
 
 defineProps({ to: { type: String, default: ROUTES.HOME } });
 </script>
