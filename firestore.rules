@@ -184,7 +184,11 @@ service cloud.firestore {
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'photoURL', 'role'])
             && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']) || isPrimaryMember(resource.data))
             && (!('displayName' in request.resource.data) || request.resource.data.displayName == null
-              || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 80)))
+              || (request.resource.data.displayName is string && request.resource.data.displayName.size() <= 80))
+            // A profile photo is a small JPEG data URL, capped so one person cannot push a huge
+            // string into a shared document.
+            && (!('photoURL' in request.resource.data) || request.resource.data.photoURL == null
+              || (request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 60000)))
           || (isPrimaryParent()
             && !isPrimaryMember(resource.data)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'accessLevel', 'permissions'])

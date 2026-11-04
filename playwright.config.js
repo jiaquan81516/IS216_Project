@@ -68,6 +68,22 @@ export default defineConfig({
       dependencies: ['auth-setup'],
       use: { ...devices['iPhone 12'], storageState: `${authDir}/parent.json` },
     },
+    // The profile photo editor on every kind of screen, as the signed-in parent: a very small
+    // phone, a phone, a phone on its side, a tablet and two desktops (Chrome and Safari's engine).
+    ...[
+      ['photo-small-phone', { ...devices['Desktop Chrome'], viewport: { width: 320, height: 568 }, hasTouch: true }],
+      ['photo-phone', { ...devices['iPhone 12'] }],
+      ['photo-android', { ...devices['Pixel 5'] }],
+      ['photo-phone-landscape', { ...devices['Desktop Chrome'], viewport: { width: 844, height: 390 }, hasTouch: true }],
+      ['photo-tablet', { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 }, hasTouch: true }],
+      ['photo-desktop', { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } }],
+      ['photo-desktop-safari', { ...devices['Desktop Safari'] }],
+    ].map(([name, use]) => ({
+      name,
+      testMatch: /profile-photo\.spec\.js/,
+      dependencies: ['auth-setup'],
+      use: { ...use, storageState: `${authDir}/parent.json` },
+    })),
     {
       name: 'admin-desktop',
       testMatch: /admin\.spec\.js/,

@@ -5,6 +5,7 @@ import "@/app/app.css";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AppButton from "@/components/ui/AppButton.vue";
+import Avatar from "@/app/components/Avatar.vue";
 import Icon from "@/app/components/Icon.vue";
 import PageHero from "@/app/components/PageHero.vue";
 import ChipGroup from "@/app/components/ChipGroup.vue";
@@ -774,8 +775,13 @@ async function confirmDelete() {
       <section class="st__card" aria-labelledby="st-partner-h">
         <h2 id="st-partner-h" class="st__h"><span class="st__ico" aria-hidden="true"><Icon name="heart" :size="20" /></span>Partner</h2>
         <template v-if="partner">
-          <p class="st__text">{{ partnerName }} shares this household.</p>
-          <p v-if="partnerRole" class="st__muted">Role: {{ partnerRole }}.</p>
+          <div class="st__partner">
+            <Avatar :name="partnerName" :src="partner.photoURL" tone="powder" :size="48" />
+            <div class="st__partner-text">
+              <p class="st__text">{{ partnerName }} shares this household.</p>
+              <p v-if="partnerRole" class="st__muted">Role: {{ partnerRole }}.</p>
+            </div>
+          </div>
         </template>
         <template v-else>
           <p class="st__muted">Nobody else has joined yet. Share this code.</p>
@@ -947,6 +953,8 @@ async function confirmDelete() {
 .st__field { display: flex; flex-direction: column; gap: 8px; }
 .st__pair { display: flex; flex-wrap: wrap; gap: 16px; }
 .st__label { font-size: 0.9375rem; font-weight: 600; color: var(--ink, #1f2a52); }
+.st__partner { display: flex; align-items: center; gap: 14px; }
+.st__partner-text { min-width: 0; }
 .st__muted { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--mut, #5b6692); }
 .st__text { margin: 0; font-size: 0.9375rem; line-height: 1.5; color: var(--ink, #1f2a52); }
 .st__save { min-height: 20px; margin: 0; font-size: 0.875rem; line-height: 20px; color: var(--mut, #5b6692); }

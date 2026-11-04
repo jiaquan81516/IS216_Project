@@ -1,5 +1,6 @@
 <script setup>
 import { onBeforeUnmount, watch } from "vue";
+import Avatar from "@/app/components/Avatar.vue";
 import "@/app/app.css";
 
 defineOptions({ name: "PartnerToast" });
@@ -9,10 +10,14 @@ defineOptions({ name: "PartnerToast" });
 const props = defineProps({
   toasts: { type: Array, default: () => [] }, // { id, kind, title, text, to? } to opens a page instead of the chat
   ms: { type: Number, default: 6000 },
+  partnerName: { type: String, default: "" },
+  partnerPhoto: { type: String, default: "" },
 });
 const emit = defineEmits(["close", "open"]);
 
 const timers = new Map();
+// Things your partner wrote or did carry their face; app reminders do not.
+const fromPartner = (toast) => toast.kind === "message" || String(toast.kind).startsWith("partner-");
 
 function start(toast) {
   stop(toast.id);
@@ -49,9 +54,12 @@ onBeforeUnmount(() => [...timers.keys()].forEach(stop));
       @focusin="stop(toast.id)"
       @focusout="start(toast)"
     >
+      <div class="pt__row">
+      <Avatar v-if="fromPartner(toast)" class="pt__avatar" :name="partnerName || toast.title" :src="partnerPhoto" tone="powder" :size="36" />
       <div class="pt__body">
         <p class="pt__title">{{ toast.title }}</p>
         <p class="pt__text">{{ toast.text }}</p>
+      </div>
       </div>
       <div class="pt__actions">
         <button type="button" class="pt__link" @click="emit('open', toast)">{{ toast.to ? "Open checklist" : "Open chat" }}</button>
@@ -67,6 +75,8 @@ onBeforeUnmount(() => [...timers.keys()].forEach(stop));
 .pt__toast--care { border-left: 3px solid var(--nt-coral, #c0553b); }
 .pt__toast--bold { background: var(--nt-plum, #3b2f3f); border-color: var(--nt-plum, #3b2f3f); }
 .pt__toast--bold .pt__title, .pt__toast--bold .pt__text, .pt__toast--bold .pt__link { color: #fff; }
+.pt__row { display: flex; align-items: flex-start; gap: 10px; }
+.pt__body { min-width: 0; flex: 1; }
 .pt__title { margin: 0; font-size: 0.9375rem; font-weight: 600; line-height: 1.35; color: var(--nt-ink); }
 .pt__text { margin: 2px 0 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); overflow-wrap: anywhere; }
 .pt__actions { display: flex; align-items: center; gap: 8px 14px; }
