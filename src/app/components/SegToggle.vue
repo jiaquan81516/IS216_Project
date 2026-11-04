@@ -10,10 +10,12 @@ const props = defineProps({
 });
 const emit = defineEmits(["update:modelValue"]);
 const index = computed(() => Math.max(0, props.options.findIndex((o) => o.value === props.modelValue)));
+// With no choice made yet (a question not answered), the highlight stays hidden.
+const chosen = computed(() => props.options.some((o) => o.value === props.modelValue));
 </script>
 
 <template>
-  <div class="sg" role="radiogroup" :aria-label="label" :style="{ '--n': options.length, '--i': index }">
+  <div class="sg" :class="{ 'sg--none': !chosen }" role="radiogroup" :aria-label="label" :style="{ '--n': options.length, '--i': index }">
     <span class="sg__thumb" aria-hidden="true"></span>
     <button
       v-for="o in options"
@@ -49,6 +51,9 @@ const index = computed(() => Math.max(0, props.options.findIndex((o) => o.value 
   border-radius: 999px;
   transform: translateX(calc(var(--i) * 100%));
   transition: transform 280ms cubic-bezier(0.34, 1.25, 0.64, 1);
+}
+.sg--none .sg__thumb {
+  opacity: 0;
 }
 .sg__btn {
   position: relative;

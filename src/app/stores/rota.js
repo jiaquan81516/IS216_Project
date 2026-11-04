@@ -73,8 +73,11 @@ function cleanCarerNights(list) {
 // the calendar month grid without a second listener.
 const WINDOW_DAYS = 365;
 
-export function rotaDefaults(today = new Date()) {
-  return { pattern: "alternate", startDate: mondayOf(today), handoverTime: "07:00", firstOnDuty: null };
+// `hasPartner` decides the default rotation: "alternate" only makes sense with someone to
+// alternate with, so a solo household (no partner yet, or one who has since left) defaults
+// to "manual" instead, even before any settings document has ever been saved.
+export function rotaDefaults(today = new Date(), hasPartner = true) {
+  return { pattern: hasPartner ? "alternate" : "manual", startDate: mondayOf(today), handoverTime: "07:00", firstOnDuty: null };
 }
 
 // The shared sleep rota. Firestore is the only store: nothing is kept in localStorage.
@@ -88,6 +91,8 @@ export const useRotaStore = defineStore("app-rota", () => {
   const householdId = ref("");
   const meUid = ref("");
   const partnerUid = ref("");
+  // Carers who can see Duty, { uid: first name }, so a carer's own shifts read as her, not as the partner.
+  const carerLabels = ref({});
 
   let stops = [];
   let seen = new Set();
@@ -106,6 +111,10 @@ export const useRotaStore = defineStore("app-rota", () => {
     error.value = null;
     writeError.value = "";
     householdId.value = "";
+    // Without this, rebinding to a different household (useShared.js re-binds whenever
+    // householdId/meUid change) would never run legacy migration for that household, since
+    // `migrating` stayed true from the very first bind of this store instance's lifetime.
+    migrating = false;
   }
 
   function fail(cause) {
@@ -180,10 +189,13 @@ export const useRotaStore = defineStore("app-rota", () => {
   function setPartnerUid(uid) {
     partnerUid.value = uid ?? "";
   }
+  function setCarers(map) {
+    carerLabels.value = map && typeof map === "object" ? map : {};
+  }
 
   // The settings with defaults filled in, still holding uids.
   const plan = computed(() => {
-    const base = rotaDefaults();
+    const base = rotaDefaults(new Date(), Boolean(partnerUid.value));
     const data = settings.value ?? {};
     return {
       pattern: PATTERNS.includes(data.pattern) ? data.pattern : base.pattern,
@@ -209,8 +221,10 @@ export const useRotaStore = defineStore("app-rota", () => {
       if (who) overrides[date] = who;
     }
     const toKind = (who) => (who === "both" || who === "other" ? who : ownerKey(who, me));
+    // A shift stored under a carer's uid shows as that carer (someone else), never as the partner.
+    const carerShift = (s) => (s?.who && s.who !== me && carerLabels.value[s.who] ? { ...s, who: "other", label: carerLabels.value[s.who] } : { ...s, who: toKind(s?.who) });
     const schedule = plan.value.schedule
-      ? cleanShifts(plan.value.schedule.map((s) => ({ ...s, who: toKind(s?.who) })))
+      ? cleanShifts(plan.value.schedule.map(carerShift))
       : fromHourCells(plan.value.hourCover.map((cell) => (cell ? { ...cell, who: toKind(cell.who) } : null)));
     return {
       pattern: plan.value.pattern,
@@ -283,6 +297,15 @@ export const useRotaStore = defineStore("app-rota", () => {
       who: s.who === "me" || s.who === "partner" ? ownerUid(s.who, meUid.value, partnerUid.value) || "" : s.who,
       label: s.label,
     }));
+    // A carer's shift keeps her uid when a parent saves the list, so it is never turned into a plain name.
+    for (const s of stored) {
+      if (s.who !== "other") continue;
+      const uid = Object.keys(carerLabels.value).find((k) => carerLabels.value[k] === s.label);
+      if (uid) {
+        s.who = uid;
+        s.label = "";
+      }
+    }
     return saveSettings({ schedule: stored.filter((s) => s.who) });
   }
   // Carers who take fixed nights every week. Saves the whole list.
@@ -371,7 +394,7 @@ export const useRotaStore = defineStore("app-rota", () => {
 
   // Back to the default pattern, and every loaded override cleared for both parents.
   async function reset() {
-    const ok = await saveSettings({ ...rotaDefaults(), firstOnDuty: meUid.value, hourCover: Array(HOURS).fill(""), dayShifts: [], schedule: [], carerNights: [] });
+    const ok = await saveSettings({ ...rotaDefaults(new Date(), Boolean(partnerUid.value)), firstOnDuty: meUid.value, hourCover: Array(HOURS).fill(""), dayShifts: [], schedule: [], carerNights: [] });
     if (!ok) return false;
     const dates = Object.keys(nights.value);
     for (const date of dates) {
@@ -401,6 +424,7 @@ export const useRotaStore = defineStore("app-rota", () => {
     bind,
     unbind,
     setPartnerUid,
+    setCarers,
     saveSettings,
     setPattern,
     setFirstOnDuty,

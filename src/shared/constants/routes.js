@@ -19,7 +19,6 @@ export const ROUTES = Object.freeze({
   HELP: "/help",
   HELP_READING: "/help/reading",
   GUIDE: "/help/guide/:topic?",
-  RETURN_TO_WORK: "/return-to-work",
   PUMPING: "/pumping-rooms",
   PUMPING_NEW: "/pumping-rooms/new",
   PUMPING_DETAIL: "/pumping-rooms/:id",

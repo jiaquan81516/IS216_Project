@@ -20,7 +20,14 @@ export function parseIso(iso) {
 }
 
 export function isIsoDate(value) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(parseIso(value).getTime());
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = parseIso(value);
+  if (Number.isNaN(date.getTime())) return false;
+  // parseIso's `new Date(y, m-1, d)` rolls an out-of-range month/day into the next one
+  // instead of failing ("2026-02-30" silently becomes 2 Mar), so a mismatch here means the
+  // calendar date never existed and must read as invalid, not as whatever it rolled into.
+  const [y, m, d] = value.split("-").map(Number);
+  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
 }
 
 export function addDays(iso, n) {
@@ -249,4 +256,11 @@ export function suggest(nights, names = {}) {
 // Remove a pending request of mine.
 export function cancelSwap(swaps, id) {
   return swaps.filter((s) => !(s.id === id && s.status === "pending" && s.from === "me"));
+}
+
+// "Tiara", "Tiara and Noah", "Tiara, Noah and Mei": every baby the plan covers.
+export function joinNames(names) {
+  const list = names.filter(Boolean);
+  if (list.length <= 1) return list[0] ?? "";
+  return `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`;
 }

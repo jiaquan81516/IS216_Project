@@ -190,7 +190,7 @@ service cloud.firestore {
             && request.resource.data.accessLevel == 'caregiver'
             && request.resource.data.role in ['grandparent', 'domestic-helper', 'babysitter', 'childcare-provider', 'trusted-caregiver']
             && request.resource.data.permissions is map
-            && request.resource.data.permissions.keys().hasOnly(['careBrief', 'careLogRead', 'careLogAdd', 'careLogEdit', 'careLogMedication', 'feedingInstructions', 'allergyInfo', 'medicationInfo', 'appointments', 'napRoutine', 'dutyView']));
+            && request.resource.data.permissions.keys().hasOnly(['careBrief', 'careLogRead', 'careLogAdd', 'careLogEdit', 'careLogMedication', 'feedingInstructions', 'allergyInfo', 'medicationInfo', 'appointments', 'napRoutine', 'dutyView', 'dutyEdit']));
         allow delete: if (signedIn() && request.auth.uid == memberId)
           || (isPrimaryParent() && !isPrimaryMember(resource.data));
       }
@@ -285,6 +285,14 @@ service cloud.firestore {
         function validEntry() {
           return request.resource.data.type in ['feed', 'sleep', 'nappy', 'medication', 'note']
             && request.resource.data.at is timestamp
+            // The baby must be the first baby or one that exists, and the author's name is capped.
+            && (!('babyId' in request.resource.data)
+              || request.resource.data.babyId == null
+              || request.resource.data.babyId == 'primary'
+              || exists(/databases/$(database)/documents/households/$(householdId)/babies/$(request.resource.data.babyId)))
+            && (!('byName' in request.resource.data)
+              || request.resource.data.byName == null
+              || (request.resource.data.byName is string && request.resource.data.byName.size() <= 60))
             // A note is user supplied text, so it is capped the same way everywhere else.
             && (!('details' in request.resource.data)
               || !('text' in request.resource.data.details)
@@ -293,11 +301,19 @@ service cloud.firestore {
                 && request.resource.data.details.text.size() <= 400));
         }
 
-        allow read: if hasPermission('careLogRead');
+        // Members read the log when allowed, and always see the entries they logged themselves.
+        // Note: a rule cannot hide only the medication entries from a list query (it would reject the
+        // whole query), so the medication permission limits adding and editing; the app never shows
+        // other people's medication entries to a caregiver.
+        allow read: if hasPermission('careLogRead')
+          || (isMember() && resource.data.by == request.auth.uid);
 
         allow create: if hasPermission('careLogAdd')
           && (request.resource.data.type != 'medication' || hasPermission('careLogMedication'))
           && request.resource.data.by == request.auth.uid
+          // Logged times stay realistic: no later than a few minutes ahead, no older than two weeks.
+          && request.resource.data.at <= request.time + duration.value(5, 'm')
+          && request.resource.data.at >= request.time - duration.value(14, 'd')
           && validEntry();
 
         allow update: if isMember() && (
@@ -306,7 +322,14 @@ service cloud.firestore {
             && resource.data.by == request.auth.uid
             && request.resource.data.by == resource.data.by
             && validEntry())
-          || (hasPermission('careLogRead') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy'])
+          // Anyone who can add entries may end a sleep that is still running ("awake now").
+          || (hasPermission('careLogAdd')
+            && resource.data.type == 'sleep'
+            && resource.data.get('endedAt', null) == null
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['endedAt'])
+            && request.resource.data.endedAt is timestamp)
+          // Only parents mark entries as seen, so a caregiver cannot change what "seen" means.
+          || (isPrimaryParent() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenBy'])
             && request.resource.data.seenBy.diff(resource.data.seenBy).affectedKeys().hasOnly([request.auth.uid]))
         );
 
@@ -325,6 +348,12 @@ service cloud.firestore {
       match /rota/{docId} {
         allow read: if isPrimaryParent() || hasPermission('dutyView');
         allow create, update: if isPrimaryParent() && request.resource.data.updatedBy == request.auth.uid;
+        // A carer a parent trusted with "Edit the day schedule" may change the weekly day shifts and
+        // nothing else: not the night plan, the handover time or anyone's nights.
+        allow update: if docId == 'settings'
+          && hasPermission('dutyView') && hasPermission('dutyEdit')
+          && request.resource.data.updatedBy == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['schedule', 'updatedAt', 'updatedBy']);
         allow delete: if false;
       }
 
@@ -366,7 +395,7 @@ service cloud.firestore {
         allow delete: if isPrimaryParent();
       }
 
-      // Return to work tasks. Shared the same way as events.
+      // Shared checklist tasks. Shared the same way as events.
       match /tasks/{taskId} {
         allow read: if isPrimaryParent();
         allow create: if isPrimaryParent() && request.resource.data.createdBy == request.auth.uid;
@@ -398,8 +427,8 @@ service cloud.firestore {
       // (under 400 KB as text) so it stays well inside the 1 MB document limit. Both parents read,
       // add, change or remove it, and every write names who made it.
       match /photo/{docId} {
-        allow read: if sharedMember();
-        allow create, update: if sharedMember()
+        allow read: if isPrimaryParent();
+        allow create, update: if isPrimaryParent()
           && docId == 'frame'
           && request.resource.data.keys().hasOnly(['image', 'caption', 'updatedBy', 'updatedAt'])
           && request.resource.data.image is string
@@ -408,14 +437,14 @@ service cloud.firestore {
           && request.resource.data.caption.size() <= 40
           && request.resource.data.updatedBy == request.auth.uid
           && request.resource.data.updatedAt == request.time;
-        allow delete: if sharedMember() && docId == 'frame';
+        allow delete: if isPrimaryParent() && docId == 'frame';
       }
 
       // Wellness check-ins. Both parents read them, so the week can be shown as a pair. One
       // document per person per day, named uid_yyyy-mm-dd, and only its owner writes it.
       match /checkins/{checkinId} {
-        allow read: if sharedMember();
-        allow create, update: if sharedMember()
+        allow read: if isPrimaryParent();
+        allow create, update: if isPrimaryParent()
           && request.resource.data.keys().hasOnly(['uid', 'date', 'mood', 'stress', 'energy', 'closeness', 'concerns', 'body', 'lifts', 'savedAt', 'moodStage', 'need', 'updatedAt'])
           && request.resource.data.uid == request.auth.uid
           && request.resource.data.date is string
@@ -469,20 +498,16 @@ service cloud.firestore {
 
         allow delete: if isPrimaryParent() && resource.data.authorUid == request.auth.uid;
       }
-
-      // The return to work plan. One document, "plan", like the rota settings.
-      match /rtw/{docId} {
-        allow read: if isPrimaryParent();
-        allow create, update: if isPrimaryParent() && request.resource.data.updatedBy == request.auth.uid;
-        allow delete: if false;
-      }
     }
 
     // Invitation codes. Any signed in user can read a code to join with it. An invite is
     // never deleted: it is marked used when somebody joins with it, and revoked when the
     // household makes a new code, so an old code gets a clear answer instead of "not found".
     match /invites/{code} {
-      allow read: if signedIn();
+      // A person needs to read the one code they were given, so a single lookup is open to any
+      // signed in user. Listing is limited to the household's parents, so codes cannot be harvested.
+      allow get: if signedIn();
+      allow list: if signedIn() && isParentFor(resource.data.householdId);
       allow create: if signedIn()
         && (isParentFor(request.resource.data.householdId)
           || isCreatorOfNewHousehold(request.resource.data.householdId))
@@ -493,7 +518,7 @@ service cloud.firestore {
         && (request.resource.data.kind != 'caregiver'
           || (request.resource.data.caregiverRole in ['grandparent', 'domestic-helper', 'babysitter', 'childcare-provider', 'trusted-caregiver']
             && request.resource.data.permissions is map
-            && request.resource.data.permissions.keys().hasOnly(['careBrief', 'careLogRead', 'careLogAdd', 'careLogEdit', 'careLogMedication', 'feedingInstructions', 'allergyInfo', 'medicationInfo', 'appointments', 'napRoutine', 'dutyView'])
+            && request.resource.data.permissions.keys().hasOnly(['careBrief', 'careLogRead', 'careLogAdd', 'careLogEdit', 'careLogMedication', 'feedingInstructions', 'allergyInfo', 'medicationInfo', 'appointments', 'napRoutine', 'dutyView', 'dutyEdit'])
             && request.resource.data.caregiverName is string
             && request.resource.data.caregiverName.size() <= 40));
 
@@ -607,7 +632,14 @@ service cloud.firestore {
           && request.resource.data.text.size() > 0
           && request.resource.data.text.size() <= 400
           && request.resource.data.at == request.time;
-        allow update, delete: if false;
+        allow update: if roomAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedBy', 'editedAt'])
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 400
+          && request.resource.data.editedBy == request.auth.uid
+          && request.resource.data.editedAt == request.time;
+        allow delete: if false;
       }
 
       match /reports/{reportId} {
@@ -621,6 +653,12 @@ service cloud.firestore {
           && request.resource.data.value.size() <= 400;
         allow update, delete: if false;
       }
+    }
+
+    // Admin collection-group view, including feedback on bundled directory rooms.
+    // The feedback collection name is reserved for pumping-room feedback.
+    match /{path=**}/feedback/{feedbackId} {
+      allow read: if roomAdmin();
     }
   }
 }

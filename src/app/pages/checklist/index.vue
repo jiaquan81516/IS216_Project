@@ -1,5 +1,6 @@
 <script setup>
-import BabySwitch from "@/app/components/BabySwitch.vue";
+import PageHero from "@/app/components/PageHero.vue";
+import StatusPill from "@/app/components/StatusPill.vue";
 import Collapse from "@/app/components/Collapse.vue";
 import DateWheel from "@/app/components/DateWheel.vue";
 import FilterSelect from "@/app/components/FilterSelect.vue";
@@ -24,7 +25,7 @@ const { loading, error, reload, me, partner, householdId } = home;
 const myUid = computed(() => me.value.uid);
 const partnerUid = computed(() => partner.value?.uid ?? "");
 const shared = inject(SHARED_KEY, null) ?? useShared(householdId, myUid, partnerUid);
-const rtw = shared.rtw;
+const taskStore = shared.tasks;
 
 const now = ref(new Date());
 let clock = null;
@@ -39,9 +40,9 @@ const myName = computed(() => displayName(me.value.firstName) || "Me");
 const partnerFirst = computed(() => (partner.value ? displayName(partner.value.firstName) : ""));
 const hasPartner = computed(() => Boolean(partnerUid.value));
 
-const tasks = computed(() => rtw.tasks ?? []);
-const listLoading = computed(() => !householdId.value || Boolean(rtw.loading));
-const listErrorInfo = computed(() => (rtw.error ? describeSharedError(rtw.error.code, "checklist") : null));
+const tasks = computed(() => taskStore.tasks ?? []);
+const listLoading = computed(() => !householdId.value || Boolean(taskStore.loading));
+const listErrorInfo = computed(() => (taskStore.error ? describeSharedError(taskStore.error.code, "checklist") : null));
 
 // Tabs
 const tab = ref("all");
@@ -59,6 +60,7 @@ const ownListEmpty = computed(() => !tasks.value.length);
 const sharedBy = computed(() => (partnerFirst.value ? `${myName.value} and ${partnerFirst.value}` : myName.value));
 const doneCount = computed(() => tasks.value.filter((t) => t.done).length);
 const progressLine = computed(() => `${doneCount.value} of ${tasks.value.length} done`);
+const allDone = computed(() => tasks.value.length > 0 && doneCount.value === tasks.value.length);
 
 // Adding a task: one line, who does it, and an optional date.
 const title = ref("");
@@ -85,7 +87,7 @@ async function add() {
   if (!text || adding.value) return;
   adding.value = true;
   const owner = who.value === "partner" && hasPartner.value ? partnerUid.value : who.value === "both" ? "both" : myUid.value;
-  const added = await rtw.addTask({ title: text, group: "home", owner, due: showDate.value && due.value ? due.value : null });
+  const added = await taskStore.addTask({ title: text, group: "home", owner, due: showDate.value && due.value ? due.value : null });
   adding.value = false;
   if (!added) return;
   title.value = "";
@@ -100,7 +102,7 @@ async function toggle(task) {
   if (busy.value) return;
   busy.value = task.id;
   try {
-    await rtw.toggleTask(task.id);
+    await taskStore.toggleTask(task.id);
   } finally {
     busy.value = "";
   }
@@ -131,15 +133,9 @@ function doneMeta(task) {
     </div>
 
     <template v-if="!loading && !error">
-  <header class="ck__hero">
-    <div class="ck__hero-text">
-      <p class="ck__eyebrow">Shared by {{ sharedBy }}</p>
-      <h1 class="ck__title">Our checklist</h1>
-      <p class="ck__lead">Who is doing what, in one place.</p>
-      <p v-if="tasks.length" class="ck__pill"><span class="ck__pill-dot"></span>{{ progressLine }}</p>
-    </div>
-  </header>
-  <BabySwitch />
+  <PageHero :eyebrow="`Shared by ${sharedBy}`" title="Our checklist" lead="Who is doing what, in one place.">
+    <StatusPill v-if="tasks.length" icon="check" :tone="allDone ? 'ok' : 'none'">{{ progressLine }}</StatusPill>
+  </PageHero>
 
   <SkeletonList v-if="listLoading" :rows="4" :height="56" label="Loading the checklist" />
   <div v-if="!listLoading && listErrorInfo" class="ck__error alert alert-danger" role="alert">
@@ -176,7 +172,7 @@ function doneMeta(task) {
           </div>
         </Collapse>
       </form>
-      <p v-if="rtw.writeError" class="ck__row-error" role="alert">{{ rtw.writeError }}</p>
+      <p v-if="taskStore.writeError" class="ck__row-error" role="alert">{{ taskStore.writeError }}</p>
     </section>
 
     <section class="ck__list" aria-label="Checklist">
@@ -232,13 +228,6 @@ function doneMeta(task) {
 .ck__muted { margin: 0; font-size: 0.875rem; color: #6b7392; }
 .ck__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; border-radius: 8px; }
 
-.ck__hero { padding: 32px 40px; background: var(--navy-2); border-radius: 28px; border-bottom: 5px solid #182246; color: #fff; }
-.ck__hero-text { display: flex; flex-direction: column; gap: 10px; }
-.ck__eyebrow { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #f2a477; }
-.ck__title { margin: 0; font-family: var(--nt-serif); font-size: 3rem; line-height: 1.05; font-weight: 700; color: #fff; }
-.ck__lead { margin: 0; font-size: 1.0625rem; color: #dfe5f7; }
-.ck__pill { display: inline-flex; align-items: center; align-self: flex-start; gap: 8px; margin: 6px 0 0; padding: 8px 16px; border: 1px solid rgb(255 255 255 / 35%); border-radius: 999px; background: rgb(255 255 255 / 10%); font-size: 0.9375rem; }
-.ck__pill-dot { width: 10px; height: 10px; border-radius: 50%; background: #8fd19e; }
 
 .ck__add-card { padding: 20px 24px; background: #fbf0d6; border: 1px solid #ecd9a8; border-bottom-width: 3px; border-radius: 24px; }
 .ck__add { display: flex; flex-direction: column; gap: 12px; }
@@ -286,8 +275,6 @@ function doneMeta(task) {
 .ck__initial { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; background: var(--navy); border-radius: 50%; font-size: 0.75rem; color: #fff; }
 
 @media (max-width: 575px) {
-  .ck__hero { padding: 24px; }
-  .ck__title { font-size: 2.25rem; }
   .ck__list { padding: 20px 16px; }
   .ck__add-row { flex-direction: column; }
   .ck__btn { height: 48px; }

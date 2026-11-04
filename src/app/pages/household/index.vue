@@ -1,12 +1,14 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import Header from "@/app/components/Header.vue";
+import AuthShell from "@/app/components/AuthShell.vue";
 import StepHeader from "@/app/components/StepHeader.vue";
 import OptionCard from "@/app/components/OptionCard.vue";
 import Field from "@/app/components/Field.vue";
 import BabyFields from "@/app/components/BabyFields.vue";
 import AddBabyForm from "@/app/components/AddBabyForm.vue";
+import DateField from "@/app/components/DateField.vue";
+import SelectField from "@/app/components/SelectField.vue";
 import BabyCard from "@/app/components/BabyCard.vue";
 import AppLink from "@/components/ui/AppLink.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
@@ -32,8 +34,12 @@ defineOptions({ name: "HouseholdPage" });
 const { currentUser, authProfile, loadProfile, commitAccount } = useAuth();
 const draft = useOnboarding();
 
-const JOURNEY_LABELS = { preparing: "Preparing for baby", newborn: "Caring for a newborn", "return-to-work": "Preparing to return to work" };
+const JOURNEY_LABELS = { preparing: "Preparing for baby", newborn: "Caring for a newborn" };
 const ROLE_LABELS = { parent: "Parent", caregiver: "Caregiver" };
+const toOptions = (labels) => Object.entries(labels).map(([value, label]) => ({ value, label }));
+const ROLE_OPTIONS = toOptions(ROLE_LABELS);
+const JOURNEY_OPTIONS = toOptions(JOURNEY_LABELS);
+const STATUS_OPTIONS = [{ value: "born", label: "Born" }, { value: "expected", label: "Expected" }];
 // "form" collects the household choice; "review" shows everything before it is saved.
 const phase = ref("form");
 // Each card on the review can be changed where it stands, so there is no trip back to an earlier page.
@@ -87,6 +93,16 @@ async function goHome() {
 const result = ref(null); // { kind: "created" | "joined", inviteCode }
 const copied = ref(false);
 const baby = ref({ name: "", status: "born", date: "" }); // the first baby, asked while creating
+const extraBabies = ref([]); // babies 2, 3, ...
+function addFormBaby() {
+  extraBabies.value.push({ name: "", status: "born", date: "" });
+}
+function removeFormBaby(i) {
+  extraBabies.value.splice(i, 1);
+}
+const fmtDate = (d) =>
+  d ? new Date(`${d}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "";
+
 let copiedTimer = null;
 
 const householdId = ref("");
@@ -201,10 +217,12 @@ async function submit() {
     const user = await commitAccount();
     if (mode.value === "create") {
       const created = await createHousehold(user, {
-        babyName: baby.value.name,
-        babyStatus: baby.value.status,
-        babyDate: baby.value.date,
-      });
+        babies: [baby.value, ...extraBabies.value].map((b) => ({
+        babyName: b.name,
+        babyStatus: b.status,
+        babyDate: b.date,
+        })),
+    });
       result.value = { kind: "created", inviteCode: created.inviteCode };
       householdId.value = created.householdId;
       canManageBabies.value = true;
@@ -216,6 +234,7 @@ async function submit() {
       result.value = { kind: "joined", inviteCode: null };
     }
     await loadBabies();
+    await refreshSidebarBabies(householdId.value);
     if (authProfile.value) authProfile.value = { ...authProfile.value, onboarded: true };
   } catch (cause) {
     console.error("[app household]", cause?.code, cause);
@@ -251,8 +270,7 @@ async function copyCode() {
 <template>
   <LoadingScreen v-if="finishing" variant="overlay" label="Setting things up" :messages="SETUP_MESSAGES" subtext="This only takes a moment." />
   <LoadingScreen v-else-if="showLoader" variant="overlay" :label="mode === 'join' ? 'Joining the household' : 'Setting up your household'" subtext="This only takes a moment." />
-  <Header />
-  <main class="app-container app-body">
+  <AuthShell wide>
     <LoadingScreen v-if="!loaded" variant="inline" label="Loading your household" />
     <div v-if="loaded" class="hh">
       <div class="app-stack app-stack--24 hh__main">
@@ -283,11 +301,16 @@ async function copyCode() {
             </div>
             <div v-if="mode === 'create'" class="app-stack app-stack--24 w-100">
               <div class="hh__baby app-stack app-stack--24">
-                <h3 class="hh__baby-title">Baby 1</h3>
-                <BabyFields v-model="baby" id-prefix="app-baby" hint="You can change this later." :disabled="busy" />
-              </div>
-              <p class="hh__hint">Twins or more? You can add each baby on the next step.</p>
+              <h3 class="hh__baby-title">Baby 1</h3>
+              <BabyFields v-model="baby" id-prefix="app-baby" hint="You can change this later." :disabled="busy" />
             </div>
+            <div v-for="(b, i) in extraBabies" :key="i" class="hh__baby app-stack app-stack--24">
+              <h3 class="hh__baby-title">Baby {{ i + 2 }}</h3>
+              <BabyFields v-model="extraBabies[i]" :id-prefix="`app-baby-${i + 2}`" :disabled="busy" />
+              <button type="button" class="app-btn app-btn--outline" @click="removeFormBaby(i)">Remove baby</button>
+            </div>
+  <button type="button" class="app-btn app-btn--outline" @click="addFormBaby">Add another baby</button>
+</div>
             <Field
               v-if="mode === 'join'"
               id="app-invite-code"
@@ -313,7 +336,9 @@ async function copyCode() {
           <AppLink v-if="phase === 'form'" :to="route.query.code ? { path: ROUTES.ACCOUNT, query: { code: route.query.code } } : ROUTES.ACCOUNT" class="app-text-link">Back</AppLink>
 
           <div v-if="phase === 'review'" class="rv" :aria-busy="busy">
-            <ul class="rv__grid" aria-label="Your details">
+            <section class="rv__sec" aria-labelledby="rv-part">
+              <h3 id="rv-part" class="rv__h">Particulars</h3>
+              <ul class="rv__grid" aria-label="Your details">
               <li class="rv__tile">
                 <div class="rv__top">
                   <span class="rv__lab">Name</span>
@@ -344,11 +369,15 @@ async function copyCode() {
                   <button v-else type="button" class="rv__edit" @click="done">Done</button>
                 </div>
                 <p v-if="editing !== 'role'" class="rv__val">{{ roleLabel }}</p>
-                <select v-else v-model="draft.role" class="app-control rv__in" aria-label="Your role" @change="done" @keydown.esc.stop.prevent="done">
-                  <option v-for="(label, value) in ROLE_LABELS" :key="value" :value="value">{{ label }}</option>
-                </select>
+                <SelectField v-else v-model="draft.role" :options="ROLE_OPTIONS" class="rv__in" aria-label="Your role" @change="done" @keydown.esc.stop.prevent="done" />
               </li>
 
+              </ul>
+            </section>
+
+            <section class="rv__sec" aria-labelledby="rv-house">
+              <h3 id="rv-house" class="rv__h">Household</h3>
+              <ul class="rv__grid" aria-label="Household details">
               <li class="rv__tile">
                 <div class="rv__top">
                   <span class="rv__lab">Stage</span>
@@ -356,9 +385,7 @@ async function copyCode() {
                   <button v-else type="button" class="rv__edit" @click="done">Done</button>
                 </div>
                 <p v-if="editing !== 'stage'" class="rv__val">{{ stageLabel }}</p>
-                <select v-else v-model="draft.journey" class="app-control rv__in" aria-label="Your stage" @change="done" @keydown.esc.stop.prevent="done">
-                  <option v-for="(label, value) in JOURNEY_LABELS" :key="value" :value="value">{{ label }}</option>
-                </select>
+                <SelectField v-else v-model="draft.journey" :options="JOURNEY_OPTIONS" class="rv__in" aria-label="Your stage" @change="done" @keydown.esc.stop.prevent="done" />
               </li>
 
               <li class="rv__tile" :class="{ 'rv__tile--wide': mode === 'join' }">
@@ -380,6 +407,12 @@ async function copyCode() {
                 </template>
               </li>
 
+              </ul>
+            </section>
+
+            <section v-if="mode === 'create'" class="rv__sec" aria-labelledby="rv-babies">
+              <h3 id="rv-babies" class="rv__h">{{ extraBabies.length ? "Babies" : "Baby" }}</h3>
+              <ul class="rv__grid" aria-label="Baby details">
               <li v-if="mode === 'create'" class="rv__tile">
                 <div class="rv__top">
                   <span class="rv__lab">Baby 1</span>
@@ -392,14 +425,32 @@ async function copyCode() {
                 </template>
                 <div v-else class="rv__stack" @keydown.esc.stop.prevent="done">
                   <input v-model="baby.name" class="app-control rv__in" maxlength="60" placeholder="Baby’s name" aria-label="Baby’s name" />
-                  <select v-model="baby.status" class="app-control rv__in" aria-label="Born or expected">
-                    <option value="born">Born</option>
-                    <option value="expected">Expected</option>
-                  </select>
-                  <input v-model="baby.date" type="date" class="app-control rv__in" aria-label="Baby’s date" />
+                  <SelectField v-model="baby.status" :options="STATUS_OPTIONS" aria-label="Born or expected" />
+                  <DateField v-model="baby.date" class="rv__in" aria-label="Baby’s date" />
                 </div>
               </li>
-            </ul>
+
+              <template v-if="mode === 'create'">
+                <li v-for="(b, i) in extraBabies" :key="`x${i}`" class="rv__tile">
+                <div class="rv__top">
+                  <span class="rv__lab">Baby {{ i + 2 }}</span>
+                  <button v-if="editing !== `baby${i}`" type="button" class="rv__edit" @click="edit(`baby${i}`)">Edit</button>
+                  <button v-else type="button" class="rv__edit" @click="done">Done</button>
+                </div>
+              <template v-if="editing !== `baby${i}`">
+                <p class="rv__val" :class="{ 'rv__val--empty': !b.name.trim() }">{{ b.name.trim() || "Name not added yet" }}</p>
+                <p class="rv__sub">{{ b.status === "expected" ? "Expected" : "Born" }}<template v-if="b.date"> · {{ fmtDate(b.date) }}</template></p>
+              </template>
+              <div v-else class="rv__stack" @keydown.esc.stop.prevent="done">
+                <input v-model="b.name" class="app-control rv__in" maxlength="60" placeholder="Baby’s name" aria-label="Baby’s name" />
+                <SelectField v-model="b.status" :options="STATUS_OPTIONS" aria-label="Born or expected" />
+      <DateField v-model="b.date" class="rv__in" aria-label="Baby’s date" />
+    </div>
+  </li>
+</template>
+
+              </ul>
+            </section>
 
             <div v-if="error" class="alert alert-danger app-alert" role="alert">{{ error }}</div>
             <p v-if="reviewProblem" class="rv__problem" role="status">{{ reviewProblem }}</p>
@@ -444,34 +495,36 @@ async function copyCode() {
       </div>
 
     </div>
-  </main>
+  </AuthShell>
 </template>
 
 <style scoped>
 .hh { width: 100%; }
-.hh__card { width: 100%; padding: 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
+.hh__card { width: 100%; padding: 22px; background: #fffdf8; border: 1.5px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 24px; }
 .hh__main { min-width: 0; }
 .hh__options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; width: 100%; }
-.hh__code { display: flex; align-items: center; justify-content: center; width: 100%; padding: 32px 48px; background: var(--nt-gray); border-radius: 12px; }
+.hh__code { display: flex; align-items: center; justify-content: center; width: 100%; padding: 32px 48px; background: #fbe3d3; border-radius: 20px; }
 .hh__card--flat { padding: 0; background: transparent; border: 0; }
-.rv { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 720px; }
+.rv { display: flex; flex-direction: column; gap: 22px; width: 100%; max-width: 720px; }
 .rv__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(104px, auto); gap: 12px; margin: 0; padding: 0; list-style: none; }
-.rv__tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 16px 20px 18px; background: #fff; border: 1px solid var(--nt-line); border-radius: 16px; transition: border-color 0.15s ease; }
-.rv__tile:focus-within { border-color: var(--nt-plum); }
+.rv__tile { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 16px 20px 18px; background: #fffdf8; border: 1.5px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 20px; transition: border-color 0.15s ease; }
+.rv__tile:focus-within { border-color: var(--navy, #243560); }
 .rv__tile--wide { grid-column: 1 / -1; }
+.rv__sec { display: flex; flex-direction: column; gap: 10px; }
+.rv__h { margin: 0; font-family: var(--nt-serif); font-size: 1.125rem; font-weight: 700; color: var(--navy, #243560); }
 .rv__top { display: flex; align-items: center; justify-content: space-between; min-height: 28px; }
 .rv__lab { font-size: 0.8125rem; font-weight: 500; color: var(--nt-muted); }
-.rv__edit { padding: 4px 10px; margin: -4px -10px -4px 0; background: transparent; border: 0; border-radius: 8px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-plum); cursor: pointer; }
-.rv__edit:hover { background: var(--nt-gray); }
+.rv__edit { padding: 4px 10px; margin: -4px -10px -4px 0; background: transparent; border: 0; border-radius: 8px; font-family: inherit; font-size: 0.875rem; font-weight: 500; color: var(--navy, #243560); font-weight: 700; cursor: pointer; }
+.rv__edit:hover { background: #f3ecd9; }
 .rv__edit:focus-visible, .rv__segbtn:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 .rv__val { margin: 0; font-size: 1.0625rem; font-weight: 600; line-height: 1.35; color: var(--nt-ink); overflow-wrap: anywhere; }
 .rv__val--empty { font-weight: 400; color: var(--nt-muted); }
 .rv__sub { margin: 0; font-size: 0.875rem; line-height: 1.4; color: var(--nt-muted); overflow-wrap: anywhere; }
 .rv__in { width: 100%; }
 .rv__stack { display: flex; flex-direction: column; gap: 8px; }
-.rv__seg { display: flex; padding: 3px; background: var(--nt-gray); border-radius: 999px; }
+.rv__seg { display: flex; padding: 3px; background: #f3ecd9; border-radius: 999px; }
 .rv__segbtn { flex: 1 1 0; padding: 6px 10px; background: transparent; border: 0; border-radius: 999px; font: inherit; font-size: 0.875rem; font-weight: 500; color: var(--nt-muted); white-space: nowrap; cursor: pointer; }
-.rv__segbtn[aria-checked="true"] { background: var(--nt-plum); color: #fff; }
+.rv__segbtn[aria-checked="true"] { background: var(--navy, #243560); color: #fff; }
 .rv__problem { margin: 0; font-size: 0.875rem; color: var(--nt-red-t, #b4372b); }
 .rv__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 @media (max-width: 575px) {
@@ -480,10 +533,10 @@ async function copyCode() {
 }
 @media (prefers-reduced-motion: reduce) { .rv__tile { transition: none; } }
 .hh__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.hh__code-text { margin: 0; font-family: var(--nt-serif); font-size: 40px; line-height: normal; letter-spacing: 0.8px; color: var(--nt-plum); }
+.hh__code-text { margin: 0; font-family: var(--nt-serif); font-size: 40px; font-weight: 700; line-height: normal; letter-spacing: 0.1em; color: var(--navy, #243560); }
 
-.hh__baby { width: 100%; padding: 20px 24px; background: #fff; border: 1px solid var(--nt-line); border-radius: 12px; }
-.hh__baby-title { margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.4; color: var(--nt-ink); }
+.hh__baby { width: 100%; padding: 18px 20px; background: #fff; border: 1.5px dashed #f2a477; border-radius: 20px; }
+.hh__baby-title { margin: 0; font-family: var(--nt-serif); font-size: 1.1875rem; font-weight: 700; line-height: 1.3; color: var(--ink, #1f2a52); }
 @media (max-width: 575px) { .hh__baby { padding: 16px; } }
 .hh__hint { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
 .hh__babies { display: flex; flex-direction: column; gap: 12px; width: 100%; }

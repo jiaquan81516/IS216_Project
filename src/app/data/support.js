@@ -19,9 +19,16 @@ export const TRUSTED_RESOURCES = Object.freeze([
   {
     id: "emergency",
     name: "Emergency ambulance",
-    purpose: "If anyone is in danger, has been hurt, or might harm themselves or the baby. Or go to the nearest A&E.",
+    purpose: "If anyone is in danger or hurt. Or go to the nearest A&E.",
     tel: "tel:995",
     telLabel: "995",
+  },
+  {
+    id: "kkh",
+    name: "KK Women's and Children's Hospital",
+    purpose: "Children's Emergency, 100 Bukit Timah Road.",
+    tel: "tel:+6562255554",
+    telLabel: "6225 5554",
   },
   {
     id: "police",
@@ -29,13 +36,6 @@ export const TRUSTED_RESOURCES = Object.freeze([
     purpose: "If you feel unsafe at home.",
     tel: "tel:999",
     telLabel: "999",
-  },
-  {
-    id: "doctor",
-    name: "Your doctor or clinic",
-    purpose: "For mood, sleep or feeding concerns that last more than two weeks.",
-    tel: null,
-    telLabel: "",
   },
   {
     id: "sos",
@@ -50,6 +50,13 @@ export const TRUSTED_RESOURCES = Object.freeze([
     purpose: "Mental health support and advice.",
     tel: "tel:+6563892222",
     telLabel: "6389 2222",
+  },
+  {
+    id: "doctor",
+    name: "Your doctor or clinic",
+    purpose: "For mood, sleep or feeding concerns that last more than two weeks.",
+    tel: null,
+    telLabel: "",
   },
 ]);
 

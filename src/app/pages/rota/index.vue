@@ -1,11 +1,12 @@
 <script setup>
-import BabySwitch from "@/app/components/BabySwitch.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
-import { computed, inject, nextTick, onMounted, ref } from "vue";
+import { computed, inject, nextTick, onMounted, ref, watch } from "vue";
 import Collapse from "@/app/components/Collapse.vue";
 import DaySchedule from "@/app/components/DaySchedule.vue";
 import DateWheel from "@/app/components/DateWheel.vue";
+import PageHero from "@/app/components/PageHero.vue";
+import StatusPill from "@/app/components/StatusPill.vue";
 import Icon from "@/app/components/Icon.vue";
 import PickField from "@/app/components/PickField.vue";
 import SegToggle from "@/app/components/SegToggle.vue";
@@ -19,6 +20,7 @@ import {
   dayNumber,
   formatHandover,
   isIsoDate,
+  joinNames,
   mondayOf,
   otherOf,
   restSummary,
@@ -48,6 +50,7 @@ function fullName(person, fallback) {
   return first ? displayName(first) : fallback;
 }
 const myName = computed(() => fullName(home?.me?.value, "Me"));
+const hasPartner = computed(() => Boolean(home?.partner?.value));
 const partnerName = computed(() => fullName(home?.partner?.value, "Partner"));
 const names = computed(() => ({
   me: myName.value,
@@ -75,7 +78,7 @@ onMounted(async () => {
   document.getElementById("day")?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
-const { selectedBaby } = useSelectedBaby();
+const { babies, selectedBaby } = useSelectedBaby();
 // Carers who can see the duty page (the "View who is on duty" permission) can also take nights.
 const firstWord = (full) => {
   const w = String(full ?? "").trim().split(/\s+/)[0] || "";
@@ -86,6 +89,16 @@ const carers = computed(() =>
     .filter((m) => m?.uid && m.accessLevel === "caregiver" && m.permissions?.dutyView === true)
     .map((m) => ({ uid: m.uid, label: firstWord(m.displayName) || "Carer" })),
 );
+// When a carer with "Edit the day schedule" changed the shifts last, say so, so nothing moves unnoticed.
+const lastEditedByCarer = computed(() => {
+  const by = store.plan?.updatedBy;
+  const m = (home?.members?.value ?? []).find((x) => x?.uid === by && x.accessLevel === "caregiver");
+  if (!m) return "";
+  const at = store.plan?.updatedAt?.toDate?.();
+  const when = at ? `, ${at.getDate()} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][at.getMonth()]}` : "";
+  return `Shifts last changed by ${firstWord(m.displayName) || "a carer"}${when}.`;
+});
+watch(carers, (list) => store.setCarers(Object.fromEntries(list.map((c) => [c.uid, c.label]))), { immediate: true });
 const carerNames = computed(() => [...new Set([...carers.value.map((c) => c.label), ...(store.view.carerNights ?? []).map((c) => c.label)])]);
 const CARER_DAYS = ["M", "T", "W", "T", "F", "S", "S"];
 const CARER_DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -98,7 +111,8 @@ function toggleCarerDay(c, day) {
   store.setCarerNights([...rest, { uid: c.uid, label: c.label, days: [...days] }]);
 }
 const markText = (night) => (night.who === "other" ? String(night.label || "?").charAt(0).toUpperCase() : initialOf(night.who));
-const babyLabel = computed(() => selectedBaby.value?.babyName || home?.baby?.value?.name || "the baby");
+// The plan covers every baby, so the text names them all.
+const babyLabel = computed(() => joinNames(babies.value.map((b, i) => b.babyName || `Baby ${i + 1}`)) || selectedBaby.value?.babyName || home?.baby?.value?.name || "the baby");
 const todayIso = toIso(new Date());
 const { timeFormat } = usePrefs();
 // Who has the baby right now, for the pill in the header: a painted daytime hour first, then the night plan.
@@ -209,13 +223,30 @@ function cellLabel(night) {
   return `${dateLabel(night.date)}${today}. ${d.title}`;
 }
 
-// Plan settings
-const PATTERN_OPTIONS = [
-  { value: "manual", label: "I will set each night", hint: "Every night starts open. Assign them yourselves from This week." },
-  { value: "alternate", label: "Alternate nights", hint: "You take turns owning the whole night." },
-  { value: "smart", label: "Plan around early starts", hint: "Tell us your early mornings and we protect them." },
-];
-const selectedPattern = ref("alternate");
+// Plan settings. Alternating and the early-starts plan both hand nights to "partner", so
+// solo households (nobody else has joined) only get to set nights themselves.
+const PATTERN_OPTIONS = computed(() =>
+  hasPartner.value
+    ? [
+        { value: "manual", label: "I will set each night", hint: "Every night starts open. Assign them yourselves from This week." },
+        { value: "alternate", label: "Alternate nights", hint: "You take turns owning the whole night." },
+        { value: "smart", label: "Plan around early starts", hint: "Tell us your early mornings and we protect them." },
+      ]
+    : [{ value: "manual", label: "I will set each night", hint: "Every night starts open. Assign them from This week." }],
+);
+// "manual" is always a safe starting value; the correct default (and any saved plan) is set
+// once household data has actually loaded, below.
+const selectedPattern = ref("manual");
+// A partner who leaves mid-session should never leave the page on a pattern that only makes
+// sense with someone to alternate with. Not `immediate`: the initial case (hasPartner still
+// settling after mount) is handled by the one-shot initialiser below instead.
+watch(hasPartner, (has) => {
+  if (!has && selectedPattern.value !== "manual") selectedPattern.value = "manual";
+  // The handover toggle only makes sense with a partner too: without this, a handover
+  // left on from when a partner was still around could silently hand a "second" carer
+  // slot to "partner" on a now-solo household's saved nights (see addOptionalHandover).
+  if (!has && handoverEnabled.value) handoverEnabled.value = false;
+});
 
 const setupStartDate = ref(store.view.startDate || todayIso);
 const earlyStarts = ref({ me: [], partner: [] });
@@ -263,7 +294,11 @@ function addOptionalHandover(night) {
   };
 }
 
+// Restores a saved setup draft, and reports whether it found one to restore.
 function readLocalPlan() {
+  // A plan saved from an earlier, two-person household is meaningless once nobody is there
+  // to take the "partner" half of it, so a solo household never restores it.
+  if (!hasPartner.value) return false;
   try {
     const saved = JSON.parse(
       localStorage.getItem("nurturetrack-smart-rota-plan") || "null",
@@ -277,13 +312,24 @@ function readLocalPlan() {
       handoverEnabled.value = Boolean(saved.handoverEnabled);
       handoverClock.value = saved.handoverClock || "02:00";
       handoverParent.value = saved.handoverParent || "partner";
+      return true;
     }
   } catch (error) {
     console.warn("Saved sleep rota data could not be read.", error);
   }
+  return false;
 }
 
-readLocalPlan();
+// Household data, including whether a partner has joined, loads after this page mounts, so
+// the starting pattern (a restored draft, or the right default) is only settled once that has
+// loaded and hasPartner is accurate. Guarded to run only once, the first time loading clears.
+let patternInitialised = false;
+watch(loading, (isLoading) => {
+  if (isLoading || patternInitialised) return;
+  patternInitialised = true;
+  const restored = readLocalPlan();
+  if (!restored) selectedPattern.value = hasPartner.value ? "alternate" : "manual";
+}, { immediate: true });
 
 function addDateOnly(value, amount) {
   const [year, month, day] = value.split("-").map(Number);
@@ -322,10 +368,11 @@ const HANDOVER_MODES = [
   { value: "off", label: "Whole night" },
   { value: "on", label: "Hand over mid-night" },
 ];
-const takeoverOptions = computed(() => [
-  { value: "me", label: myName.value },
-  { value: "partner", label: partnerName.value },
-]);
+const takeoverOptions = computed(() =>
+  hasPartner.value
+    ? [{ value: "me", label: myName.value }, { value: "partner", label: partnerName.value }]
+    : [{ value: "me", label: myName.value }],
+);
 const confirmReset = ref(false);
 const setupStatus = ref("");
 async function doReset() {
@@ -450,18 +497,9 @@ async function finishSetup() {
 
 <template>
   <div class="rt">
-    <header class="rt__hero">
-      <div class="rt__hero-text">
-        <p class="rt__eyebrow">Taking turns with {{ partnerName }}</p>
-        <h1 class="rt__title">Duty</h1>
-        <p class="rt__lead">Who is looking after {{ babyLabel }}, day and night.</p>
-        <p v-if="carerNow" class="rt__pill">
-          <span class="rt__pill-dot" aria-hidden="true"></span>
-          <span>Now: {{ carerNow.text }} {{ carerNow.verb }} looking after {{ babyLabel }}</span>
-        </p>
-      </div>
-    </header>
-    <BabySwitch />
+    <PageHero :eyebrow="hasPartner ? `Taking turns with ${partnerName}` : 'Duty'" title="Duty" :lead="`Who is looking after ${babyLabel}, day and night.`">
+      <StatusPill v-if="carerNow" icon="moon" tone="ok">Now: {{ carerNow.text }} {{ carerNow.verb }} looking after {{ babyLabel }}</StatusPill>
+    </PageHero>
 
     <div aria-live="polite">
       <LoadingScreen v-if="loading" variant="inline" label="Loading the rota" />
@@ -488,7 +526,8 @@ async function finishSetup() {
       <section id="day" class="rt__card rt__daycard" aria-labelledby="rt-day">
         <h2 id="rt-day" class="rt__h2">Day</h2>
         <p class="rt__muted">Who looks after {{ babyLabel }} from 6 AM to 6 PM. Tap or drag on a day to add a shift.</p>
-        <DaySchedule :rota="store.view" :names="names" :has-partner="Boolean(home?.partner?.value)" :baby-label="babyLabel" :carers="carerNames" @save="store.setSchedule" />
+        <p v-if="lastEditedByCarer" class="rt__muted">{{ lastEditedByCarer }}</p>
+        <DaySchedule :rota="store.view" :names="names" :has-partner="hasPartner" :allow-both="hasPartner" :baby-label="babyLabel" :carers="carerNames" @save="store.setSchedule" />
       </section>
 
       <!-- Night -->
@@ -612,6 +651,7 @@ async function finishSetup() {
                     I take it
                   </button>
                   <button
+                    v-if="hasPartner"
                     type="button"
                     class="rt__link"
                     @click="assignSelectedNight('partner')"
@@ -695,7 +735,7 @@ async function finishSetup() {
             Helpers and family you invite can take fixed nights once "View who is on duty" is on for them in Caregiver access.
           </p>
           <template v-else>
-            <p class="rt__muted">Pick the nights each carer takes every week. You and your partner share the rest.</p>
+            <p class="rt__muted">{{ hasPartner ? "Pick the nights each carer takes every week. You and your partner share the rest." : "Pick the nights each carer takes every week. You cover the rest." }}</p>
             <div v-for="c in carers" :key="c.uid" class="rt__carer">
               <span class="rt__carer-name">{{ c.label }}</span>
               <div class="rt__dchips" role="group" :aria-label="`Nights for ${c.label}`">
@@ -796,7 +836,7 @@ async function finishSetup() {
         </Collapse>
 
         <Collapse>
-          <section v-if="selectedPattern === 'manual'" class="rt__sec" aria-labelledby="rt-s-hand">
+          <section v-if="selectedPattern === 'manual' && hasPartner" class="rt__sec" aria-labelledby="rt-s-hand">
             <h2 id="rt-s-hand" class="rt__h2">Hand over in the night?</h2>
             <p class="rt__muted">Split a night so one of you sleeps first and the other takes over.</p>
             <SegToggle v-model="handoverMode" :options="HANDOVER_MODES" label="Night style" class="rt__seg" />
@@ -871,13 +911,6 @@ async function finishSetup() {
 }
 
 /* Hero, the same as the Care log and Checklist */
-.rt__hero { padding: 32px 40px; background: var(--navy-2); border-radius: 28px; border-bottom: 5px solid #182246; color: #fff; }
-.rt__hero-text { display: flex; flex-direction: column; gap: 10px; }
-.rt__eyebrow { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--apricot); }
-.rt__title { margin: 0; font-family: var(--nt-serif); font-size: 2.5rem; line-height: 1.05; font-weight: 700; color: #fff; }
-.rt__lead { margin: 0; font-size: 1.0625rem; color: #dfe5f7; }
-.rt__pill { display: inline-flex; align-items: center; align-self: flex-start; gap: 8px; margin: 6px 0 0; padding: 8px 16px; border: 1px solid rgb(255 255 255 / 35%); border-radius: 999px; background: rgb(255 255 255 / 10%); font-size: 0.9375rem; }
-.rt__pill-dot { width: 10px; height: 10px; border-radius: 50%; background: #8fd19e; }
 .rt__daycard, .rt__nightcard { display: flex; flex-direction: column; gap: 14px; }
 .rt__weekblock { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
 .rt__rest { display: flex; flex-direction: column; gap: 12px; padding-top: 18px; border-top: 1.5px dashed var(--sand); }
@@ -993,8 +1026,6 @@ async function finishSetup() {
 .rt__danger { padding: 0; background: none; border: 0; font: inherit; font-size: 0.875rem; font-weight: 600; color: #a8473f; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .rt__danger:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; border-radius: 4px; }
 @media (max-width: 575px) {
-  .rt__hero { padding: 24px 20px; }
-  .rt__title { font-size: 2rem; }
   .rt__card { padding: 20px 16px; }
   .rt__strip { gap: 4px; }
   .rt__cell { min-height: 124px; border-radius: 14px; }

@@ -2,7 +2,6 @@
 // to lift an old plan into the household, and then removed.
 export const LEGACY_ROTA_KEY = "nt.app.rota";
 export const LEGACY_CALENDAR_KEY = "nt.app.calendar";
-export const LEGACY_RTW_KEY = "nt.app.rtw";
 
 // Returns the parsed payload, or null when there is nothing usable.
 export function readLegacy(key) {

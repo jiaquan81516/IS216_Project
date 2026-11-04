@@ -1,5 +1,4 @@
 <script setup>
-import BabySwitch from "@/app/components/BabySwitch.vue";
 import FilterSelect from "@/app/components/FilterSelect.vue";
 import { agoText } from "@/app/utils/homeSummary";
 import { useToast } from "@/app/composables/useToast";
@@ -10,6 +9,11 @@ import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } fr
 import { useRoute, useRouter } from "vue-router";
 import AppBadge from "@/components/ui/AppBadge.vue";
 import CareLogPanel from "@/app/components/CareLogPanel.vue";
+import BabySwitch from "@/app/components/BabySwitch.vue";
+import PageHero from "@/app/components/PageHero.vue";
+import BabyScene from "@/app/components/BabyScene.vue";
+import { readBaby } from "@/app/utils/babyMood";
+import StatusPill from "@/app/components/StatusPill.vue";
 import Icon from "@/app/components/Icon.vue";
 import { addEntry, deleteEntry, loadOlder, markSeen, updateEntry } from "@/api/entries";
 import { notifyPartner } from "@/api/push";
@@ -110,6 +114,26 @@ const feedStatus = computed(() => {
   const word = tone === "due" ? "Feed is due" : tone === "soon" ? "Feed due soon" : "Recently fed";
   return { ago: agoText(at, now.value), clock: prefTime(lastFeed.value.at), tone, word };
 });
+
+// The same bassinet picture as Home, following the selected baby.
+const babyMood = computed(() => readBaby(allEntries.value, selectedBaby.value?.babyName || "Baby", now.value));
+
+// While a sleep has no end yet, the hero offers "awake now", which ends it at this moment.
+const openSleep = computed(() => (babyMood.value.state === "sleeping" ? lastOfType(allEntries.value, "sleep") : null));
+const waking = ref(false);
+async function wakeUp() {
+  if (!openSleep.value || waking.value || !householdId.value) return;
+  waking.value = true;
+  try {
+    await updateEntry(householdId.value, openSleep.value.id, { endedAt: new Date() });
+    showToast({ title: `${selectedBaby.value?.babyName || "Baby"} is awake` });
+  } catch (cause) {
+    console.error("[app care log]", cause?.code, cause);
+    showToast({ title: "Could not save. Try again." });
+  } finally {
+    waking.value = false;
+  }
+}
 
 function byLabel(entry) {
   if (isMine(entry)) return "you";
@@ -318,31 +342,22 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
     </div>
 
     <template v-if="!loading && !error">
-  <header class="cl__hero">
-    <div class="cl__hero-text">
-      <p class="cl__eyebrow">Shared by {{ sharedBy }}</p>
-      <h1 class="cl__title">Care log</h1>
-      <p class="cl__lead">Tap what just happened.<template v-if="partnerFirst">{{ " " }}{{ partnerFirst }} sees it straight away.</template></p>
-      <p class="cl__pill" :class="`cl__pill--${feedStatus ? feedStatus.tone : 'none'}`">
-        <span class="cl__pill-ico" aria-hidden="true"><Icon name="feed" :size="18" /></span>
-        <template v-if="feedStatus">
-          <span class="visually-hidden">{{ feedStatus.word }}.</span>
-          <span class="cl__pill-main">Last feed <strong>{{ feedStatus.ago }}</strong></span>
-          <span class="cl__pill-time">{{ feedStatus.clock }}</span>
-        </template>
-        <span v-else class="cl__pill-main">No feeds logged yet</span>
-      </p>
-    </div>
-    <svg class="cl__art" viewBox="0 0 150 180" aria-hidden="true">
-      <path d="M5 175V75a70 70 0 0 1 140 0v100z" fill="#f6e3c4" stroke="#e8cf9f" stroke-width="4"/>
-      <path d="M20 175V78a55 55 0 0 1 110 0v97z" fill="#b6c6ea"/>
-      <circle cx="75" cy="85" r="26" fill="#f8dcc0"/>
-      <path d="M49 82a26 26 0 0 1 52 0z" fill="#f4e6d0"/>
-      <circle cx="67" cy="90" r="2.5" fill="#2a2f55"/><circle cx="83" cy="90" r="2.5" fill="#2a2f55"/>
-      <path d="M69 99q6 5 12 0" fill="none" stroke="#c76a5a" stroke-width="2.5" stroke-linecap="round"/>
-      <path d="M45 175c0-28 14-42 30-42s30 14 30 42z" fill="#98aadb"/>
-    </svg>
-  </header>
+  <PageHero :eyebrow="`Shared by ${sharedBy}`" title="Care log">
+    <template #lead>Tap what just happened.<template v-if="partnerFirst">{{ " " }}{{ partnerFirst }} sees it straight away.</template></template>
+    <StatusPill icon="feed" :tone="feedStatus ? feedStatus.tone : 'none'">
+      <template v-if="feedStatus">
+        <span class="visually-hidden">{{ feedStatus.word }}.</span>Last feed <strong>{{ feedStatus.ago }}</strong>
+      </template>
+      <template v-else>No feeds logged yet</template>
+      <template v-if="feedStatus" #time>{{ feedStatus.clock }}</template>
+    </StatusPill>
+    <button v-if="openSleep" type="button" class="cl__wake" :disabled="waking" @click="wakeUp">
+      <Icon name="sun" :size="18" />{{ selectedBaby?.babyName || "Baby" }} is awake now
+    </button>
+    <template #art>
+      <BabyScene class="cl__art" on-dark art-only :state="babyMood.state" :title="babyMood.title" />
+    </template>
+  </PageHero>
   <BabySwitch />
 
   <section aria-labelledby="cl-now">
@@ -440,20 +455,14 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 .cl__muted { margin: 0; font-size: 0.875rem; color: #6b7392; }
 .cl__error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; border-radius: 8px; }
 
-.cl__hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 32px 40px; background: var(--navy-2); border-radius: 28px; border-bottom: 5px solid #182246; color: #fff; overflow: hidden; }
-.cl__hero-text { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .cl__eyebrow { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #f2a477; }
 .cl__eyebrow--rose { color: #a8473f; }
-.cl__title { margin: 0; font-family: var(--nt-serif); font-size: 2.25rem; line-height: 1.05; font-weight: 700; color: #fff; }
-.cl__lead { margin: 0; font-size: 1.0625rem; color: #dfe5f7; }
-.cl__pill { --tone: #cfd6ea; display: inline-flex; align-items: center; align-self: flex-start; gap: 10px; margin: 8px 0 0; padding: 6px 18px 6px 6px; background: var(--cream); border-radius: 999px; box-shadow: 0 3px 0 rgb(0 0 0 / 18%); font-size: 1rem; color: var(--navy); }
-.cl__pill--ok { --tone: #b9e4c4; }
-.cl__pill--soon { --tone: #f6d88e; }
-.cl__pill--due { --tone: #f4a98c; }
-.cl__pill-ico { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: var(--tone); border-radius: 50%; color: var(--navy); transition: background-color 400ms ease; }
 .cl__pill-main strong { font-weight: 700; }
-.cl__pill-time { padding-left: 10px; border-left: 1.5px solid var(--sand); color: #5b6692; font-size: 0.9375rem; }
-.cl__art { flex: none; width: 140px; height: auto; align-self: flex-end; margin-bottom: -32px; }
+.cl__wake { display: inline-flex; align-items: center; gap: 8px; align-self: flex-start; padding: 10px 20px; background: #f2a477; border: 0; border-bottom: 3px solid #d78251; border-radius: 999px; color: #243560; font-size: 0.9375rem; font-weight: 700; cursor: pointer; }
+.cl__wake:hover { background: #f5ad84; }
+.cl__wake:disabled { opacity: 0.6; cursor: default; }
+.cl__wake:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.cl__art { flex: none; width: 170px; align-self: center; margin: -12px 0; }
 
 .cl__row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .cl__row-head--wrap { flex-wrap: wrap; align-items: center; }
@@ -515,13 +524,11 @@ const quickTypes = Object.entries(ENTRY_TYPES).map(([key, t]) => ({ key, ...t })
 
 @media (max-width: 991px) {
   .cl__tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .cl__hero { padding: 24px; }
   .cl__art { display: none; }
 }
 @media (max-width: 575px) {
   .cl__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cl__stats { grid-template-columns: 1fr; }
-  .cl__title { font-size: 2.25rem; }
   .cl__timeline { padding: 20px 16px; }
   .cl__card { flex-wrap: wrap; }
 }

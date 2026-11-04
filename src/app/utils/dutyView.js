@@ -28,16 +28,30 @@ export function dutyForCarer({ settings, nights = {}, members = [], meUid = "", 
     const found = (members ?? []).find((m) => m.uid === uid);
     return cap(found?.displayName) || "A parent";
   };
-  const label = (who, other) => (who === "both" ? "Both parents" : who === "other" ? other || "Someone else" : nameOfUid(who));
+  // `who` on a schedule shift is the literal string "me"/"partner"/"both"/"other" (see
+  // scheduleHelpers' KINDS), not a uid, so it must be resolved to the actual parent before
+  // nameOfUid can look up a real name -- otherwise every "me"/"partner" shift showed the
+  // generic "A parent" fallback instead of the parent's own name.
+  const label = (who, other) => {
+    if (who === "both") return "Both parents";
+    if (who === "other") return other || "Someone else";
+    const uid = who === "me" ? parents[0]?.uid : who === "partner" ? parents[1]?.uid : who;
+    return nameOfUid(uid);
+  };
 
   const dayIndex = (now.getDay() + 6) % 7;
   const today = (Array.isArray(settings.schedule) ? settings.schedule : [])
     .filter((s) => s?.day === dayIndex && s.who && /^\d{2}:\d{2}$/.test(s.start ?? "") && /^\d{2}:\d{2}$/.test(s.end ?? ""))
     .sort((a, b) => toMinutes(a.start) - toMinutes(b.start))
-    .map((s) => ({ start: clock(s.start), end: clock(s.end), name: label(s.who, s.label), isMe: s.who === meUid }));
+    .map((s) => {
+      // Same resolution as `label`: shift.who is "me"/"partner"/"both"/"other", not a uid, so
+      // comparing it to meUid directly never matched a real caregiver and isMe was always false.
+      const ownerUid = s.who === "me" ? parents[0]?.uid : s.who === "partner" ? parents[1]?.uid : null;
+      return { start: clock(s.start), end: clock(s.end), name: label(s.who, s.label), isMe: Boolean(meUid) && ownerUid === meUid };
+    });
 
   // The first parent is "me" for the plan helpers, the second is "partner".
-  const view = buildRotaView({ rotaSettings: settings, nights, swaps: [], uid: parents[0]?.uid ?? "", now });
+  const view = buildRotaView({ rotaSettings: settings, nights, swaps: [], uid: parents[0]?.uid ?? "", now, hasPartner: parents.length > 1 });
   const date = tonightDate(now, view.handoverTime);
   const night = weekNights(view, mondayOf(date)).find((n) => n.date === date);
   let owner = null;

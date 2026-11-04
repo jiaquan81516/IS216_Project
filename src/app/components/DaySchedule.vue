@@ -18,6 +18,9 @@ const props = defineProps({
   names: { type: Object, default: () => ({ me: "Me", partner: "Partner" }) },
   hasPartner: { type: Boolean, default: false },
   babyLabel: { type: String, default: "the baby" },
+  allowBoth: { type: Boolean, default: true }, // a carer can only pick themselves or someone else
+  readonly: { type: Boolean, default: false }, // a carer's view: no adding, dragging or editing
+  resolveNight: { type: Function, default: null }, // lets a read only view reword who has a night
 });
 const emit = defineEmits(["save"]);
 
@@ -96,7 +99,8 @@ const PH = computed(() => (view.value === "day" ? 30 : 26)); // pixels for one h
 const shiftsOf = (day) => (props.rota.schedule ?? []).filter((s) => s.day === day);
 const nightsOf = computed(() => {
   try {
-    return weekNights(props.rota, weekStart.value) || [];
+    const nights = weekNights(props.rota, weekStart.value) || [];
+    return props.resolveNight ? nights.map(props.resolveNight) : nights;
   } catch {
     return [];
   }
@@ -115,11 +119,11 @@ const nowTop = computed(() => {
 });
 const isToday = (day) => dateOf(day) === todayIso;
 const range = (s) => `${formatHhmm(toHhmm(s.start), timeFormat.value)} to ${formatHhmm(toHhmm(s.end), timeFormat.value)}`;
-const blockLabel = (s) => `${nameOf(s.who, s.label)}, ${DAYS[s.day]}, ${range(s)}. Edit`;
+const blockLabel = (s) => `${nameOf(s.who, s.label)}, ${DAYS[s.day]}, ${range(s)}${props.readonly ? "" : ". Edit"}`;
 
 // ---- Tip ----
 const TIP_KEY = "nurturetrack-duty-tip";
-const tipOpen = ref(true);
+const tipOpen = ref(!props.readonly);
 try {
   tipOpen.value = localStorage.getItem(TIP_KEY) !== "done";
 } catch {
@@ -144,7 +148,7 @@ function minuteAt(event, el) {
   return DAY_START + Math.round((frac * SPAN) / SNAP) * SNAP;
 }
 function onDown(event, day) {
-  if (event.target.closest(".ds__sh") || event.button > 0) return;
+  if (props.readonly || event.target.closest(".ds__sh") || event.button > 0) return;
   const el = event.currentTarget;
   drag = { day, el, a: minuteAt(event, el), b: minuteAt(event, el), y: event.clientY, mouse: event.pointerType === "mouse" };
   if (drag.mouse) el.setPointerCapture?.(event.pointerId);
@@ -207,7 +211,7 @@ const dateLine = computed(() => `${DAYS[draft.day]} ${dayNumber(dateOf(draft.day
 const whoChips = computed(() => [
   { value: "me", label: "You" },
   ...(props.hasPartner ? [{ value: "partner", label: partnerFirst.value }] : []),
-  { value: "both", label: "Both" },
+  ...(props.allowBoth ? [{ value: "both", label: "Both" }] : []),
 ]);
 function pickWho(value) {
   draft.who = value;
@@ -316,7 +320,7 @@ function addButton() {
   <div class="ds" :class="`ds--${view}`" :style="{ '--ph': `${PH}px` }">
     <div class="ds__bar">
       <SegToggle v-model="view" :options="VIEWS" label="Calendar view" class="ds__seg" />
-      <button type="button" class="ds__add" @click="addButton">Add a shift</button>
+      <button v-if="!readonly" type="button" class="ds__add" @click="addButton">Add a shift</button>
     </div>
 
     <div class="ds__nav">
@@ -326,7 +330,7 @@ function addButton() {
       <button v-if="!onThisWeek" type="button" class="ds__today" @click="goToday">Today</button>
     </div>
 
-    <div v-if="tipOpen" class="ds__tip">
+    <div v-if="tipOpen && !readonly" class="ds__tip">
       <ol class="ds__steps">
         <li><i>1</i>Tap or drag on a day</li>
         <li><i>2</i>Choose who</li>
@@ -362,10 +366,11 @@ function addButton() {
             :key="s.id"
             type="button"
             class="ds__sh"
-            :class="[`ds__sh--${s.who}`, `is-${sizeOf(s)}`]"
+            :class="[`ds__sh--${s.who}`, `is-${sizeOf(s)}`, { 'ds__sh--static': readonly }]"
+            :tabindex="readonly ? -1 : undefined"
             :style="blockStyle(s)"
             :aria-label="blockLabel(s)"
-            @click.stop="openSheet({ id: s.id, day: s.day, start: s.start, end: s.end })"
+            @click.stop="!readonly && openSheet({ id: s.id, day: s.day, start: s.start, end: s.end })"
           >
             <span class="ds__who">
               <span class="ds__nm">{{ nameOf(s.who, s.label) }}</span>
@@ -376,7 +381,7 @@ function addButton() {
             <span v-if="preview.end - preview.start >= 60">{{ formatHhmm(toHhmm(preview.start), timeFormat) }} to {{ formatHhmm(toHhmm(preview.end), timeFormat) }}</span>
           </div>
           <span v-if="isToday(d) && nowTop" class="ds__now" :style="{ top: nowTop }" aria-hidden="true"></span>
-          <span v-if="!shiftsOf(d).length && !hasAny" class="ds__empty">Tap to add</span>
+          <span v-if="!shiftsOf(d).length && !hasAny && !readonly" class="ds__empty">Tap to add</span>
         </div>
       </div>
 
@@ -395,7 +400,13 @@ function addButton() {
       </div>
     </div>
 
-    <ul class="ds__legend" aria-label="Colours">
+    <ul v-if="readonly" class="ds__legend" aria-label="Colours">
+      <li><i class="ds__sw ds__sw--me"></i>You</li>
+      <li><i class="ds__sw ds__sw--other"></i>A parent or someone else</li>
+      <li><i class="ds__sw ds__sw--both"></i>Both parents</li>
+      <li><i class="ds__sw ds__sw--night"></i>Night, from the night plan</li>
+    </ul>
+    <ul v-else class="ds__legend" aria-label="Colours">
       <li><i class="ds__sw ds__sw--me"></i>You</li>
       <li v-if="hasPartner"><i class="ds__sw ds__sw--partner"></i>{{ partnerFirst }}</li>
       <li><i class="ds__sw ds__sw--both"></i>Both of you</li>
@@ -512,6 +523,7 @@ function addButton() {
 /* Blocks. Everything inside is centred, across and down. */
 .ds__sh { position: absolute; left: 3px; right: 3px; margin-top: 1px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 2px 4px; border: 0; border-radius: 10px; overflow: hidden; font-family: inherit; text-align: center; color: var(--ink); cursor: pointer; z-index: 1; transition: filter 0.15s ease, transform 0.15s ease; }
 .ds__sh:hover { filter: brightness(0.95); }
+.ds__sh--static { cursor: default; pointer-events: none; }
 .ds__sh:active { transform: scale(0.98); }
 .ds__who { display: flex; align-items: center; justify-content: center; gap: 6px; max-width: 100%; font-size: 0.8125rem; font-weight: 700; line-height: 1.15; }
 .ds__nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline; }

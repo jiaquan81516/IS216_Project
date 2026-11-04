@@ -8,6 +8,7 @@ import Tabs from "@/app/components/Tabs.vue";
 import AppButton from "@/components/ui/AppButton.vue";
 import Icon from "@/app/components/Icon.vue";
 import RoomCard from "@/app/components/RoomCard.vue";
+import AppPager from "@/app/components/AppPager.vue";
 import RoomFilterPanel from "@/app/components/RoomFilterPanel.vue";
 import OneMapEmbed from "@/app/components/OneMapEmbed.vue";
 import { loadBmsgRooms } from "@/api/bmsgRooms";
@@ -28,6 +29,7 @@ import { useToast } from "@/app/composables/useToast";
 import { useLocate } from "@/app/composables/useLocate";
 import { useAuth } from "@/composables/useAuth";
 import RoomManager from "@/app/components/RoomManager.vue";
+import RoomFeedbackManager from "@/app/components/RoomFeedbackManager.vue";
 import { useAdmin } from "@/composables/useAdmin";
 import { saveManagedRoom, subscribeRoomOverrides } from "@/api/roomManagement";
 import AddressPicker from "@/app/components/AddressPicker.vue";
@@ -73,6 +75,14 @@ const visible = computed(() => {
   const filtered = applyFilters(base, { text: query.value, ...filters.value });
   // Distance only matters once the person has shared their location.
   return located.value ? sortByDistance(filtered, origin.value) : filtered;
+});
+// Ten rooms to a page. The map still knows every room, so a chosen room stays on the map.
+const PAGE_SIZE = 10;
+const page = ref(1);
+const pageRooms = computed(() => visible.value.slice((page.value - 1) * PAGE_SIZE, page.value * PAGE_SIZE));
+watch([view, query, filters, located, origin], () => { page.value = 1; }, { deep: true });
+watch(() => visible.value.length, (n) => {
+  while (page.value > 1 && (page.value - 1) * PAGE_SIZE >= n) page.value -= 1;
 });
 const savedCount = computed(() => allRooms.value.filter((r) => savedIds.value.includes(r.id)).length);
 const countText = computed(() => {
@@ -129,6 +139,8 @@ onMounted(async () => {
     message.value = "Room updates could not be loaded. Please refresh and try again.";
   });
   listed.value = await loadBmsgRooms();
+  // Open on where the person is. If they say no, the island view and search still work.
+  locate();
 });
 onBeforeUnmount(() => { roomsStore.unbind(); stopOverrides?.(); });
 
@@ -241,11 +253,13 @@ const SUPPORT_TABS = [
   { id: "guides", label: "For you" },
   { id: "baby", label: "Baby care" },
   { id: "rooms", label: "Pumping rooms" },
+  { id: "clinics", label: "Clinics" },
   { id: "resources", label: "Who to call" },
 ];
 const supportTab = ref("rooms");
 watch(supportTab, (id) => {
   if (id === "guides") router.push("/support");
+  else if (id === "clinics") router.push("/support/kids-care");
   else if (id !== "rooms") router.push(`/support?tab=${id}`);
 });
 </script>
@@ -313,6 +327,7 @@ watch(supportTab, (id) => {
 
         <div class="pr__views" role="group" aria-label="Show">
           <button type="button" class="app-chip" :aria-pressed="view === 'all' ? 'true' : 'false'" @click="view = 'all'">All rooms</button>
+          <button v-if="isAdmin" type="button" class="app-chip" :aria-pressed="view === 'feedback'" @click="view = 'feedback'">All feedback</button>
           <AppButton v-if="isAdmin" ref="addButton" variant="outline" size="sm" @click="openForm">
             <Icon name="plus" :size="16" />
             Add room
@@ -353,10 +368,11 @@ watch(supportTab, (id) => {
           </TransitionGroup>
         </section>
 
-        <div v-if="roomsStore.loading && !roomsError" class="pr__pad pr__skel"><SkeletonList :rows="3" :height="140" label="Loading pumping rooms" /></div>
+        <RoomFeedbackManager v-if="isAdmin && view === 'feedback'" :rooms="allRooms" @edit-room="manager?.edit($event)" />
+        <div v-else-if="roomsStore.loading && !roomsError" class="pr__pad pr__skel"><SkeletonList :rows="3" :height="140" label="Loading pumping rooms" /></div>
         <TransitionGroup tag="ul" name="li" v-else-if="visible.length" class="pr__list" aria-label="Pumping rooms">
           <RoomCard
-            v-for="room in visible"
+            v-for="room in pageRooms"
             :key="room.id"
             :room="room"
             :selected="room.id === selectedId"
@@ -377,6 +393,8 @@ watch(supportTab, (id) => {
             {{ view === "saved" ? "Save a room from the list and it shows here." : "Try a different search or remove a filter." }}
           </p>
         </div>
+
+        <AppPager v-if="view !== 'feedback'" v-model="page" class="pr__pager" :total="visible.length" :page-size="PAGE_SIZE" label="Room pages" />
 
         <div v-if="!isAdmin" class="pr__foot">
           <p class="pr__muted pr__note">
@@ -475,13 +493,22 @@ watch(supportTab, (id) => {
 .pr__head { padding: 24px 24px 0; }
 .pr__title { margin: 0; font-size: 1.75rem; line-height: 1.25; }
 .pr__field { position: relative; margin: 24px 24px 8px; }
-.pr__input { width: 100%; padding: 24px 44px 8px 16px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 8px; font: inherit; font-size: 0.875rem; color: var(--nt-ink); }
-.pr__input:focus { outline: 2px solid var(--nt-plum); outline-offset: 1px; border-color: var(--nt-plum); }
+.pr__input { width: 100%; padding: 24px 44px 8px 16px; background: #fff; border: 1.5px solid #e9d9b8; border-radius: 14px; font: inherit; font-size: 0.875rem; color: var(--nt-ink); }
+.pr__input:focus { outline: 3px solid #f2a477; outline-offset: 1px; border-color: #243560; }
 .pr__icon { position: absolute; right: 14px; top: 50%; display: inline-flex; transform: translateY(-50%); color: var(--nt-muted); pointer-events: none; }
-.pr__notice { margin: 8px 24px; padding: 10px 12px; background: var(--nt-gray); border: 1px solid var(--nt-line); border-radius: 8px; font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); }
+.pr__notice { margin: 8px 24px; padding: 10px 14px; background: #fdf9f0; border: 1px solid #e9d9b8; border-radius: 14px; font-size: 0.875rem; line-height: 1.45; color: var(--nt-ink); }
 .pr__bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; }
-.pr__count { margin: 0; font-size: 0.875rem; color: var(--nt-muted); }
+.pr__count { margin: 0; font-size: 0.9375rem; color: #1f2a52; }
 .pr__views { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 24px 16px; }
+/* Filters, tabs and the toolbar buttons: the app's pill buttons instead of the older plum chips. */
+.pr__views :deep(.app-chip), .pr__bar :deep(.btn), .pr__views :deep(.btn-outline) { min-height: 40px; padding: 7px 18px; background: #fff; border: 1.5px solid #e9d9b8; border-bottom-width: 3px; border-radius: 999px; color: #243560; font-size: 0.9375rem; font-weight: 600; transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease; }
+.pr__views :deep(.app-chip:hover), .pr__bar :deep(.btn:hover:not(:disabled)) { background: #fff; border-color: #243560; color: #243560; transform: translateY(-1px); }
+.pr__views :deep(.app-chip[aria-pressed="true"]) { background: #243560; border-color: #182246; color: #fff; }
+.pr__views :deep(.app-chip[aria-pressed="true"]:hover) { background: #2c4175; color: #fff; }
+.pr__views :deep(.btn-outline) { background: #f2a477; border-color: #c4642f; color: #1f2a52; font-weight: 700; }
+.pr__views :deep(.btn-outline:hover:not(:disabled)) { background: #f6b58e; border-color: #c4642f; color: #1f2a52; transform: translateY(-1px); }
+.pr__views :deep(.app-chip:focus-visible), .pr__views :deep(.btn:focus-visible), .pr__bar :deep(.btn:focus-visible) { outline: 3px solid #f2a477; outline-offset: 2px; }
+.pr__views :deep(.btn:active:not(:disabled)), .pr__bar :deep(.btn:active:not(:disabled)) { transform: none; }
 .pr__status:empty { display: none; }
 .pr__status { padding: 0 24px 12px; }
 .pr__pad { padding: 0 24px; }
@@ -489,12 +516,13 @@ watch(supportTab, (id) => {
 .pr__skel { padding-bottom: 16px; }
 .pr__subs { display: flex; flex-direction: column; gap: 10px; padding: 0 24px 16px; }
 .pr__sublist { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.pr__sub { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
-.pr__sub--no { border-left: 3px solid var(--nt-plum); }
+.pr__sub { display: flex; flex-direction: column; gap: 4px; padding: 14px 18px 16px; background: #fdf9f0; border: 1px solid #e9d9b8; border-bottom-width: 4px; border-radius: 20px; }
+.pr__sub--no { border-color: #f2c9a6; }
 .pr__subhead { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .pr__sub p { margin: 0; }
 .pr__subclose { margin-left: auto; min-height: 44px; padding: 0 8px; }
 .pr__list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--nt-line); }
+.pr__pager { margin: 20px 0 4px; }
 .pr__empty { display: flex; flex-direction: column; gap: 8px; padding: 32px 24px; border-top: 1px solid var(--nt-line); }
 .pr__foot { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 20px 24px 8px; }
 .pr__note { font-size: 0.875rem; }
@@ -538,12 +566,14 @@ watch(supportTab, (id) => {
 .pr--list .pr__side { border-right: 0; overflow: visible; }
 .pr--list .pr__scroll { height: auto; overflow: visible; max-width: 1120px; margin: 0 auto; }
 .pr--list .pr__list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 24px; border-top: 0; }
-.pr--list .pr__list :deep(.rc) { background: var(--nt-white); border: 1px solid var(--nt-line); border-radius: 12px; }
-.pr--list .pr__list :deep(.rc--on) { border-left: 3px solid var(--nt-plum); }
-.panel-rise-enter-active, .panel-rise-leave-active { transition: opacity 220ms ease, transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1); }
-.pr--list .pr__panel.panel-rise-enter-from, .pr--list .pr__panel.panel-rise-leave-to { opacity: 0; transform: translateX(-50%) translateY(16px); }
+.pr--list .pr__list :deep(.rc) { padding: 22px 26px 20px; background: #fdf9f0; border: 1px solid #e9d9b8; border-bottom-width: 4px; border-radius: 24px; }
+.pr--list .pr__list :deep(.rc:hover) { background: #fffdf8; border-color: #d9c79a; }
+.pr--list .pr__list :deep(.rc--on) { border-color: #f2a477; padding-left: 26px; }
+.panel-rise-enter-active { transition: opacity 220ms ease; }
+.panel-rise-leave-active { transition: opacity 180ms ease; }
+.panel-rise-enter-from, .panel-rise-leave-to { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .panel-rise-enter-active, .panel-rise-leave-active { transition: none; } }
-.pr--list .pr__panel { position: fixed; inset: auto; top: 10vh; left: 50%; transform: translateX(-50%); width: min(480px, calc(100vw - 32px)); max-height: 80vh; border: 1px solid var(--nt-line); border-radius: 12px; }
+.pr--list .pr__panel { position: fixed; inset: auto; top: 10vh; left: 50%; transform: translateX(-50%); width: min(480px, calc(100vw - 32px)); max-height: 80vh; background: #fdf9f0; border: 1px solid #e9d9b8; border-bottom-width: 4px; border-radius: 24px; }
 
 /* Line this page up with the Support page: same width, no extra inset, no forced full height,
    so switching tabs does not move the header, the tabs or the page. */

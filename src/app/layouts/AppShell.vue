@@ -15,6 +15,7 @@ import { displayName, useHome, HOME_KEY } from "@/app/composables/useHome";
 import { useEntries, ENTRIES_KEY } from "@/app/composables/useEntries";
 import { useShared, SHARED_KEY } from "@/app/composables/useShared";
 import { useNudges, NUDGES_KEY } from "@/app/composables/useNudges";
+import { useCaregiverJoins, CAREGIVER_JOINS_KEY } from "@/app/composables/useCaregiverJoins";
 import { usePush, usePushMessages } from "@/app/composables/usePush";
 import { buildStream, unreadCount } from "@/app/utils/stream";
 import { resetLimits } from "@/app/utils/limits";
@@ -49,7 +50,7 @@ watch(home.householdId, (id) => id && loadBabies(id), { immediate: true });
 // One live entries listener, shared by Home and the care log. It waits for the household id.
 const entriesShared = useEntries(home.householdId);
 provide(ENTRIES_KEY, entriesShared);
-// One set of listeners for the shared pages (sleep rota, calendar, return to work). They
+// One set of listeners for the shared pages (sleep rota, calendar, tasks). They
 // wait for the household id too, and are unbound when it changes or the shell unmounts.
 const meUid = computed(() => home.me.value.uid);
 const partnerUid = computed(() => home.partner.value?.uid ?? "");
@@ -93,7 +94,13 @@ onMounted(() => {
   router.replace({ path: route.path, query: rest });
 });
 
-const { toasts: appToasts, closeToast: closeAppToast } = useToast();
+const { toasts: appToasts, closeToast: closeAppToast, showToast } = useToast();
+
+// A parent hears when somebody joins as a caregiver: a pop up now, and a notice on Home until it is read.
+const caregiverJoins = useCaregiverJoins(home.householdId, meUid, (who) =>
+  showToast({ title: `${who.name} joined as a caregiver`, text: `${who.role}. Check what they can see in Settings.`, ms: 9000 }),
+);
+provide(CAREGIVER_JOINS_KEY, caregiverJoins);
 
 const menuOpen = ref(false);
 const menuButton = ref(null);
@@ -112,6 +119,10 @@ const ADMIN_NAV = ADMIN_SECTIONS.map((section) => ({
   to: { path: ROUTES.ADMIN, query: { tab: section.id } },
 }));
 const adminSection = computed(() => (ADMIN_SECTIONS.some((s) => s.id === route.query.tab) ? route.query.tab : ADMIN_SECTIONS[0].id));
+// Open checklist tasks that are yours or shared, shown as a count on the Checklist link.
+const checklistCount = computed(
+  () => (shared.tasks.tasks ?? []).filter((t) => !t.done && (t.owner === meUid.value || t.owner === "both")).length,
+);
 const items = computed(() =>
   (adminWorkspace.value ? ADMIN_NAV : NAV).map((item) => ({
     ...item,
@@ -119,6 +130,7 @@ const items = computed(() =>
       ? route.path === ROUTES.ADMIN && adminSection.value === item.key
       : item.to === route.path || route.path.startsWith(item.to + "/"),
     dot: item.key === "today" && unread.value > 0,
+    badge: !adminWorkspace.value && item.key === "checklist" ? checklistCount.value : 0,
   })),
 );
 // Daily pages sit on the bar; the rest live under "More". An administrator's sections are all primary.
@@ -243,6 +255,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
                   <span>{{ item.label }}</span>
                   <span v-if="item.dot" class="top__dot" aria-hidden="true"></span>
                   <span v-if="item.dot" class="visually-hidden">unread</span>
+                  <span v-if="item.badge" class="top__badge" aria-hidden="true">{{ item.badge > 9 ? "9+" : item.badge }}</span>
+                  <span v-if="item.badge" class="visually-hidden">{{ item.badge }} to do</span>
                 </RouterLink>
               </li>
               <li v-if="moreItems.length" ref="moreWrap" class="top__more" :class="{ 'top__more--open': moreOpen }">
@@ -300,7 +314,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
         <div v-if="confirmOut" class="so" @click.self="closeConfirm">
           <div class="so__box" role="alertdialog" aria-modal="true" aria-labelledby="so-title" aria-describedby="so-text" @keydown="trapConfirm">
             <h2 id="so-title" class="so__title">Are you sure you want to sign out?</h2>
-            <p id="so-text" class="so__text">You will need to sign in again to see your care space.</p>
+            <p id="so-text" class="so__text">{{ adminWorkspace ? "You will need to sign in again to manage rooms and support content." : "You will need to sign in again to see your care space." }}</p>
             <div class="so__actions">
               <button ref="cancelOut" type="button" class="app-btn app-btn--outline" :disabled="signingOut" @click="closeConfirm">Stay signed in</button>
               <button type="button" class="app-btn app-btn--primary" :disabled="signingOut" @click="signOut">{{ signingOut ? "Signing out" : "Sign out" }}</button>
@@ -323,11 +337,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  /* A soft, grainy sky blue behind every page. */
-  background-color: #8fb0d6;
-  background-image: url("/bg-sky.jpg");
-  background-size: 675px 1200px;
-  background-attachment: fixed;
+  /* A soft dotted periwinkle behind every page. */
+  background-color: #9fb0d0;
+  background-image: radial-gradient(rgb(255 255 255 / 35%) 1.5px, transparent 1.5px);
+  background-size: 22px 22px;
 }
 .appshell__skip {
   position: absolute;
@@ -549,6 +562,20 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
     transition: none;
   }
 }
+.top__badge {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: #f2a477;
+  border-radius: 999px;
+  color: #243560;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
 .top__dot {
   width: 8px;
   height: 8px;
@@ -693,13 +720,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   .top__user {
     order: 3;
   }
-}
-
-/* Care log and Checklist sit on a soft dotted periwinkle page. */
-.appshell__main--carelog {
-  background-color: #9fb0d0;
-  background-image: radial-gradient(rgb(255 255 255 / 35%) 1.5px, transparent 1.5px);
-  background-size: 22px 22px;
 }
 </style>
 

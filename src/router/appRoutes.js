@@ -8,7 +8,8 @@ const appPage = (name) => () => import(`@/app/pages/${name}/index.vue`);
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
-  scrollBehavior: () => ({ top: 0 }),
+  // New page: start at the top. Same page with a different query (a tab, an open guide): stay put.
+  scrollBehavior: (to, from, saved) => saved ?? (to.path === from.path ? false : { top: 0 }),
   routes: [
     { path: ROUTES.LANDING, name: "landing", component: appPage("landing"), meta: { public: true } },
     { path: ROUTES.JOURNEY, name: "journey", component: appPage("journey"), meta: { public: true } },
@@ -20,6 +21,7 @@ const router = createRouter({
       : []),
     { path: ROUTES.HOUSEHOLD, name: "household", component: appPage("household"), meta: { public: true } },
     { path: ROUTES.CARE_BRIEF, name: "care-brief", component: appPage("care-brief"), meta: { requiresAuth: true } },
+    { path: ROUTES.CARE_DUTY, name: "care-duty", component: appPage("care-duty"), meta: { requiresAuth: true } },
 
     // Invitation links remain valid and open the current household flow.
     {
@@ -43,8 +45,7 @@ const router = createRouter({
         // (and its header and tabs) in place. pageKey tells the shell they are the same page.
         { path: "support", name: "support", component: appPage("support"), meta: { pageKey: "support" } },
         { path: "support/rooms", name: "pumping-rooms", component: appPage("support"), meta: { pageKey: "support" } },
-        { path: "support/kids-care", name: "kids-care", component: appPage("kids-care") },
-        { path: "return-to-work", name: "return-to-work", component: appPage("return-to-work") },
+        { path: "support/kids-care", name: "kids-care", component: appPage("support"), meta: { pageKey: "support" } },
         { path: "calendar", name: "calendar", component: appPage("calendar") },
         { path: "settings", name: "settings", component: appPage("settings") },
         { path: "profile", name: "profile", component: appPage("profile") },

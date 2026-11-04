@@ -1,4 +1,5 @@
 <script setup>
+import DateField from "@/app/components/DateField.vue";
 import { computed } from "vue";
 import Field from "@/app/components/Field.vue";
 import "@/app/app.css";
@@ -68,15 +69,13 @@ function onStatusKeydown(event) {
     </div>
     <div class="app-field">
       <label class="app-field__label" :for="`${idPrefix}-date`">{{ dateLabel }} (optional)</label>
-      <input
+      <DateField
         :id="`${idPrefix}-date`"
-        :value="modelValue.date"
-        class="app-input"
-        type="date"
+        :model-value="modelValue.date"
         :min="dateMin"
         :max="dateMax"
         :disabled="disabled"
-        @input="set({ date: $event.target.value })"
+        @update:model-value="set({ date: $event })"
       />
     </div>
   </div>

@@ -24,18 +24,32 @@ import { CAREGIVER_ROLES, caregiverPermissions, isPrimaryParent } from "@/app/ut
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_PREFIX = "NT-";
 
+// Eight characters from a 32 letter set is about a trillion codes, drawn from the browser's secure
+// random source, so a code cannot be guessed or stepped through the way a short one could.
+const CODE_LENGTH = 8;
 export function generateInviteCode() {
+  const bytes = new Uint8Array(CODE_LENGTH);
+  crypto.getRandomValues(bytes);
   let suffix = "";
-  for (let i = 0; i < 4; i += 1) {
-    suffix += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  }
+  for (const byte of bytes) suffix += CODE_CHARS[byte % CODE_CHARS.length];
   return `${CODE_PREFIX}${suffix}`;
 }
 
 export function normaliseInviteCode(input) {
-  const cleaned = String(input ?? "").replace(/\s+/g, "").toUpperCase();
-  if (!cleaned) return "";
-  return cleaned.startsWith(CODE_PREFIX) ? cleaned : `${CODE_PREFIX}${cleaned}`;
+  let raw = String(input ?? "").trim();
+  // A whole invite link can be pasted: take the code from ?code= or from the last part of the path.
+  if (/[/?#]/.test(raw)) {
+    const query = /[?&]code=([^&#]+)/i.exec(raw);
+    const tail = raw.split(/[?#]/)[0].split("/").filter(Boolean).pop() ?? "";
+    raw = decodeURIComponent(query ? query[1] : tail);
+  }
+  // Spaces and dashes are ignored, so "nt-abcd-2345", "ABCD 2345" and "NT-ABCD2345" are the same code.
+  let body = raw.toUpperCase().replace(/[\s-]+/g, "");
+  // Codes are 4 (older) or 8 characters. With the NT prefix attached that is 6 or 10, with or
+  // without a dash, so "NTMVUG3GF2" and "NT-MVUG3GF2" both mean MVUG3GF2.
+  if (body.startsWith("NT") && (body.length === 6 || body.length === 10)) body = body.slice(2);
+  body = body.replace(/[^A-Z0-9]/g, "");
+  return body ? `${CODE_PREFIX}${body}` : "";
 }
 
 export async function getUserProfile(uid) {
@@ -116,8 +130,10 @@ export function babySummary(baby = {}, today = new Date()) {
   return { name: babyName, line };
 }
 
-export async function createHousehold(user, baby = {}) {
-  const { babyName, babyStatus, babyDate } = cleanBaby(baby);
+export async function createHousehold(user, input = {}) {
+  const list = Array.isArray(input.babies) && input.babies.length ? input.babies : [input];
+  const [first, ...rest] = list.map(cleanBaby);
+  const { babyName, babyStatus, babyDate } = first;
   const profile = (await getUserProfile(user.uid)) || {};
 
   const inviteCode = await freshCode();
@@ -147,6 +163,7 @@ export async function createHousehold(user, baby = {}) {
   batch.update(doc(db, "users", user.uid), { householdId, householdIds: [householdId], onboarded: true });
 
   await batch.commit();
+  for (const extra of rest) await addBaby(householdId, extra);
   return { householdId, inviteCode };
 }
 
@@ -174,6 +191,13 @@ export async function joinHousehold(user, code, { householdLabel = "" } = {}) {
   const { householdId } = invite;
   const profile = (await getUserProfile(user.uid)) || {};
   const currentMember = profile.householdId ? await getMember(profile.householdId, user.uid) : null;
+  // A parent's account stays a parent account. Taking a caregiver invite would move the profile to the
+  // caregiver household and lock them out of their own, so they use a separate account for that.
+  if (currentMember?.accessLevel === "parent" && invite.kind === "caregiver") {
+    const error = new Error("This account runs its own household. Use a different account to be a caregiver.");
+    error.code = "invite/parent-account";
+    throw error;
+  }
   if (currentMember?.accessLevel === "caregiver" && invite.kind !== "caregiver") {
     const error = new Error("Caregiver accounts can only join households through a caregiver invitation.");
     error.code = "invite/caregiver-required";
@@ -287,9 +311,7 @@ export async function getHousehold(householdId) {
   return snap.exists() ? snap.data() : null;
 }
 
-export async function getHouseholdMembers(householdId) {
-  if (!householdId) return [];
-  const snap = await getDocs(collection(db, "households", householdId, "members"));
+function mapMembers(snap) {
   const joined = (data) => data.joinedAt?.toMillis?.() ?? 0;
   return snap.docs
     .map((d) => ({ data: d.data(), uid: d.id }))
@@ -304,6 +326,17 @@ export async function getHouseholdMembers(householdId) {
     }));
 }
 
+export async function getHouseholdMembers(householdId) {
+  if (!householdId) return [];
+  return mapMembers(await getDocs(collection(db, "households", householdId, "members")));
+}
+
+// The same list, kept live, so a parent sees a caregiver arrive without refreshing.
+export function subscribeHouseholdMembers(householdId, onData, onError) {
+  if (!householdId) return () => {};
+  return onSnapshot(collection(db, "households", householdId, "members"), (snap) => onData(mapMembers(snap)), onError);
+}
+
 export async function getMember(householdId, uid) {
   if (!householdId || !uid) return null;
   const snap = await getDoc(doc(db, "households", householdId, "members", uid));
@@ -312,11 +345,27 @@ export async function getMember(householdId, uid) {
   return { uid, ...data, accessLevel: data.accessLevel ?? (isPrimaryParent(data) ? "parent" : "caregiver") };
 }
 
+// Live updates to one member document, so a caregiver sees permission changes straight away.
+export function subscribeMember(householdId, uid, onData, onError) {
+  if (!householdId || !uid) return () => {};
+  return onSnapshot(
+    doc(db, "households", householdId, "members", uid),
+    (snap) => {
+      if (!snap.exists()) return onData(null);
+      const data = snap.data();
+      onData({ uid, ...data, accessLevel: data.accessLevel ?? (isPrimaryParent(data) ? "parent" : "caregiver") });
+    },
+    onError,
+  );
+}
+
 export async function getCaregiverHouseholds(uid) {
   const profile = await getUserProfile(uid);
   const ids = [...new Set([...(profile?.householdIds ?? []), profile?.householdId].filter(Boolean))];
+  let hasParentMembership = false;
   const memberships = await Promise.all(ids.map(async (householdId) => {
     const member = await getMember(householdId, uid);
+    if (member?.accessLevel === "parent") hasParentMembership = true;
     if (member?.accessLevel !== "caregiver") return null;
     let babyName = "";
     if (member.permissions?.careBrief === true) {
@@ -343,7 +392,9 @@ export async function getCaregiverHouseholds(uid) {
     : activeHouseholds[0]?.householdId ?? null;
   const validIds = activeHouseholds.map((item) => item.householdId);
   const activeRole = activeHouseholds.find((item) => item.householdId === activeId)?.member.role ?? profile?.role ?? null;
-  if (profile && (JSON.stringify(profile.householdIds ?? []) !== JSON.stringify(validIds) || profile.householdId !== activeId || profile.role !== activeRole)) {
+  // An account that also runs a household of its own is left alone: tidying the list to caregiver
+  // households only would point its profile away from that household.
+  if (profile && !hasParentMembership && (JSON.stringify(profile.householdIds ?? []) !== JSON.stringify(validIds) || profile.householdId !== activeId || profile.role !== activeRole)) {
     await updateDoc(doc(db, "users", uid), { householdIds: validIds, householdId: activeId, role: activeRole });
   }
   const labelCounts = new Map();
@@ -539,6 +590,16 @@ export async function getRecentCareEntries(householdId, max = 100) {
   const q = query(collection(db, "households", householdId, "entries"), orderBy("at", "desc"), limit(max));
   const snap = await getDocs(q);
   return snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+}
+
+// A caregiver without full care log access still sees what they logged themselves. No index needed:
+// one equality filter, newest first after the fetch.
+export async function getMyCareEntries(householdId, uid, max = 100) {
+  const q = query(collection(db, "households", householdId, "entries"), where("by", "==", uid), limit(max));
+  const snap = await getDocs(q);
+  const list = snap.docs.map((item) => ({ id: item.id, ...item.data() }));
+  const ms = (v) => (v?.toDate ? v.toDate().getTime() : new Date(v).getTime()) || 0;
+  return list.sort((a, b) => ms(b.at) - ms(a.at));
 }
 
 export async function getUpcomingCareAppointments(householdId, max = 10) {

@@ -49,6 +49,7 @@ export const BODY_AREAS = Object.freeze([
   { value: "back", label: "Back" },
 ]);
 
+// Top 6 shown as chips. Anything else is typed in through the "Something else" option.
 export const LIFTS = Object.freeze([
   { value: "sleep", label: "Some sleep" },
   { value: "food", label: "Food I enjoyed" },
@@ -56,8 +57,6 @@ export const LIFTS = Object.freeze([
   { value: "laugh", label: "A laugh" },
   { value: "hug", label: "A hug" },
   { value: "baby", label: "A moment with the baby" },
-  { value: "alone", label: "Time to myself" },
-  { value: "friend", label: "Talking to someone" },
 ]);
 
 // What a parent can ask for, on a hard day. Optional. A kind check-in is assumed when nothing is chosen.
@@ -111,6 +110,7 @@ export function kindWords({ mood, energy, stress, lifts = [] }) {
 
 export const MAX_CONCERNS = 3;
 
+// Top 6 shown as chips. Anything else is typed in through the "Something else" option.
 export const CONCERNS = Object.freeze([
   { value: "exhausted", label: "Tiredness" },
   { value: "overwhelmed", label: "Feeling overwhelmed" },
@@ -118,10 +118,6 @@ export const CONCERNS = Object.freeze([
   { value: "isolated", label: "Feeling alone" },
   { value: "disconnected", label: "Distance between us" },
   { value: "body-image", label: "My body" },
-  { value: "provider-pressure", label: "Pressure to provide" },
-  { value: "return-to-work", label: "Going back to work" },
-  { value: "pumping", label: "Pumping" },
-  { value: "parenting-confidence", label: "Unsure as a parent" },
 ]);
 
 const guide = (id) => ({ path: ROUTES.SUPPORT, query: { guide: id } });
@@ -154,10 +150,10 @@ export const IDEAS = Object.freeze({
   ],
   "provider-pressure": [
     { title: "Say the worry out loud", body: "Name the one thing you are afraid will happen, such as money in the first year, and tell your partner. A named worry can be planned for.", action: "Read the guide", to: guide("dads") },
-    { title: "Hand one job over for a week", body: "Pick a job you carry without saying so, and agree who owns it for the next seven days.", action: "Review shared tasks", to: ROUTES.RETURN_TO_WORK },
+    { title: "Hand one job over for a week", body: "Pick a job you carry without saying so, and agree who owns it for the next seven days.", action: "Review shared tasks", to: ROUTES.CHECKLIST },
   ],
   "return-to-work": [
-    { title: "Plan the first week back", body: "Who does drop-off, who does pick-up, and who stays home if the baby is unwell. Decide it once, together.", action: "Open return to work", to: ROUTES.RETURN_TO_WORK },
+    { title: "Plan the first week back", body: "Who does drop-off, who does pick-up, and who stays home if the baby is unwell. Decide it once, together.", action: "Open the checklist", to: ROUTES.CHECKLIST },
     { title: "Say which feeling is louder", body: "Guilt and relief can both be true. Tell your partner which one is louder today." },
   ],
   pumping: [

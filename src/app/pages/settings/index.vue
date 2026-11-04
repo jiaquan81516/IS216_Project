@@ -1,9 +1,12 @@
 <script setup>
+import DateField from "@/app/components/DateField.vue";
 import LoadingScreen from "@/app/components/LoadingScreen.vue";
 import "@/app/app.css";
 import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AppButton from "@/components/ui/AppButton.vue";
+import Icon from "@/app/components/Icon.vue";
+import PageHero from "@/app/components/PageHero.vue";
 import ChipGroup from "@/app/components/ChipGroup.vue";
 import ConfirmDanger from "@/app/components/ConfirmDanger.vue";
 import GoogleCalendarClientCard from "@/app/components/GoogleCalendarClientCard.vue";
@@ -49,14 +52,14 @@ import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 defineOptions({ name: "SettingsPage" });
 
 const NAV = [
-  { id: "st-notif", label: "Notifications" },
-  { id: "st-cal", label: "Google Calendar" },
-  { id: "st-display", label: "Display" },
-  { id: "st-privacy", label: "Privacy" },
-  { id: "st-partner-h", label: "Partner" },
-  { id: "st-caregivers", label: "Caregivers" },
-  { id: "st-house", label: "Household" },
-  { id: "st-danger", label: "Danger zone" },
+  { id: "st-notif", label: "Notifications", icon: "chat" },
+  { id: "st-cal", label: "Google Calendar", icon: "calendar" },
+  { id: "st-display", label: "Display", icon: "sliders" },
+  { id: "st-privacy", label: "Privacy", icon: "lifebuoy" },
+  { id: "st-partner-h", label: "Partner", icon: "heart" },
+  { id: "st-caregivers", label: "Caregivers", icon: "briefcase" },
+  { id: "st-house", label: "Household", icon: "pin" },
+  { id: "st-danger", label: "Danger zone", icon: "trash" },
 ];
 
 const router = useRouter();
@@ -232,6 +235,17 @@ const CALENDAR_RETURNS = {
   error: { text: "We could not connect Google Calendar. Try again, or check docs/setup.md.", alert: true },
   denied: { text: "Google Calendar was not connected, because access was not granted.", alert: true },
 };
+
+// A link such as /settings?section=st-caregivers scrolls straight to that card, then tidies the address.
+onMounted(async () => {
+  const section = Array.isArray(route.query?.section) ? route.query.section[0] : route.query?.section;
+  if (!section) return;
+  await nextTick();
+  goTo(section);
+  const rest = { ...route.query };
+  delete rest.section;
+  router.replace({ path: route.path, query: rest });
+});
 
 onMounted(() => {
   const flag = route.query?.calendar;
@@ -546,10 +560,7 @@ async function confirmDelete() {
 
 <template>
   <div ref="rootEl" class="st">
-    <header class="st__head">
-      <h1 class="nt-title st__title">Settings</h1>
-      <p class="st__sub">Changes save as you make them.</p>
-    </header>
+    <PageHero title="Settings" />
 
     <LoadingScreen v-if="loading" variant="inline" label="Loading" />
 
@@ -567,7 +578,7 @@ async function confirmDelete() {
           :href="`#${item.id}`"
           :aria-current="activeId === item.id ? 'true' : undefined"
           @click.prevent="goTo(item.id)"
-        >{{ item.label }}</a>
+        ><Icon :name="item.icon" :size="18" class="st__nav-ico" aria-hidden="true" />{{ item.label }}</a>
       </nav>
       <div class="st__cards">
       <p class="st__save" role="status" aria-live="polite">{{ savedAt }}</p>
@@ -575,7 +586,7 @@ async function confirmDelete() {
 
       <!-- Notifications -->
       <section class="st__card" aria-labelledby="st-notif">
-        <h2 id="st-notif" class="st__h">Notifications</h2>
+        <h2 id="st-notif" class="st__h"><span class="st__ico" aria-hidden="true"><Icon name="chat" :size="20" /></span>Notifications</h2>
         <p class="st__muted">
           Alerts for a message or a task from your partner reach this device while the browser is
           running. They need the push server from docs/setup.md.
@@ -665,7 +676,7 @@ async function confirmDelete() {
 
       <!-- Calendar -->
       <section class="st__card" aria-labelledby="st-cal">
-        <h2 id="st-cal" class="st__h">Google Calendar</h2>
+        <h2 id="st-cal" class="st__h"><span class="st__ico" aria-hidden="true"><Icon name="calendar" :size="20" /></span>Google Calendar</h2>
         <GoogleCalendarClientCard v-if="clientMode" :household-id="householdId || ''" :uid="me?.uid || ''" />
         <template v-else>
         <p v-if="form.calendar.connected" class="st__text">Connected.</p>
@@ -717,7 +728,7 @@ async function confirmDelete() {
 
       <!-- Display -->
       <section class="st__card" aria-labelledby="st-display">
-        <h2 id="st-display" class="st__h">Display</h2>
+        <h2 id="st-display" class="st__h"><span class="st__ico" aria-hidden="true"><Icon name="sliders" :size="20" /></span>Display</h2>
         <div class="st__rows">
           <div class="st__field">
             <ChipGroup
@@ -749,7 +760,7 @@ async function confirmDelete() {
 
       <!-- Privacy -->
       <section class="st__card" aria-labelledby="st-privacy">
-        <h2 id="st-privacy" class="st__h">Privacy</h2>
+        <h2 id="st-privacy" class="st__h"><span class="st__ico" aria-hidden="true"><Icon name="lifebuoy" :size="20" /></span>Privacy</h2>
         <Toggle
           id="st-lastseen"
           label="Show my partner when I was last active"
@@ -761,7 +772,7 @@ async function confirmDelete() {
 
       <!-- Partner -->
       <section class="st__card" aria-labelledby="st-partner-h">
-        <h2 id="st-partner-h" class="st__h">Partner</h2>
+        <h2 id="st-partner-h" class="st__h"><span class="st__ico" aria-hidden="true"><Icon name="heart" :size="20" /></span>Partner</h2>
         <template v-if="partner">
           <p class="st__text">{{ partnerName }} shares this household.</p>
           <p v-if="partnerRole" class="st__muted">Role: {{ partnerRole }}.</p>
@@ -795,7 +806,7 @@ async function confirmDelete() {
                 autocomplete="off"
                 autocapitalize="characters"
                 spellcheck="false"
-                placeholder="NT-XXXX"
+                placeholder="NT-XXXXXXXX"
                 :disabled="joinBusy"
                 :aria-invalid="joinError ? 'true' : undefined"
               />
@@ -816,13 +827,13 @@ async function confirmDelete() {
 
       <!-- Household -->
       <section class="st__card" aria-labelledby="st-caregivers">
-        <h2 id="st-caregivers" class="st__h">Caregivers</h2>
+        <h2 id="st-caregivers" class="st__h"><span class="st__ico" aria-hidden="true"><Icon name="briefcase" :size="20" /></span>Caregivers</h2>
         <CaregiverAccessPanel :household-id="householdId || ''" :uid="me?.uid || ''" />
       </section>
 
       <!-- Household -->
       <section class="st__card" aria-labelledby="st-house">
-        <h2 id="st-house" class="st__h">Household</h2>
+        <h2 id="st-house" class="st__h"><span class="st__ico" aria-hidden="true"><Icon name="pin" :size="20" /></span>Household</h2>
         <div class="st__rows">
           <div v-for="(b, i) in babyList" :key="b.id" class="st__baby">
             <h3 v-if="babyList.length > 1" class="st__baby-h">Baby {{ i + 1 }}</h3>
@@ -848,13 +859,7 @@ async function confirmDelete() {
             </div>
             <div class="st__field">
               <label class="st__label" :for="`st-baby-date-${i}`">{{ babyDateLabel(b) }}</label>
-              <input
-                :id="`st-baby-date-${i}`"
-                class="app-control st__time"
-                type="date"
-                :value="b.babyDate"
-                @change="setBaby(b.id, 'babyDate', $event.target.value)"
-              />
+              <DateField :id="`st-baby-date-${i}`" :model-value="b.babyDate" @update:model-value="setBaby(b.id, 'babyDate', $event)" />
             </div>
           </div>
           <p class="st__save" role="status" aria-live="polite">{{ babySaved }}</p>
@@ -885,7 +890,7 @@ async function confirmDelete() {
 
       <!-- Danger zone -->
       <section class="st__card st__card--danger" aria-labelledby="st-danger">
-        <h2 id="st-danger" class="st__h">Danger zone</h2>
+        <h2 id="st-danger" class="st__h"><span class="st__ico" aria-hidden="true"><Icon name="trash" :size="20" /></span>Danger zone</h2>
         <div v-if="!deleteOpen" class="st__actions">
           <AppButton variant="outline" size="sm" @click="deleteOpen = true">Delete my account</AppButton>
         </div>
@@ -899,7 +904,7 @@ async function confirmDelete() {
             'Your profile, settings and saved devices go.',
             'Your private wellness check-ins go.',
             'Shared household data stays, so your partner keeps the care log, rota and calendar.',
-            'Your care log entries will show the words A parent instead of your name.',
+            'Care log entries you added may remain in the household and keep your name.',
           ]"
           confirm-label="Delete my account"
           :busy="deleteBusy"
@@ -908,7 +913,7 @@ async function confirmDelete() {
         />
         <p v-if="deleteDone" class="st__text" role="status">{{ deleteDone }}</p>
         <div v-if="deleteKept.length" class="st__kept">
-          <p class="st__text">The server is not set up yet, so this was done from the browser. It could not remove:</p>
+          <p class="st__text">Some shared information could not be removed:</p>
           <ul class="st__points">
             <li v-for="item in deleteKept" :key="item">{{ item }}</li>
           </ul>
@@ -921,47 +926,71 @@ async function confirmDelete() {
 </template>
 
 <style scoped>
-.st { display: flex; flex-direction: column; gap: 24px; max-width: 960px; font-size: 1rem; }
-.st__head { display: flex; flex-direction: column; gap: 8px; }
-.st__title { font-size: 2.5rem; line-height: 1.2; }
-.st__sub { margin: 0; color: var(--nt-muted); }
-.st__layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 40px; align-items: start; }
-.st__nav { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 2px; }
-.st__nav-link { padding: 8px 12px; border-radius: 8px; font-size: 0.9375rem; color: var(--nt-muted); text-decoration: none; }
-.st__nav-link[aria-current="true"] { background: var(--nt-gray); color: var(--nt-ink); font-weight: 600; }
-.st__nav-link:hover { background: var(--nt-gray); color: var(--nt-ink); }
-.st__nav-link:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
-.st__cards { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.st__card { display: flex; flex-direction: column; gap: 14px; padding: 24px; background: var(--nt-surface, #fff); border: 1px solid var(--nt-line); border-radius: 12px; scroll-margin-top: 24px; }
-.st__h { margin: 0; font-size: 1.125rem; font-weight: 600; line-height: 1.3; color: var(--nt-ink); }
-.st__card--danger .st__h { color: var(--nt-coral); }
-.st__rows { display: flex; flex-direction: column; gap: 16px; }
-.st__field { display: flex; flex-direction: column; gap: 6px; }
+.st { display: flex; flex-direction: column; gap: 20px; max-width: 860px; margin: 0 auto; font-size: 1rem; color: var(--ink, #1f2a52); }
+.st__layout { display: flex; flex-direction: column; gap: 16px; }
+.st__nav { display: flex; flex-wrap: wrap; gap: 8px; }
+.st__nav-ico { display: none; }
+.st__nav-link { flex: none; padding: 6px 14px; background: #fffdf8; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 999px; font-size: 0.875rem; font-weight: 600; color: var(--navy, #243560); text-decoration: none; white-space: nowrap; transition: background 0.15s, color 0.15s; }
+.st__nav-link[aria-current="true"] { background: var(--navy, #243560); border-color: var(--navy, #243560); color: #fff; }
+.st__nav-link:hover { border-color: var(--navy, #243560); }
+.st__nav-link:focus-visible { outline: 3px solid var(--navy, #243560); outline-offset: 2px; }
+.st__cards { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.st__card { display: flex; flex-direction: column; gap: 14px; padding: 22px 24px 26px; background: var(--cream, #fdf9f0); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 24px; scroll-margin-top: 24px; }
+.st__h { display: flex; align-items: center; gap: 12px; margin: 0; font-family: var(--nt-serif); font-size: 1.5rem; font-weight: 700; line-height: 1.25; color: var(--ink, #1f2a52); }
+.st__ico { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 14px; background: #cfe3d4; color: #2f5d43; }
+.st__card--danger { background: #fdf0e6; border-color: #f2c9a6; }
+.st__card--danger .st__ico { background: #fbe3d3; color: #a4541f; }
+.st__card--danger .st__h { color: #7a2e12; }
+.st__rows { display: flex; flex-direction: column; }
+.st__rows > * { padding: 14px 0; border-top: 1.5px dashed var(--sand, #e9d9b8); }
+.st__rows > :first-child { padding-top: 0; border-top: 0; }
+.st__field { display: flex; flex-direction: column; gap: 8px; }
 .st__pair { display: flex; flex-wrap: wrap; gap: 16px; }
-.st__label { font-size: 0.875rem; font-weight: 600; color: var(--nt-ink); }
-.st__muted { margin: 0; font-size: 0.875rem; line-height: 1.45; color: var(--nt-muted); }
-.st__text { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--nt-ink); }
-.st__save { min-height: 20px; margin: 0; font-size: 0.875rem; line-height: 20px; color: var(--nt-muted); }
-.st__code { margin: 0; font-size: 1.25rem; font-weight: 600; letter-spacing: 0.08em; color: var(--nt-plum); }
+.st__label { font-size: 0.9375rem; font-weight: 600; color: var(--ink, #1f2a52); }
+.st__muted { margin: 0; font-size: 0.875rem; line-height: 1.5; color: var(--mut, #5b6692); }
+.st__text { margin: 0; font-size: 0.9375rem; line-height: 1.5; color: var(--ink, #1f2a52); }
+.st__save { min-height: 20px; margin: 0; font-size: 0.875rem; line-height: 20px; color: var(--mut, #5b6692); }
+.st__code { margin: 0; font-family: var(--nt-serif); font-size: 1.5rem; font-weight: 700; letter-spacing: 0.1em; color: var(--navy, #243560); }
 .st__time { max-width: 160px; }
 .st__input { max-width: 320px; }
 .st__actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.st__link { align-self: flex-start; padding: 4px 0; background: none; border: 0; font: inherit; font-size: 0.875rem; color: var(--nt-plum); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.st__link:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; border-radius: 4px; }
+.st__link { align-self: flex-start; padding: 4px 0; background: none; border: 0; font: inherit; font-size: 0.875rem; font-weight: 600; color: var(--navy, #243560); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.st__link:focus-visible { outline: 3px solid var(--navy, #243560); outline-offset: 2px; border-radius: 4px; }
 .st__link:disabled { opacity: 0.6; cursor: default; }
 .st__join { display: flex; flex-direction: column; gap: 12px; }
 .st__actions--center { align-items: center; gap: 16px; }
-.st__points { margin: 0; padding-left: 20px; font-size: 0.875rem; line-height: 1.5; color: var(--nt-ink); }
+.st__points { margin: 0; padding-left: 20px; font-size: 0.9375rem; line-height: 1.5; color: var(--ink, #1f2a52); }
 .st__kept { display: flex; flex-direction: column; gap: 8px; }
-.st__retry { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
-.st__baby { display: flex; flex-direction: column; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--nt-line); }
-.st__baby:last-of-type { border-bottom: 0; }
-.st__baby-h { margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--nt-ink); }
+.st__retry { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 18px 20px; background: #fdeee6; border: 1.5px solid #f4a98c; border-radius: 18px; color: #7a2e12; }
+.st__baby { display: flex; flex-direction: column; gap: 16px; padding: 14px 0 !important; }
+.st__baby-h { margin: 0; font-family: var(--nt-serif); font-size: 1.0625rem; font-weight: 700; color: var(--ink, #1f2a52); }
 
-@media (max-width: 991px) {
-  .st__title { font-size: 2rem; }
-  .st__layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .st__nav { display: none; }
+/* Shared controls, in the app's look while they sit inside these cards. */
+.st :deep(.app-control) { padding: 11px 14px; background: #fff; border: 1.5px solid var(--sand, #e9d9b8); border-radius: 14px; font-size: 0.9375rem; box-shadow: none; }
+.st :deep(.app-control:focus) { outline: 3px solid var(--navy, #243560); outline-offset: 1px; border-color: var(--navy, #243560); box-shadow: none; }
+.st :deep(.app-chip) { padding: 8px 16px; background: #fff; border: 1.5px solid var(--sand, #e9d9b8); color: var(--navy, #243560); font-weight: 600; }
+.st :deep(.app-chip:hover) { background: #fff; border-color: var(--navy, #243560); }
+.st :deep(.app-chip[aria-checked="true"]), .st :deep(.app-chip[aria-pressed="true"]) { background: var(--navy, #243560); border-color: var(--navy, #243560); color: #fff; }
+.st :deep(.app-chip:focus-visible) { outline: 3px solid var(--navy, #243560); }
+.st :deep(.btn) { padding: 9px 20px; background: var(--navy, #243560); border: 0; border-bottom: 3px solid #182246; border-radius: 14px; color: #fff; font-size: 0.9375rem; font-weight: 600; }
+.st :deep(.btn:hover) { background: #1b2a4f; color: #fff; }
+.st :deep(.btn-outline) { background: #fff; border: 1.5px solid var(--sand, #e9d9b8); border-bottom-width: 3px; color: var(--navy, #243560); }
+.st :deep(.btn-outline:hover) { background: #fffdf8; border-color: var(--navy, #243560); color: var(--navy, #243560); }
+.st :deep(.app-error-text) { font-weight: 600; color: #a4541f; }
+
+@media (max-width: 575px) { .st__card { padding: 18px 16px 22px; } .st__h { font-size: 1.3125rem; } }
+
+/* On wide screens the sections sit in a menu beside the cards that stays in view while you scroll. */
+@media (min-width: 960px) {
+  .st__layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 20px; align-items: start; }
+  .st__nav { position: sticky; top: 100px; max-height: calc(100vh - 124px); overflow-y: auto; flex-direction: column; flex-wrap: nowrap; gap: 6px; padding: 10px; background: var(--cream, #fdf9f0); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 22px; }
+  .st__nav-link { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: transparent; border: 0; border-radius: 14px; font-size: 0.9375rem; }
+  .st__nav-ico { display: inline-block; flex: none; }
+  .st__nav-link:hover { background: var(--sand, #e9d9b8); }
+  .st__nav-link[aria-current="true"] { background: var(--navy, #243560); color: #fff; }
 }
-@media (max-width: 575px) { .st__card { padding: 20px 16px; } }
+
+/* The "saved" note floats as a small pill, so it never pushes the first card down. */
+.st__cards > .st__save { position: fixed; right: 24px; bottom: 24px; z-index: 40; min-height: 0; padding: 8px 16px; background: var(--navy, #243560); border-radius: 999px; box-shadow: 0 8px 20px rgb(36 53 96 / 28%); font-weight: 600; color: #fff; }
+.st__cards > .st__save:empty { display: none; }
 </style>
