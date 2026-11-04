@@ -320,6 +320,7 @@ function mapMembers(snap) {
     .map(({ data, uid }) => ({
       uid,
       displayName: data.displayName ?? "",
+      photoURL: typeof data.photoURL === "string" ? data.photoURL : "",
       role: data.role ?? null,
       accessLevel: data.accessLevel ?? (isPrimaryParent(data) ? "parent" : "caregiver"),
       permissions: data.permissions ?? {},

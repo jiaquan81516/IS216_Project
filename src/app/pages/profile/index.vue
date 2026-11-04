@@ -11,6 +11,10 @@ import { useHome, HOME_KEY } from "@/app/composables/useHome";
 import AddBabyForm from "@/app/components/AddBabyForm.vue";
 import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 import BabyCard from "@/app/components/BabyCard.vue";
+import Avatar from "@/app/components/Avatar.vue";
+import PhotoCropDialog from "@/app/components/PhotoCropDialog.vue";
+import { savePhoto } from "@/api/account";
+import { validatePhotoFile } from "@/app/utils/photoHelpers";
 
 defineOptions({ name: "ProfilePage" });
 
@@ -60,6 +64,79 @@ onMounted(async () => {
     { immediate: true },
   );
 });
+
+// The profile photo: choose a file, crop it in a dialog, then save the cropped copy.
+const fileInput = ref(null);
+const cropper = ref(null);
+const photoBusy = ref(false);
+const photoError = ref("");
+const photoStatus = ref("");
+const cropError = ref("");
+// Every household you belong to gets the new photo, so a caregiver in two homes is not stale in one.
+const photoHouseholds = computed(() => [...new Set([householdId.value, ...(profile?.value?.householdIds ?? [])].filter(Boolean))]);
+
+function choosePhoto() {
+  photoError.value = "";
+  photoStatus.value = "";
+  fileInput.value?.click();
+}
+
+async function onPhotoChosen(event) {
+  const file = event.target.files?.[0];
+  // Clear the input so choosing the same file again still counts as a change.
+  event.target.value = "";
+  if (!file) return;
+  const check = validatePhotoFile(file);
+  if (!check.ok) {
+    photoError.value = check.message;
+    return;
+  }
+  cropError.value = "";
+  const problem = await cropper.value?.open(file);
+  if (problem) photoError.value = problem;
+}
+
+function photoSaveMessage(cause) {
+  return cause?.code === "permission-denied"
+    ? "Your database rules do not allow saving a photo yet. Publish the latest firestore.rules, then try again."
+    : "We could not save your photo. Check your connection and try again.";
+}
+
+async function applyPhoto(photoURL) {
+  await savePhoto(me.value.uid, photoHouseholds.value, photoURL);
+  // Update the shared profile in place, so the menu and this page change at once without a reload.
+  profile.value = { ...profile.value, photoURL };
+}
+
+async function onPhotoSave(dataUrl) {
+  photoBusy.value = true;
+  cropError.value = "";
+  try {
+    await applyPhoto(dataUrl);
+    cropper.value?.close();
+    photoStatus.value = "Photo saved.";
+  } catch (cause) {
+    console.error("[app profile photo]", cause?.code, cause);
+    cropError.value = photoSaveMessage(cause);
+  } finally {
+    photoBusy.value = false;
+  }
+}
+
+async function removePhoto() {
+  photoError.value = "";
+  photoStatus.value = "";
+  photoBusy.value = true;
+  try {
+    await applyPhoto(null);
+    photoStatus.value = "Photo removed.";
+  } catch (cause) {
+    console.error("[app profile photo]", cause?.code, cause);
+    photoError.value = photoSaveMessage(cause);
+  } finally {
+    photoBusy.value = false;
+  }
+}
 
 const name = ref("");
 const role = ref(null);
@@ -138,6 +215,20 @@ async function save() {
     <form v-else class="pf__card" novalidate :aria-busy="busy" @submit.prevent="save">
       <div class="pf__top">
         <h2 class="pf__h">About you</h2>
+      </div>
+
+      <div class="pf__photo" role="group" aria-labelledby="pf-photo-h">
+        <div class="pf__photo-avatar"><Avatar :name="me.displayName || name" :src="me.photoURL" tone="apricot" :size="88" /></div>
+        <div class="pf__photo-side">
+          <span id="pf-photo-h" class="pf__label">Profile photo</span>
+          <p id="pf-photo-hint" class="pf__muted">Your partner sees it in chat and Settings. JPG or PNG, up to 10 MB.</p>
+          <div class="pf__photo-actions">
+            <button type="button" class="pf__btn pf__btn--ghost" aria-describedby="pf-photo-hint" :disabled="photoBusy" @click="choosePhoto">{{ me.photoURL ? "Change photo" : "Add a photo" }}</button>
+            <button v-if="me.photoURL" type="button" class="pf__btn pf__btn--ghost" :disabled="photoBusy" @click="removePhoto">{{ photoBusy ? "Removing..." : "Remove photo" }}</button>
+          </div>
+          <p class="pf__status pf__ok" role="status">{{ photoStatus }}</p>
+          <p v-if="photoError" class="pf__err" role="alert">{{ photoError }}</p>
+        </div>
       </div>
 
       <div class="pf__field">
@@ -224,6 +315,9 @@ async function save() {
         <AddBabyForm v-if="showAddBaby" :household-id="householdId" :number="babies.length + 1" id-prefix="pf-add-baby" @added="onBabyAdded" @cancel="showAddBaby = false" />
       </div>
     </section>
+
+    <input id="pf-photo-input" ref="fileInput" type="file" accept="image/*" hidden aria-label="Choose a profile photo" @change="onPhotoChosen" />
+    <PhotoCropDialog ref="cropper" :busy="photoBusy" :error="cropError" @save="onPhotoSave" />
   </div>
 </template>
 
@@ -232,6 +326,11 @@ async function save() {
 .pf__card { display: flex; flex-direction: column; gap: 18px; padding: 22px 24px 26px; background: var(--cream, #fdf9f0); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 24px; }
 .pf__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
 .pf__h { margin: 0; font-family: var(--nt-serif); font-size: 1.5rem; font-weight: 700; line-height: 1.25; }
+.pf__photo { display: flex; align-items: center; gap: 20px; padding-bottom: 18px; border-bottom: 1px dashed var(--sand, #e9d9b8); }
+.pf__photo-avatar { flex: none; }
+.pf__photo-side { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; flex: 1; min-width: 0; }
+.pf__photo-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.pf__photo-side .pf__status { min-height: 1.3em; }
 .pf__field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .pf__label { font-size: 0.9375rem; font-weight: 600; }
 .pf__label-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
@@ -262,6 +361,11 @@ async function save() {
 @media (max-width: 575px) {
   .pf__card { gap: 16px; padding: 18px 16px 22px; border-radius: 20px; }
   .pf__top { align-items: flex-start; }
+  .pf__photo { flex-direction: column; align-items: stretch; gap: 14px; }
+  .pf__photo-avatar { align-self: center; }
+  .pf__photo-side { align-items: stretch; text-align: center; }
+  .pf__photo-actions { flex-direction: column; }
+  .pf__photo-actions .pf__btn { width: 100%; justify-content: center; }
   .pf__label-row { align-items: flex-start; }
   .pf__provider { flex-basis: 100%; }
   .pf__input { min-height: 50px; padding: 12px 14px; font-size: 1rem; }

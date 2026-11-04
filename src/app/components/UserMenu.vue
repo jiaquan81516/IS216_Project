@@ -10,6 +10,8 @@ defineOptions({ name: "UserMenu" });
 
 const props = defineProps({
   name: { type: String, required: true },
+  // The profile photo; the initials show when there is none.
+  photo: { type: String, default: "" },
   // An administrator has no profile or settings pages, only sign out.
   admin: { type: Boolean, default: false },
   // Where the menu opens: "up" in a sidebar foot, "down" from a top bar.
@@ -93,7 +95,7 @@ onBeforeUnmount(() => {
       aria-haspopup="true"
       @click="toggle"
     >
-      <Avatar :name="props.name" tone="apricot" :size="36" />
+      <Avatar :name="props.name" :src="props.photo" tone="apricot" :size="36" />
       <span class="um__name">{{ props.name }}</span>
       <Icon name="chevron-down" :size="16" class="um__chevron" />
       <span class="visually-hidden">Account menu</span>

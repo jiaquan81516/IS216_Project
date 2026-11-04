@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 import { auth } from "@/api/firebase";
 import { db } from "./db";
+import { isSafePhotoUrl } from "@/app/utils/photoHelpers";
 
 export const DISPLAY_NAME_MAX = 40;
 export const PROFILE_ROLES = Object.freeze([
@@ -53,6 +54,26 @@ export async function saveProfile(uid, householdId, { displayName, role }) {
   }
   await batch.commit();
   return { displayName: name, role: nextRole };
+}
+
+// Saves or clears the profile photo. The picture is a small JPEG data URL kept in the profile and
+// mirrored into your member document in every household you belong to, so your partner sees it
+// without reading the private user document. One batch, so the copies can never disagree. Pass
+// null to remove the photo. Households you are not a member of are skipped, because the rules do
+// not let a member document be created from here.
+export async function savePhoto(uid, householdIds, photoURL) {
+  if (photoURL !== null && !isSafePhotoUrl(photoURL)) {
+    const error = new Error("That photo cannot be saved. Try a different one.");
+    error.code = "photo/invalid";
+    throw error;
+  }
+  const ids = [...new Set((householdIds ?? []).filter(Boolean))];
+  const members = await Promise.all(ids.map((id) => getDoc(doc(db, "households", id, "members", uid))));
+  const batch = writeBatch(db);
+  batch.update(doc(db, "users", uid), { photoURL });
+  for (const member of members) if (member.exists()) batch.update(member.ref, { photoURL });
+  await batch.commit();
+  return photoURL;
 }
 
 // One settings field at a time, written with a dotted path so two sections saved close

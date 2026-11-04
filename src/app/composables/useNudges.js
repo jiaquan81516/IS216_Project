@@ -217,6 +217,7 @@ export function useNudges({ home, entries, shared }) {
     suggestions,
     together,
     partnerFirst,
+    partnerPhoto: computed(() => home.partner.value?.photoURL ?? ""),
     messages: computed(() => chat.messages),
     unread: computed(() => chat.unread + unseenLines.value.length),
     writeError: computed(() => chat.writeError),

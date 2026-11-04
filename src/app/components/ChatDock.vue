@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import "@/app/app.css";
 import AppButton from "@/components/ui/AppButton.vue";
+import Avatar from "@/app/components/Avatar.vue";
 import Icon from "@/app/components/Icon.vue";
 import { usePrefs } from "@/app/composables/usePrefs";
 import { toDate } from "@/app/utils/entryHelpers";
@@ -23,6 +24,7 @@ const router = useRouter();
 const { formatTime } = usePrefs();
 
 const partnerName = computed(() => props.chat.partnerFirst.value);
+const partnerPhoto = computed(() => props.chat.partnerPhoto?.value ?? "");
 const open = computed(() => props.chat.open.value);
 const draft = ref("");
 const thread = ref(null);
@@ -88,7 +90,10 @@ async function sendDraft() {
       @keydown.esc="close"
     >
       <header class="cd__head">
-        <h2 class="cd__title">{{ partnerName }}</h2>
+        <div class="cd__who">
+          <Avatar :name="partnerName" :src="partnerPhoto" tone="powder" :size="36" />
+          <h2 class="cd__title">{{ partnerName }}</h2>
+        </div>
         <button type="button" class="cd__close" aria-label="Close chat" @click="close"><Icon name="close" :size="18" /></button>
       </header>
 
@@ -165,8 +170,9 @@ async function sendDraft() {
 
 .cd__panel { display: flex; flex-direction: column; width: min(380px, calc(100vw - 32px)); height: min(560px, calc(100vh - 120px)); background: var(--nt-white, #fff); border: 1px solid var(--nt-line); border-radius: 12px; overflow: hidden; }
 .cd__head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--nt-line); }
-.cd__title { margin: 0; font-size: 1rem; font-weight: 600; color: var(--nt-ink); }
-.cd__close { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; background: transparent; border: 0; border-radius: 8px; color: var(--nt-muted); cursor: pointer; }
+.cd__who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.cd__title { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1rem; font-weight: 600; color: var(--nt-ink); }
+.cd__close { flex: none; margin-left: 8px; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; background: transparent; border: 0; border-radius: 8px; color: var(--nt-muted); cursor: pointer; }
 .cd__close:hover { color: var(--nt-ink); }
 .cd__close:focus-visible { outline: 2px solid var(--nt-plum); outline-offset: 2px; }
 

@@ -316,7 +316,7 @@ onBeforeUnmount(() => {
             </ul>
           </nav>
           <div class="top__user">
-            <UserMenu :name="adminWorkspace ? adminName : userName" :admin="adminWorkspace" drop="down" @sign-out="askSignOut" />
+            <UserMenu :name="adminWorkspace ? adminName : userName" :photo="adminWorkspace ? '' : home.me.value.photoURL" :admin="adminWorkspace" drop="down" @sign-out="askSignOut" />
           </div>
         </div>
       </div>
@@ -353,7 +353,7 @@ onBeforeUnmount(() => {
     </Teleport>
 
     <template v-if="!adminWorkspace">
-      <PartnerToast :toasts="chat.toasts.value" @close="chat.closeToast" @open="onToastOpen" />
+      <PartnerToast :toasts="chat.toasts.value" :partner-name="chat.partnerFirst.value" :partner-photo="chat.partnerPhoto.value" @close="chat.closeToast" @open="onToastOpen" />
       <ChatDock :chat="chat" :me="meUid" />
     </template>
   </div>
