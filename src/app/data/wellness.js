@@ -49,6 +49,7 @@ export const BODY_AREAS = Object.freeze([
   { value: "back", label: "Back" },
 ]);
 
+// Top 6 shown as chips. Anything else is typed in through the "Something else" option.
 export const LIFTS = Object.freeze([
   { value: "sleep", label: "Some sleep" },
   { value: "food", label: "Food I enjoyed" },
@@ -56,8 +57,6 @@ export const LIFTS = Object.freeze([
   { value: "laugh", label: "A laugh" },
   { value: "hug", label: "A hug" },
   { value: "baby", label: "A moment with the baby" },
-  { value: "alone", label: "Time to myself" },
-  { value: "friend", label: "Talking to someone" },
 ]);
 
 // What a parent can ask for, on a hard day. Optional. A kind check-in is assumed when nothing is chosen.
@@ -111,6 +110,7 @@ export function kindWords({ mood, energy, stress, lifts = [] }) {
 
 export const MAX_CONCERNS = 3;
 
+// Top 6 shown as chips. Anything else is typed in through the "Something else" option.
 export const CONCERNS = Object.freeze([
   { value: "exhausted", label: "Tiredness" },
   { value: "overwhelmed", label: "Feeling overwhelmed" },
@@ -118,10 +118,6 @@ export const CONCERNS = Object.freeze([
   { value: "isolated", label: "Feeling alone" },
   { value: "disconnected", label: "Distance between us" },
   { value: "body-image", label: "My body" },
-  { value: "provider-pressure", label: "Pressure to provide" },
-  { value: "return-to-work", label: "Going back to work" },
-  { value: "pumping", label: "Pumping" },
-  { value: "parenting-confidence", label: "Unsure as a parent" },
 ]);
 
 const guide = (id) => ({ path: ROUTES.SUPPORT, query: { guide: id } });

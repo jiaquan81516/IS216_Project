@@ -118,7 +118,10 @@ export function appointmentBody(event, householdId) {
   if (!endTime || (endDate === date && endTime <= event.start)) {
     const [h, m] = event.start.split(":").map(Number);
     const total = h * 60 + m + DEFAULT_MINUTES;
-    endDate = addDaysIso(date, Math.floor(total / 1440));
+    // Default duration rolls forward from the event's own last day (lastDate), not the start
+    // date, so a multi-day timed event with a missing/malformed end time keeps its intended
+    // span instead of silently collapsing to a 1-hour event on the first day.
+    endDate = addDaysIso(lastDate, Math.floor(total / 1440));
     endTime = `${pad(Math.floor((total % 1440) / 60))}:${pad(total % 60)}`;
   }
   return bodyOf({ summary, description, start: sgDateTime(date, event.start), end: sgDateTime(endDate, endTime), key });

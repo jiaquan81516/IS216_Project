@@ -42,7 +42,7 @@ const nameOfUid = (uid) => firstName(members.value.find((m) => m.uid === uid)) |
 // The calendar speaks in "me", "partner", "both" and "other". Here "me" is the carer, and the
 // parents are shown by name as "other", so they read as someone else.
 const view = computed(() => {
-  const base = buildRotaView({ rotaSettings: settings.value ?? {}, nights: nights.value, swaps: [], uid: parents.value[0]?.uid ?? "" });
+  const base = buildRotaView({ rotaSettings: settings.value ?? {}, nights: nights.value, swaps: [], uid: parents.value[0]?.uid ?? "", hasPartner: parents.value.length > 1 });
   const raw = Array.isArray(settings.value?.schedule) ? settings.value.schedule : [];
   const mapped = raw.map((s) => {
     if (s?.who === "both") return { ...s, who: "both" };

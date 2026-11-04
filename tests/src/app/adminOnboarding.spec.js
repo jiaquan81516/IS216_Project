@@ -38,8 +38,8 @@ beforeEach(() => {
 
 describe("admin setup bypass", () => {
   it.each([ROUTES.JOURNEY, ROUTES.ROLE, ROUTES.ACCOUNT, ROUTES.SIGN_IN, ROUTES.HOUSEHOLD, ROUTES.HOME])(
-    "redirects admins from %s to room management without reading a profile", async (path) => {
-      expect(await navigate(path)).toBe(ROUTES.ROOMS);
+    "redirects admins from %s to the admin dashboard without reading a profile", async (path) => {
+      expect(await navigate(path)).toBe(ROUTES.ADMIN);
       expect(state.getUserProfile).not.toHaveBeenCalled();
     },
   );
@@ -50,7 +50,7 @@ describe("admin setup bypass", () => {
   it.each(["email", "google"])("skips profile creation after %s sign-in", async (provider) => {
     const auth = useAuth();
     const destination = provider === "email" ? await auth.signIn({ email: "admin@example.com", password: "password" }) : await auth.continueWithGoogle();
-    expect(destination).toBe(ROUTES.ROOMS);
+    expect(destination).toBe(ROUTES.ADMIN);
     expect(state.ensureUserProfile).not.toHaveBeenCalled();
   });
   it("retains profile creation and household setup for members", async () => {

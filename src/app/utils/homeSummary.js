@@ -11,7 +11,7 @@ const TIME = /^\d{2}:\d{2}$/;
 // The raw rota documents turned into the { pattern, firstOnDuty, startDate, overrides, swaps }
 // shape weekNights reads, with "me" and "partner" instead of uids. Mirrors the rota store's
 // own `view`, so a caller that already has that view can pass it as `view` instead.
-export function buildRotaView({ rotaSettings, nights, swaps, uid, now = new Date() } = {}) {
+export function buildRotaView({ rotaSettings, nights, swaps, uid, now = new Date(), hasPartner = true } = {}) {
   const data = rotaSettings ?? {};
   const overrides = {};
   for (const [date, night] of Object.entries(nights ?? {})) {
@@ -19,7 +19,10 @@ export function buildRotaView({ rotaSettings, nights, swaps, uid, now = new Date
     if (who) overrides[date] = who;
   }
   return {
-    pattern: PATTERNS.includes(data.pattern) ? data.pattern : "alternate",
+    // "alternate" is the long-standing default, but it only makes sense with a partner to
+    // alternate with. A caller without one (pass `hasPartner: false`) falls back to "manual"
+    // instead, so a solo household is never shown a phantom partner's nights.
+    pattern: PATTERNS.includes(data.pattern) ? data.pattern : (hasPartner ? "alternate" : "manual"),
     firstOnDuty: ownerKey(data.firstOnDuty, uid) === "partner" ? "partner" : "me",
     startDate: ISO.test(data.startDate ?? "") ? data.startDate : mondayOf(now),
     handoverTime: TIME.test(data.handoverTime ?? "") ? data.handoverTime : "07:00",

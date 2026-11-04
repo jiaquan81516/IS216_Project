@@ -25,7 +25,7 @@ export function suggestionsFor({ nudges = [], messages = [], uid = "", partnerLo
   const kinds = new Map((nudges ?? []).map((n) => [n.kind, n]));
   const out = [];
   const add = (text, kind, nudge) =>
-    out.push({ text, kind, label: kind === "thanks" && nudge ? "Send a thank you" : text, nudgeId: nudge?.id ?? null });
+    out.push({ text, kind, label: kind === "thanks" ? "Send a thank you" : text, nudgeId: nudge?.id ?? null });
 
   const heavy = kinds.get("partner-heavy");
   const hard = kinds.get("partner-feeling");

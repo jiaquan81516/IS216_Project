@@ -62,13 +62,24 @@ export function caregiverPermissions(role, overrides = {}) {
 }
 
 export function isPrimaryParent(member = {}) {
+  // An explicit caregiver accessLevel is authoritative: a caregiver's own `role` comes from
+  // CAREGIVER_ROLES (grandparent, babysitter, ...) and never collides with the parent-ish
+  // strings below today, but accessLevel must still win if that ever changes, rather than
+  // quietly promoting a caregiver to "primary parent" through a role-string coincidence.
+  if (member.accessLevel === "caregiver") return false;
   return member.accessLevel === "parent" || ["mum", "dad", "carer", "parent", "partner"].includes(member.role);
 }
 
 // The parent contact list is stored as plain lines, "Mum: 9860 7453", so older text still reads
 // fine and the caregiver's care brief shows it as it is.
 export const PHONE_DIGITS = 8;
-const phoneDigits = (value) => String(value ?? "").replace(/\D/g, "").slice(0, PHONE_DIGITS);
+const phoneDigits = (value) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  // A number typed/pasted with Singapore's country code ("+65 9860 7453" -> "6598607453")
+  // would otherwise have its last 2 real digits truncated away instead of the prefix.
+  const local = digits.length === 10 && digits.startsWith("65") ? digits.slice(2) : digits;
+  return local.slice(0, PHONE_DIGITS);
+};
 
 // "98607453" becomes "9860 7453" as the person types.
 export function formatPhone(value) {

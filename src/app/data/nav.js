@@ -1,6 +1,6 @@
 import { ROUTES } from "@/app/routes";
 
-// Top bar items. All eight point to App pages. Primary ones sit on the bar for daily use;
+// Top bar items. All seven point to App pages. Primary ones sit on the bar for daily use;
 // secondary ones live under "More" (and in their own group in the folded menu on phones).
 export const NAV = Object.freeze([
   { group: "primary", key: "today", label: "Home", icon: "home", to: ROUTES.HOME },
