@@ -12,6 +12,12 @@ test-results/
 .env
 .env.*
 !.env.example
+!.env.e2e
+
+# Emulator and Playwright authentication state is always disposable.
+.firebase/
+firebase-export/
+__tests__/e2e/.auth/
 
 # Tool caches and logs
 .eslintcache

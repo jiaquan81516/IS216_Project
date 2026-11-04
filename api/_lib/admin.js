@@ -12,6 +12,9 @@ import { getMessaging } from "firebase-admin/messaging";
 
 export const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "";
 export const CLIENT_EMAIL = process.env.FIREBASE_CLIENT_EMAIL || "";
+const E2E_PROJECT_ID = "demo-is216";
+const e2eEmulators = process.env.E2E_EMULATORS === "true";
+const localEmulator = (value) => /^(127\.0\.0\.1|localhost):\d+$/.test(String(value || ""));
 
 // Forgiving about how the key was pasted into Vercel: literal backslash n sequences, real
 // line breaks, spaces where the line breaks were, or quote marks around the whole thing all
@@ -48,6 +51,13 @@ function appOnce() {
   const existing = getApps().find((item) => item.name === APP_NAME);
   if (existing) {
     started = existing;
+    return started;
+  }
+  if (e2eEmulators) {
+    if (PROJECT_ID !== E2E_PROJECT_ID || !localEmulator(process.env.FIREBASE_AUTH_EMULATOR_HOST) || !localEmulator(process.env.FIRESTORE_EMULATOR_HOST)) {
+      throw new Error("Unsafe Admin SDK E2E configuration. Refusing to connect outside demo-is216 on localhost.");
+    }
+    started = initializeApp({ projectId: E2E_PROJECT_ID }, APP_NAME);
     return started;
   }
   if (!hasAdminConfig()) throw notConfigured();
