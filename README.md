@@ -17,7 +17,7 @@ Use any of the accounts below on the live app. All accounts sign in with **email
 | User 1    | Parent                                             | https://nurture-track.vercel.app/signin                                    | Jocelyn123@gmail.com | password1234 |
 | User 2    | Parent (partner in the same household)             | https://nurture-track.vercel.app/signin                                    | Jacob@gmail.com      | password1234 |
 | Caregiver | Caregiver (sees the Care Brief)                    | https://nurture-track.vercel.app/signin                                    | nannylim@gmail.com   | password1234 |
-| Admin     | Administrator (rooms, clinics and support content) | https://nurture-track.vercel.app/signin/admin/`8b9e6ddbf55959127e0e4178` | `bob@gmail.com`    | `password` |
+| Admin     | Administrator (rooms, clinics and support content) | https://nurture-track.vercel.app/signin/admin/8b9e6ddbf55959127e0e4178 | `bob@gmail.com`    | `password` |
 
 The admin sign-in page is private: it only exists at the link above, and it accepts email and password only.
 
