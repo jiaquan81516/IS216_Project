@@ -104,3 +104,12 @@ The app is deployed to Vercel from the GitHub repository. `vercel.json` already 
 ## Tech stack
 
 Vue 3, Vite, Pinia, Vue Router and Bootstrap 5 on the front end. Firebase (Cloud Firestore, Authentication, Cloud Messaging) and Vercel serverless functions on the back end. Vitest and Playwright for testing.
+
+## AI Declaration
+Parts that involved AI/LLM:
+- Exploration of design concepts and inspiration
+- Assisting in debugging codes
+- Generating starter codes for pages
+- Assisting in generation of unit test cases
+- Generation of mock data
+- Tidying up codes
