@@ -629,6 +629,16 @@ async function wakeUp() {
     waking.value = false;
   }
 }
+
+// Parents write routines as line breaks, or as one run of "1. … 2. …" steps. Either way, show each
+// step on its own line so a caregiver can follow it.
+function routineText(value) {
+  const text = String(value ?? "").trim();
+  if (!text || text.includes("\n")) return text;
+  const steps = text.match(/(?:^|\s)\d{1,2}\.\s/g) ?? [];
+  if (steps.length < 2) return text;
+  return text.replace(/\s+(?=\d{1,2}\.\s)/g, "\n").replace(/^(.*?:)\s*\n?(?=1\.\s)/, "$1\n");
+}
 </script>
 
 <template>
@@ -894,21 +904,21 @@ async function wakeUp() {
                     <span class="brief__row-ico" aria-hidden="true"><Icon name="feed" :size="20" /></span>
                     <div>
                       <h3>Feeding</h3>
-                      <p>{{ household?.careBrief?.feeding || "Ask a parent to add feeding instructions." }}</p>
+                      <p class="brief__row-text">{{ routineText(household?.careBrief?.feeding) || "Ask a parent to add feeding instructions." }}</p>
                     </div>
                   </li>
                   <li v-if="permissions.napRoutine" class="brief__row">
                     <span class="brief__row-ico" aria-hidden="true"><Icon name="moon" :size="20" /></span>
                     <div>
                       <h3>Naps</h3>
-                      <p>{{ household?.careBrief?.napRoutine || "Ask a parent to add the nap routine." }}</p>
+                      <p class="brief__row-text">{{ routineText(household?.careBrief?.napRoutine) || "Ask a parent to add the nap routine." }}</p>
                     </div>
                   </li>
                   <li v-if="permissions.medicationInfo" class="brief__row">
                     <span class="brief__row-ico" aria-hidden="true"><Icon name="medication" :size="20" /></span>
                     <div>
                       <h3>Medication</h3>
-                      <p>{{ household?.careBrief?.medications || "No medication instructions listed." }}</p>
+                      <p class="brief__row-text">{{ routineText(household?.careBrief?.medications) || "No medication instructions listed." }}</p>
                     </div>
                   </li>
                 </ul>
@@ -1501,7 +1511,9 @@ async function wakeUp() {
 .brief__row-edit:hover, .brief__row-edit:focus-visible { outline: none; border-color: var(--navy); background: var(--cream); }
 .brief__row-ico { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 40px; height: 40px; background: #f1e4c8; border-radius: 12px; color: var(--navy); }
 .brief__row h3 { margin: 0 0 2px; color: var(--ink); font-size: 1rem; font-weight: 700; letter-spacing: 0; text-transform: none; }
-.brief__row p { margin: 0; color: #4a5272; font-size: 1.0625rem; line-height: 1.55; }
+.brief__row > div { flex: 1; min-width: 0; }
+.brief__row p { margin: 0; color: #4a5272; font-size: 1.0625rem; line-height: 1.55; overflow-wrap: anywhere; }
+.brief__row .brief__row-text { white-space: pre-line; }
 .brief__person { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--sand); }
 .brief__person:first-child { padding-top: 0; border-top: 0; }
 .brief__avatar { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 44px; height: 44px; background: #f1c9ad; border-radius: 50%; color: var(--navy); font-family: var(--nt-serif); font-size: 1.125rem; }

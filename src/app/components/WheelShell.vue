@@ -30,7 +30,8 @@ const emit = defineEmits(["action"]);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 12px 16px 14px;
+  min-width: 0;
+  padding: 12px 12px 14px;
   background: #fffdf8;
   border: 1.5px solid var(--sand, #e9d9b8);
   border-bottom-width: 4px;
@@ -40,16 +41,19 @@ const emit = defineEmits(["action"]);
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
 }
 .ws__read {
   margin: 0;
   font-family: var(--nt-serif, inherit);
   font-size: 1.125rem;
   font-weight: 600;
+  white-space: nowrap;
   color: var(--navy, #243560);
 }
 .ws__action {
+  flex: none;
   padding: 4px 12px;
   background: transparent;
   border: 1.5px solid var(--navy, #243560);

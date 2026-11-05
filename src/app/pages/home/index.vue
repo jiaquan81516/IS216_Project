@@ -307,18 +307,35 @@ const lookingAfter = computed(() => {
   };
 });
 // Offers your partner has made that need your answer.
-const smallThings = computed(() => incomingSwaps.value.length + waiting.value.length);
+const smallThings = computed(() => listedSwaps.value.length + waiting.value.length);
 const cheerLine = computed(() => (smallThings.value === 1 ? "No rush. You've got this." : "One at a time, no rush. You've got this."));
-const incomingSwaps = computed(() => (rotaStore.value?.pending ?? []).filter((x) => x.from !== myUid.value && (!x.to || x.to === myUid.value)));
+// A request for a night that has already passed can no longer be answered, so it is not shown.
+const isStaleSwap = (swap) => {
+  const view = rotaView.value;
+  if (!view) return false;
+  const tonight = tonightDate(now.value, view.handoverTime);
+  const night = swap.date || swap.withDate;
+  return Boolean(night) && night < tonight;
+};
+const incomingSwaps = computed(() =>
+  (rotaStore.value?.pending ?? []).filter((x) => x.from !== myUid.value && (!x.to || x.to === myUid.value) && !isStaleSwap(x)),
+);
+// A request to take over a night is answered in the banner across the top, so "Needs you" lists the rest.
+const isBannerSwap = (swap) => Boolean(swap.date) && !swap.withDate;
+const listedSwaps = computed(() => incomingSwaps.value.filter((x) => !isBannerSwap(x)));
+const niceDate = (iso) => {
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("en-SG", { weekday: "short", day: "numeric", month: "short" });
+};
 function swapLine(swap) {
   const who = partnerFirst.value || "Your partner";
   if (swap.date && !swap.withDate) {
     const tonight = rotaView.value && swap.date === tonightDate(now.value, rotaView.value.handoverTime);
-    return `${who} asks you to take ${tonight ? "tonight's shift" : `the night of ${swap.date}`} so they can rest.`;
+    return `${who} asks you to take ${tonight ? "tonight's shift" : `the night of ${niceDate(swap.date)}`} so they can rest.`;
   }
   if (!swap.date && swap.withDate) {
     const tonight = rotaView.value && swap.withDate === tonightDate(now.value, rotaView.value.handoverTime);
-    return `${who} offers to take ${tonight ? "tonight's shift" : `the night of ${swap.withDate}`}.`;
+    return `${who} offers to take ${tonight ? "tonight's shift" : `the night of ${niceDate(swap.withDate)}`}.`;
   }
   return `${who} asked to swap nights.`;
 }
@@ -587,7 +604,7 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
           </div>
         </div>
           <ul class="hp__todo-list">
-            <li v-for="swap in incomingSwaps" :key="swap.id" class="hp__todo">
+            <li v-for="swap in listedSwaps" :key="swap.id" class="hp__todo">
               <div class="hp__todo-text">
                 <p class="hp__text">{{ swapLine(swap) }}</p>
                 <p class="hp__small">Duty</p>

@@ -33,7 +33,7 @@ defineProps({
 </template>
 
 <style scoped>
-.as { min-height: 100vh; background: #f1eee7; }
+.as { min-height: 100vh; min-height: 100dvh; background: #f1eee7; }
 .as__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .as__logo { min-height: 44px; }
 .as__logo :deep(img) { width: 27px; height: 27px; }
@@ -44,8 +44,10 @@ defineProps({
 .as__nav { display: inline-flex; align-items: center; gap: 16px; font-size: 0.9375rem; font-weight: 600; margin-left: auto; }
 .as__nav :deep(a) { color: var(--navy, #243560); text-decoration: none; }
 .as__nav :deep(a:hover) { text-decoration: underline; text-underline-offset: 4px; }
-.as__main { display: flex; justify-content: center; padding: clamp(24px, 7vh, 72px) 16px 64px; }
-.as__card { width: 100%; max-width: 45rem; background: var(--cream, #fdf9f0); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 5px; box-shadow: 0 18px 40px rgb(36 53 96 / 8%); border-radius: 32px; overflow: hidden; animation: as-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+/* The card sits in the middle of the screen, across and down, on every size and in both orientations.
+   `margin: auto` centres it when there is room and lets the page scroll normally when there is not. */
+.as__main { display: flex; box-sizing: border-box; min-height: 100vh; min-height: 100dvh; padding: clamp(12px, 2.5vh, 32px) 16px; }
+.as__card { width: 100%; margin: auto; max-width: 45rem; background: var(--cream, #fdf9f0); border: 1px solid var(--sand, #e9d9b8); border-bottom-width: 5px; box-shadow: 0 18px 40px rgb(36 53 96 / 8%); border-radius: 32px; overflow: hidden; animation: as-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
 .as__card--wide { max-width: 62.5rem; }
 .as__card--split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); max-width: 60rem; }
 .as__body { display: flex; flex-direction: column; gap: 20px; min-width: 0; padding: 34px 38px 38px; color: var(--ink, #1f2a52); }
@@ -62,6 +64,11 @@ defineProps({
 @media (max-width: 360px) {
   .as__head { gap: 8px; }
 }
+
+/* "New here? Create your household" and "Already have an account? Sign in": the sentence and its link share
+   one centred line, and wrap together under each other when the screen is too narrow for both. */
+.as__body :deep(.as__switch) { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 8px; margin: 0; font-size: 0.9375rem; color: var(--mut, #5b6692); text-align: center; }
+.as__body :deep(.as__switch .app-text-link--sm) { padding-block: 0; }
 
 /* Shared form pieces, in the app's look while they sit in this card. */
 .as__body :deep(.app-field__label) { font-size: 0.9375rem; font-weight: 600; color: var(--ink, #1f2a52); }

@@ -91,7 +91,7 @@ async function remove() {
       <p v-if="line()" class="bc__line">{{ line() }}</p>
     </div>
     <div v-if="!editing && !confirmingDelete" class="bc__side">
-      <span class="bc__tag">{{ baby.id === "primary" ? "Primary baby" : `Baby ${number}` }}</span>
+      <span class="bc__tag">{{ `Baby ${number}` }}</span>
       <div v-if="editable" class="bc__actions">
         <button type="button" class="bc__action" :disabled="busy" @click="startEdit"><Icon name="edit" :size="15" /> Edit</button>
         <span

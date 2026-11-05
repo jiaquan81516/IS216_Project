@@ -128,6 +128,69 @@ test.describe('responsive public layouts', () => {
   }
 })
 
+test.describe('sign-in and sign-up screens are centred and tidy on every screen', () => {
+  const screens = [
+    ['iPad Air portrait', 820, 1180],
+    ['iPad Air landscape', 1180, 820],
+    ['iPad portrait', 768, 1024],
+    ['iPad landscape', 1024, 768],
+    ['phone portrait', 390, 844],
+    ['phone landscape', 844, 390],
+    ['small phone', 320, 568],
+    ['desktop', 1440, 900],
+  ]
+  const pages = ['/signin', '/start', '/role', '/account']
+
+  for (const [name, width, height] of screens) {
+    test(`card is centred and nothing overflows on ${name}`, async ({ page }) => {
+      await page.setViewportSize({ width, height })
+
+      for (const path of pages) {
+        await page.goto(path)
+        const card = page.locator('.as__card')
+        await expect(card).toBeVisible({ timeout: 10_000 })
+        await page.waitForTimeout(700) // the card rises in; wait until it has settled
+
+        const box = await card.boundingBox()
+        const padding = await page.locator('.as__main').evaluate((el) => parseFloat(getComputedStyle(el).paddingTop))
+        if (box.height <= height - 2 * padding - 2) {
+          // It fits: equal space above and below. (When it does not fit the page scrolls instead.)
+          expect(Math.abs(box.y - (height - box.y - box.height)), `${path} vertical centring`).toBeLessThanOrEqual(3)
+        }
+        const centreX = box.x + box.width / 2
+        expect(Math.abs(centreX - width / 2), `${path} horizontal centring`).toBeLessThanOrEqual(10)
+        await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+      }
+    })
+
+    test(`"New here?" and "Already have an account?" lines are aligned on ${name}`, async ({ page }) => {
+      await page.setViewportSize({ width, height })
+
+      for (const path of ['/signin', '/account']) {
+        await page.goto(path)
+        const line = page.locator('.as__switch')
+        await expect(line).toBeVisible({ timeout: 10_000 })
+        await page.waitForTimeout(700)
+
+        const text = await line.locator('span').boundingBox()
+        const link = await line.locator('a').boundingBox()
+        const sameLine = Math.abs(text.y + text.height / 2 - (link.y + link.height / 2)) < 20
+        if (sameLine) {
+          // Side by side: their middles line up, and the pair sits in the middle of the card.
+          expect(Math.abs(text.y + text.height / 2 - (link.y + link.height / 2)), `${path} text and link`).toBeLessThanOrEqual(3)
+          const lineBox = await line.boundingBox()
+          const pairMid = (Math.min(text.x, link.x) + Math.max(text.x + text.width, link.x + link.width)) / 2
+          expect(Math.abs(pairMid - (lineBox.x + lineBox.width / 2)), `${path} pair centred`).toBeLessThanOrEqual(4)
+        } else {
+          // Too narrow for both: the link sits directly under the sentence, both centred.
+          expect(link.y).toBeGreaterThanOrEqual(text.y + text.height - 1)
+          expect(Math.abs(text.x + text.width / 2 - (link.x + link.width / 2)), `${path} stacked`).toBeLessThanOrEqual(6)
+        }
+      }
+    })
+  }
+})
+
 test.describe('mobile device interactions', () => {
   test.beforeEach(async ({ isMobile }) => {
     test.skip(!isMobile, 'Runs only in the touch-capable mobile projects')

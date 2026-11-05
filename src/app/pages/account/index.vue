@@ -115,7 +115,7 @@ async function google() {
         </form>
         <OrDivider />
         <GoogleButton :disabled="busy" @click="google" />
-        <p class="account__signin">
+        <p class="as__switch">
           <span>Already have an account?</span>
           <AppLink :to="route.query.code ? { path: ROUTES.SIGN_IN, query: { code: route.query.code } } : ROUTES.SIGN_IN" class="app-text-link--sm">Sign in</AppLink>
         </p>
@@ -128,7 +128,6 @@ async function google() {
 .account { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 48px; align-items: start; }
 .account__intro { min-width: 0; }
 .account__card { width: 100%; padding: 22px; background: #fffdf8; border: 1.5px solid var(--sand, #e9d9b8); border-bottom-width: 4px; border-radius: 24px; }
-.account__signin { display: flex; gap: 6px; margin: 0; font-size: 0.9375rem; color: var(--mut, #5b6692); }
 @media (max-width: 991px) {
   .account { grid-template-columns: minmax(0, 1fr); gap: 24px; }
 }

@@ -104,7 +104,7 @@ async function google() {
     </form>
     <OrDivider />
     <GoogleButton :disabled="busy" @click="google" />
-    <p class="signin__new">
+    <p class="as__switch">
       <span>New here?</span>
       <AppLink :to="route.query.code ? { path: ROUTES.JOURNEY, query: { code: route.query.code } } : ROUTES.JOURNEY" class="app-text-link--sm">Create your household</AppLink>
     </p>
@@ -115,7 +115,6 @@ async function google() {
 <style scoped>
 .signin__title { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .signin__h1 { margin: 0; font-family: var(--nt-serif); font-weight: 700; font-size: 2.125rem; line-height: 1.15; color: var(--ink, #1f2a52); }
-.signin__new { display: flex; gap: 6px; margin: 0; font-size: 0.9375rem; color: var(--mut, #5b6692); }
 .signin__side-h { margin: 0 0 12px; font-family: var(--nt-serif); font-size: 2.125rem; line-height: 1.1; font-weight: 700; color: #fff; }
 .signin__side-p { margin: 0; color: #dfe5f7; line-height: 1.5; }
 </style>

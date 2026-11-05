@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   toIso, parseIso, isIsoDate, addDays, daysBetween, mondayOf, otherOf,
   dateLabel, weekdayShort, dayNumber, weekLabel, formatHandover,
-  carerOn, weekNights, restSummary, suggest, cancelSwap, joinNames,
+  carerOn, buildFairPlan, weekNights, restSummary, suggest, cancelSwap, joinNames,
 } from "@/app/utils/rotaHelpers";
 
 describe("toIso / parseIso round-trip", () => {
@@ -388,5 +388,100 @@ describe("joinNames", () => {
   });
   it("filters out falsy entries", () => {
     expect(joinNames(["Tiara", "", null, "Noah"])).toBe("Tiara and Noah");
+  });
+});
+
+describe("buildFairPlan", () => {
+  // Wed 14 Oct 2026 to Tue 20 Oct 2026, as in the setup screen.
+  const nights = Array.from({ length: 7 }, (_, i) => addDays("2026-10-14", i));
+  const count = (plan, who) => plan.nights.filter((n) => n.who === who).length;
+  const whoOn = (plan, date) => plan.nights.find((n) => n.date === date).who;
+
+  it("splits seven parent nights as evenly as seven allows", () => {
+    const plan = buildFairPlan({ nights });
+    expect(Math.abs(count(plan, "me") - count(plan, "partner"))).toBe(1);
+    expect(plan.notes).toEqual([]);
+  });
+
+  it("gives the odd night to firstOnDuty", () => {
+    expect(count(buildFairPlan({ nights, firstOnDuty: "me" }), "me")).toBe(4);
+    expect(count(buildFairPlan({ nights, firstOnDuty: "partner" }), "partner")).toBe(4);
+  });
+
+  it("alternates so nobody has back-to-back nights without a reason", () => {
+    const plan = buildFairPlan({ nights });
+    for (let i = 1; i < plan.nights.length; i += 1) expect(plan.nights[i].who).not.toBe(plan.nights[i - 1].who);
+  });
+
+  it("leaves a carer's nights to the carer, and they cost neither parent a turn", () => {
+    // The nanny takes Monday and Tuesday: 19 and 20 Oct (Monday is 0).
+    const plan = buildFairPlan({ nights, carers: [{ label: "Nanny", days: [0, 1] }] });
+    expect(whoOn(plan, "2026-10-19")).toBe("other");
+    expect(whoOn(plan, "2026-10-20")).toBe("other");
+    expect(plan.nights.find((n) => n.date === "2026-10-19").label).toBe("Nanny");
+    expect(plan.counts.carer).toBe(2);
+    expect(Math.abs(count(plan, "me") - count(plan, "partner"))).toBe(1);
+    expect(count(plan, "me") + count(plan, "partner")).toBe(5);
+  });
+
+  it("keeps the night before an early start clear", () => {
+    // Me needs the mornings of 16 and 17 Oct, so the nights of 15 and 16 are the partner's.
+    const plan = buildFairPlan({ nights, early: { me: ["2026-10-16", "2026-10-17"], partner: [] } });
+    expect(whoOn(plan, "2026-10-15")).toBe("partner");
+    expect(whoOn(plan, "2026-10-16")).toBe("partner");
+    expect(plan.notes.some((n) => n.kind === "broken" || n.kind === "clash")).toBe(false);
+  });
+
+  it("does not need a parent clear before an early start when the carer has that night", () => {
+    // Me needs Tuesday 20 Oct morning, but the nanny already has Monday night.
+    const plan = buildFairPlan({ nights, carers: [{ label: "Nanny", days: [0] }], early: { me: ["2026-10-20"], partner: [] } });
+    expect(whoOn(plan, "2026-10-19")).toBe("other");
+    expect(plan.notes).toEqual([]);
+  });
+
+  it("says so when both parents need the same morning", () => {
+    const plan = buildFairPlan({ nights, early: { me: ["2026-10-16"], partner: ["2026-10-16"] } });
+    expect(plan.notes.some((n) => n.kind === "clash" && n.date === "2026-10-16")).toBe(true);
+  });
+
+  it("says so when an early start falls on the first morning, before any planned night", () => {
+    const plan = buildFairPlan({ nights, early: { me: ["2026-10-14"], partner: [] } });
+    expect(plan.notes.some((n) => n.kind === "outside")).toBe(true);
+  });
+
+  it("puts early-start nights first and warns when that leaves the nights uneven", () => {
+    const early = { me: nights.slice(1).map((d) => d), partner: [] };
+    const plan = buildFairPlan({ nights, early });
+    expect(plan.notes.some((n) => n.kind === "uneven")).toBe(true);
+    expect(count(plan, "me")).toBeLessThan(count(plan, "partner"));
+  });
+
+  it("gives the parent with many early starts fewer nights than the parent with one", () => {
+    // Ariel (me) needs 14 to 17, 19 and 20 Oct; Jia Quan (partner) needs only 20 Oct. Both need the morning of the
+    // 20th, so one of them has to be on duty on the 19th. It is Ariel: losing one of six early starts costs far less
+    // than Jia Quan losing their only one. Every other night that is not forced goes to Jia Quan.
+    const early = { me: ["2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17", "2026-10-19", "2026-10-20"], partner: ["2026-10-20"] };
+    const plan = buildFairPlan({ nights, early });
+    expect(count(plan, "me")).toBe(2);
+    expect(count(plan, "partner")).toBe(5);
+    expect(whoOn(plan, "2026-10-19")).toBe("me");
+    expect(plan.notes.some((n) => n.kind === "clash")).toBe(true);
+  });
+
+  it("marks who is resting on each parent night and nobody on a carer night", () => {
+    const plan = buildFairPlan({ nights, carers: [{ label: "Nanny", days: [0] }] });
+    for (const n of plan.nights) {
+      if (n.who === "other") expect(n.resting).toBeNull();
+      else expect(n.resting).toBe(n.who === "me" ? "partner" : "me");
+    }
+  });
+
+  it("is the same every time it is run", () => {
+    const input = { nights, carers: [{ label: "Nanny", days: [0, 1] }], early: { me: ["2026-10-17"], partner: ["2026-10-18"] } };
+    expect(buildFairPlan(input)).toEqual(buildFairPlan(input));
+  });
+
+  it("ignores dates that are not real calendar dates", () => {
+    expect(buildFairPlan({ nights: ["nope", "2026-02-30"] }).nights).toEqual([]);
   });
 });

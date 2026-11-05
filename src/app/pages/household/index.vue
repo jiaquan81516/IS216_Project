@@ -483,7 +483,7 @@ async function copyCode() {
               :number="i + 1"
               :editable="canManageBabies"
               :household-id="householdId"
-              :can-delete="canManageBabies && baby.id !== 'primary'"
+              :can-delete="canManageBabies"
               @changed="onBabyChanged"
               @deleted="onBabyDeleted"
             />

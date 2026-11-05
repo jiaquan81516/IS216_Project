@@ -253,6 +253,134 @@ export function suggest(nights, names = {}) {
   return { text: "This week is balanced.", action: null };
 }
 
+// A fair plan for a run of nights (the "suggested plan" in setup).
+//
+// nights    ISO dates, one per night, in order.
+// carers    [{ label, days }] fixed weekly carer nights (Monday is 0). A carer night belongs to the carer: no
+//           parent is on duty, so it never uses up a parent's turn and it breaks up a run of duty nights.
+// early     { me: [dates], partner: [dates] }, the mornings each parent needs extra sleep. The night before
+//           such a morning must not be theirs.
+// firstOnDuty  "me" or "partner": who gets the odd night when the parent nights cannot split evenly.
+//
+// The parent nights are searched exhaustively and ranked, in this order, by:
+//   1. early-start nights broken (a parent on duty the night before their own early start),
+//   2. how evenly the load is shared: nights on duty, with each early start counting as a night of rest owed,
+//   3. the longest run of one parent on consecutive parent nights,
+//   4. the number of back-to-back nights for the same parent,
+//   5. the odd night going to firstOnDuty, then who starts.
+// Returns { nights, notes, counts }. `notes` lists everything the plan could not honour, in plain words.
+const EARLY_WEIGHT = 1;
+
+export function buildFairPlan({ nights = [], carers = [], early = {}, firstOnDuty = "me" } = {}) {
+  const dates = nights.filter(isIsoDate);
+  const wants = { me: new Set(early.me ?? []), partner: new Set(early.partner ?? []) };
+  const store = { carerNights: carers };
+  const first = firstOnDuty === "partner" ? "partner" : "me";
+
+  const slots = dates.map((date) => {
+    const carer = carerOn(store, date);
+    const morning = addDays(date, 1);
+    return { date, carer, noMe: wants.me.has(morning), noPartner: wants.partner.has(morning) };
+  });
+  const free = slots.map((x, i) => (x.carer ? -1 : i)).filter((i) => i >= 0);
+  const planned = new Set(dates);
+  const needs = {
+    me: [...wants.me].filter((m) => planned.has(addDays(m, -1))).length,
+    partner: [...wants.partner].filter((m) => planned.has(addDays(m, -1))).length,
+  };
+
+  const scoreOf = (pick) => {
+    let broken = 0;
+    let me = 0;
+    let partner = 0;
+    let run = 0;
+    let longest = 0;
+    let backToBack = 0;
+    let prev = null;
+    slots.forEach((slot, i) => {
+      const who = slot.carer ? null : pick[i];
+      if (!who) {
+        run = 0;
+        prev = null;
+        return;
+      }
+      if (who === "me") me += 1;
+      else partner += 1;
+      if ((who === "me" && slot.noMe) || (who === "partner" && slot.noPartner)) broken += 1;
+      run = who === prev ? run + 1 : 1;
+      if (who === prev) backToBack += 1;
+      longest = Math.max(longest, run);
+      prev = who;
+    });
+    const odd = me === partner ? 0 : (me > partner ? "me" : "partner") === first ? 0 : 1;
+    // Fairness is about rest, not only nights. Each early start is extra rest a parent is owed, so it counts as
+    // a night on their side of the scale: the parent with more early starts ends up on duty fewer nights.
+    const load = Math.abs(me + EARLY_WEIGHT * needs.me - (partner + EARLY_WEIGHT * needs.partner));
+    return { broken, diff: Math.round(load * 100) / 100, longest, backToBack, odd, me, partner };
+  };
+  const rank = (a, b) => a.broken - b.broken || a.diff - b.diff || a.longest - b.longest || a.backToBack - b.backToBack || a.odd - b.odd;
+
+  let best = null;
+  const pick = {};
+  const walk = (k) => {
+    if (k === free.length) {
+      const sc = scoreOf(pick);
+      if (!best || rank(sc, best.sc) < 0) best = { sc, pick: { ...pick } };
+      return;
+    }
+    // Try the person who would otherwise start first, so ties settle the same way every time.
+    for (const who of first === "me" ? ["me", "partner"] : ["partner", "me"]) {
+      pick[free[k]] = who;
+      walk(k + 1);
+    }
+  };
+  if (free.length <= 16) walk(0);
+  else {
+    // Far too many nights to search: alternate, skipping carer nights, and let the early starts decide.
+    let turn = first;
+    for (const i of free) {
+      const slot = slots[i];
+      let who = turn;
+      if (who === "me" && slot.noMe && !slot.noPartner) who = "partner";
+      else if (who === "partner" && slot.noPartner && !slot.noMe) who = "me";
+      pick[i] = who;
+      turn = otherOf(who);
+    }
+    best = { sc: scoreOf(pick), pick: { ...pick } };
+  }
+
+  const out = slots.map((slot, i) => {
+    if (slot.carer) return { date: slot.date, who: "other", label: slot.carer.label || "Carer", resting: null, shared: false, source: "smart" };
+    const who = best.pick[i];
+    return { date: slot.date, who, label: "", resting: otherOf(who), shared: false, source: "smart" };
+  });
+
+  const notes = [];
+  const label = (iso) => `${weekdayShort(iso)} ${dayNumber(iso)}`;
+  const inPlan = new Set(dates);
+  for (const who of ["me", "partner"]) {
+    for (const morning of [...wants[who]].sort()) {
+      if (!inPlan.has(addDays(morning, -1)) && inPlan.has(morning)) {
+        notes.push({ kind: "outside", who, date: morning, text: `The night before ${label(morning)} is before the plan starts, so that early start is not planned for.` });
+      }
+    }
+  }
+  out.forEach((night, i) => {
+    const slot = slots[i];
+    if (night.who === "other") return;
+    if (slot.noMe && slot.noPartner) {
+      notes.push({ kind: "clash", date: addDays(night.date, 1), text: `Both of you need an early start on ${label(addDays(night.date, 1))}, so one of you is on duty the night before.` });
+    } else if ((night.who === "me" && slot.noMe) || (night.who === "partner" && slot.noPartner)) {
+      notes.push({ kind: "broken", who: night.who, date: addDays(night.date, 1), text: `The night before ${label(addDays(night.date, 1))} could not be kept clear.` });
+    }
+  });
+  const counts = { me: best?.sc.me ?? 0, partner: best?.sc.partner ?? 0, carer: out.filter((n) => n.who === "other").length };
+  if (Math.abs(counts.me - counts.partner) > 1) {
+    notes.push({ kind: "uneven", text: "The early starts leave the nights uneven this week." });
+  }
+  return { nights: out, notes, counts };
+}
+
 // Remove a pending request of mine.
 export function cancelSwap(swaps, id) {
   return swaps.filter((s) => !(s.id === id && s.status === "pending" && s.from === "me"));

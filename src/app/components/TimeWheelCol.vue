@@ -131,7 +131,7 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 1;
   flex: 1 1 0;
-  min-width: 3.25rem;
+  min-width: 0;
   height: calc(var(--tw-row) * 5);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -159,8 +159,9 @@ onBeforeUnmount(() => {
   height: var(--tw-row);
   scroll-snap-align: center;
   font-family: var(--nt-serif, inherit);
-  font-size: 1.375rem;
+  font-size: clamp(1.125rem, 5vw, 1.375rem);
   font-weight: 600;
+  white-space: nowrap;
   font-variant-numeric: lining-nums tabular-nums;
   font-feature-settings: "lnum" 1, "tnum" 1;
   color: var(--navy, #243560);

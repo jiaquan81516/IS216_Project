@@ -16,6 +16,7 @@ import { usePrefs } from "@/app/composables/usePrefs";
 import { useSelectedBaby } from "@/app/composables/useSelectedBaby";
 import {
   addDays,
+  buildFairPlan,
   dateLabel,
   dayNumber,
   formatHandover,
@@ -375,6 +376,8 @@ const takeoverOptions = computed(() =>
 );
 const confirmReset = ref(false);
 const setupStatus = ref("");
+// Anything the suggested plan could not honour, in plain words.
+const planNotes = ref([]);
 async function doReset() {
   try {
     await store.reset();
@@ -384,6 +387,7 @@ async function doReset() {
     store.setPattern("manual");
     selectedPattern.value = "manual";
     earlyStarts.value = { me: [], partner: [] };
+    planNotes.value = [];
     setupStartDate.value = todayIso;
 
     confirmReset.value = false;
@@ -438,27 +442,16 @@ async function finishSetup() {
 
   if (selectedPattern.value === "smart") {
     localPlanStart.value = setupStartDate.value;
-    localPlan.value = setupDays.value.map((day, index) => {
-      const nextMorning = addDateOnly(day.date, 1);
-      let who = index % 2 === 0 ? "me" : "partner";
-      let resting = null;
-      if (earlyStarts.value.me.includes(nextMorning)) {
-        who = "partner";
-        resting = "me";
-      }
-      if (earlyStarts.value.partner.includes(nextMorning)) {
-        who = "me";
-        resting = "partner";
-      }
-      const night = {
-        date: day.date,
-        who,
-        resting,
-        shared: false,
-        source: "smart",
-      };
-      return addOptionalHandover(night);
+    // A fair plan: the carers keep their nights, every early start is honoured where it can be, and the
+    // parents' nights are split as evenly as they can be.
+    const fair = buildFairPlan({
+      nights: setupDays.value.map((day) => day.date),
+      carers: store.view.carerNights ?? [],
+      early: earlyStarts.value,
+      firstOnDuty: "me",
     });
+    localPlan.value = fair.nights.map(addOptionalHandover);
+    planNotes.value = fair.notes.map((note) => note.text);
 
     localStorage.setItem(
       "nurturetrack-smart-rota-plan",
@@ -481,7 +474,8 @@ async function finishSetup() {
     store.setStartDate(setupStartDate.value);
     if (selectedPattern.value === "smart") {
       for (const night of localPlan.value) {
-        await store.setOverride(night.date, night.who);
+        // A carer's night is the carer's: clear any earlier choice so the weekly carer night shows.
+        await store.setOverride(night.date, night.who === "other" ? null : night.who);
       }
     }
     setupStatus.value = "This week plan is ready.";
@@ -796,7 +790,7 @@ async function finishSetup() {
                     <span>{{ day.label }}</span>
                     <strong>{{ day.number }}</strong>
                     <small>{{
-                      hasEarlyStart("me", day.date) ? "Selected" : "Select"
+                      hasEarlyStart("me", day.date) ? "Picked" : "Select"
                     }}</small>
                   </button>
                 </div>
@@ -826,7 +820,7 @@ async function finishSetup() {
                     <span>{{ day.label }}</span>
                     <strong>{{ day.number }}</strong>
                     <small>{{
-                      hasEarlyStart("partner", day.date) ? "Selected" : "Select"
+                      hasEarlyStart("partner", day.date) ? "Picked" : "Select"
                     }}</small>
                   </button>
                 </div>
@@ -860,6 +854,9 @@ async function finishSetup() {
         <button type="button" class="rt__btn rt__go" @click.stop.prevent="finishSetup">
           {{ selectedPattern === "smart" ? "Generate suggested plan" : "Save and view This week" }}
         </button>
+        <ul v-if="selectedPattern === 'smart' && planNotes.length" class="rt__notes" role="status">
+          <li v-for="note in planNotes" :key="note">{{ note }}</li>
+        </ul>
 
         <div v-if="!confirmReset" class="rt__foot">
           <button type="button" class="rt__danger" @click="confirmReset = true">
@@ -923,6 +920,7 @@ async function finishSetup() {
 
 .rt__counts { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 0; list-style: none; }
 .rt__count { display: flex; align-items: center; gap: 8px; font-size: 0.9375rem; color: var(--ink); }
+.rt__notes { display: grid; gap: 6px; margin: 0; padding: 12px 14px 12px 30px; background: #fdf0e3; border: 1.5px solid #f2c9a6; border-radius: 14px; font-size: 0.875rem; line-height: 1.45; color: var(--ink); }
 .rt__muted { margin: 0; font-size: 0.875rem; line-height: 1.45; color: #6b7392; }
 .rt__text { margin: 0; font-size: 0.9375rem; line-height: 1.5; color: var(--ink); }
 .rt__h2 { margin: 0; font-family: var(--nt-serif); font-size: 1.5rem; font-weight: 700; color: var(--ink); }
@@ -1008,9 +1006,10 @@ async function finishSetup() {
 .rt__early-day { display: grid; gap: 4px; min-width: 0; padding: 10px 4px; background: #fffdf8; border: 1.5px solid var(--sand); border-radius: 14px; color: #6b7392; font-family: inherit; cursor: pointer; transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.4, 0.64, 1); }
 .rt__early-day:hover { border-color: var(--navy); }
 .rt__early-day:active { transform: scale(0.95); }
-.rt__early-day span { font-size: 0.6875rem; }
+.rt__early-day span { font-size: 0.6875rem; white-space: nowrap; }
 .rt__early-day strong { color: var(--ink); font-size: 1rem; }
-.rt__early-day small { font-size: 0.625rem; }
+.rt__early-day small { font-size: 0.625rem; line-height: 1.2; white-space: nowrap; }
+@media (max-width: 359.98px) { .rt__early-day { padding: 10px 1px; } .rt__early-day small { font-size: 0.5625rem; } }
 .rt__early-day--selected { background: var(--navy); border-color: var(--navy); color: #fff; }
 .rt__early-day--selected-dad { background: var(--sand); border-color: var(--navy); color: var(--navy); }
 .rt__early-day--selected strong { color: #fff; }
