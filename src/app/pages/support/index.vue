@@ -698,14 +698,18 @@ function toggleBaby(slug) {
     min-width: 0;
     grid-template-columns: repeat(var(--n), minmax(0, 1fr));
   }
+  /* Five equal columns. The label may wrap between words ("Pumping / rooms") but never inside
+     one, so the text scales with the screen until the longest word, "Pumping", always fits. */
   .sp__tabs :deep(.sg__btn) {
     min-width: 0;
     min-height: 48px;
-    padding: 8px 6px;
-    font-size: 0.875rem;
+    padding: 8px 2px;
+    font-size: clamp(0.6875rem, 3.3vw, 0.875rem);
     line-height: 1.25;
     white-space: normal;
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: manual;
   }
 }
 @media (max-width: 640px) {
